@@ -1,5 +1,9 @@
 # Absorption Working Pairs
 
+Engineering models for absorption refrigeration working pairs (R134a-DMF,
+R22-DMF, and more): bubble-point pressure and solution enthalpy. Excel VBA,
+C, and Python implementations.
+
 A library of thermophysical property models for absorption refrigeration /
 heat-pump working pairs. Every model is implemented three ways — a Python
 reference implementation, a C implementation, and Excel VBA worksheet
