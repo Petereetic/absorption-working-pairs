@@ -1,0 +1,40 @@
+# Borde 1978 图1 数字化数据
+# 来源：Jelinek, Borde & Yaron, ASHRAE Trans. 84(2), 1978, Fig. 1
+# 提取日期：2026-10-01；方法：视觉定位+轴标定
+# 不确定度：xi ±0.01；h ±1.2 kcal/kg；交叉点 T ±5°C
+# isotherms: T_C 精确（标签在线上）；isobars: P_kgcm2 精确（标签值）
+# crossings: P/T 为标称值
+kind,T_C,P_kgcm2,xi,h_kcal_per_kg
+isotherm,90,,0.1131,145.89
+isotherm,80,,0.2005,137.24
+isotherm,70,,0.2474,130.94
+isotherm,60,,0.2980,124.04
+isotherm,50,,0.3755,115.38
+isotherm,40,,0.4477,109.00
+isotherm,30,,0.5398,107.08
+isotherm,20,,0.6035,102.10
+isotherm,10,,0.6826,98.86
+isobar,,1,0.2007,104.97
+isobar,,2,0.2572,108.43
+isobar,,3,0.2984,111.89
+isobar,,4,0.3395,114.78
+isobar,,5,0.3909,114.43
+isobar,,6,0.4422,113.63
+isobar,,8,0.4936,117.67
+isobar,,10,0.5347,119.40
+isobar,,12,0.5789,128.64
+isobar,,14,0.6170,130.95
+isobar,,16,0.6365,134.41
+isobar,,18,0.6663,136.14
+isobar,,20,0.6858,138.22
+crossing,40,1,0.2624,114.20
+crossing,40,2,0.4063,111.32
+crossing,50,3,0.3960,116.63
+crossing,50,4,0.4165,118.59
+crossing,50,6,0.5502,117.09
+crossing,60,8,0.5419,120.09
+crossing,60,10,0.5902,119.28
+crossing,70,12,0.5656,125.17
+crossing,70,14,0.6087,123.79
+crossing,80,16,0.5872,130.72
+crossing,80,20,0.6735,127.94

@@ -1,0 +1,17 @@
+# Deng et al. 2014, Int. J. Refrigeration 43, 176-186
+# Table 1: R134a(1)+DMF(2) VLE apparatus-validation data (BUCT's own measurements)
+# vs Han et al. 2011 literature reference.
+# Transcribed 2026-09-30 from user-uploaded PDF.
+# pexp/kPa, x1exp: Deng's measurements; plit/kPa, x1lit: Han 2011 nearest tabulated points
+# (paper's stated comparison: xexp substituted into Han's NRTL correlation,
+#  avg |dp|/p = 1.51%, max 2.89%)
+# Standard uncertainties: u(p)=0.6 kPa, u(T)=0.072 K, u(x)=0.015
+T_K,pexp_kPa,x1exp,plit_kPa,x1lit_Han
+303.15,155.6,0.2388,155.8,0.2352
+303.15,260.2,0.3950,258.9,0.3836
+303.15,408.5,0.6026,410.7,0.5994
+303.15,485.8,0.6971,485.7,0.6929
+313.15,214.5,0.2512,201.5,0.2343
+313.15,342.6,0.4037,332.2,0.3828
+313.15,471.5,0.5302,471.5,0.5263
+313.15,611.2,0.6941,614.1,0.6925
