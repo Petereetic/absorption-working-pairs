@@ -40,6 +40,8 @@ bands instead of being averaged away.
 | `r22_degdme/` | R22–DEGDME | Ando & Takeshita 1984 (Int. J. Refrigeration 7(3)) bubble pressure, heat capacity and mixing-heat correlations | Paper-reported deviations 0.79 % / 0.83 % / 0.72 % reproduced |
 | `r22_dmf/` | R22–DMF | Bubble pressure fitted to Agarwal 1982 VLE data; solution enthalpy after Fatouh 1993 | Fit AARD 2.38 % on 132 points; a reconstruction report on Borde et al. 1978 shows two of its printed equations to be numerically inconsistent — they are documented and excluded |
 | `r124_dmac/` | R124–DMAC | Borde, Jelinek & Daltrophe 1997 (Int. J. Refrigeration 20(4)) full correlation set: pure vapour pressures, bubble-pressure and excess-enthalpy polynomials, solution enthalpy, density and viscosity | Transcription verified against the paper's own endpoints and figures; two misprints in the paper arbitrated and documented. A Dalian master's thesis citing this work altered two of its coefficient tables (×100 scalings, dropped signs, K redefined as °C) — the altered tables are documented in the verification record and excluded |
+| `r124_nmp/` | R124–NMP | Xu et al. 2017 (J. Chem. Eng. Data 62, 3414–3422) five-parameter NRTL bubble pressure, 303.15–363.15 K (VLE only; no published mixture enthalpy/density/viscosity) | Reproduces the paper's 53 measured points with AARD 1.25 % (paper reports 1.25 %); pure-R124 psat anchored on the paper's REFPROP table — using Borde's Eq. (15) instead would degrade the AARD to ≈2.3 % |
+| `r124_dmf/` | R124–DMF | Xu et al. 2017 (J. Chem. Eng. Data 62, 3414–3422) five-parameter NRTL bubble pressure, 303.15–363.15 K (VLE only) | Reproduces the paper's 60 measured points with AARD 1.17 % (paper reports 1.17 %) |
 
 ## Repository layout
 
