@@ -39,6 +39,7 @@ bands instead of being averaged away.
 | `r134a_dmf/` | R134a–DMF | NRTL (γ–φ) model with parameters re-fitted here to Zehioua et al. 2009 data (the paper's own NRTL parameters belong to a PR+MHV1 framework and do not transfer) | Fit AARD 1.49 % on 58 training points; cross-laboratory validation vs. Han 2011, Cui 2007 and Deng 2014 gives an honest uncertainty of ≈8 % at 300 K and ≈20 % at 360 K — see the merge study in the directory |
 | `r22_degdme/` | R22–DEGDME | Ando & Takeshita 1984 (Int. J. Refrigeration 7(3)) bubble pressure, heat capacity and mixing-heat correlations | Paper-reported deviations 0.79 % / 0.83 % / 0.72 % reproduced |
 | `r22_dmf/` | R22–DMF | Bubble pressure fitted to Agarwal 1982 VLE data; solution enthalpy after Fatouh 1993 | Fit AARD 2.38 % on 132 points; a reconstruction report on Borde et al. 1978 shows two of its printed equations to be numerically inconsistent — they are documented and excluded |
+| `r124_dmac/` | R124–DMAC | Borde, Jelinek & Daltrophe 1997 (Int. J. Refrigeration 20(4)) full correlation set: pure vapour pressures, bubble-pressure and excess-enthalpy polynomials, solution enthalpy, density and viscosity | Transcription verified against the paper's own endpoints and figures; two misprints in the paper arbitrated and documented. A Dalian master's thesis citing this work altered two of its coefficient tables (×100 scalings, dropped signs, K redefined as °C) — the altered tables are documented in the verification record and excluded |
 
 ## Repository layout
 
