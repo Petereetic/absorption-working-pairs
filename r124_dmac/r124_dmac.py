@@ -20,6 +20,15 @@ own data (see 公式说明.md for the full evidence):
     pure-component endpoints reproduce the Table 7 intercepts to < 0.3 %.
 The pure-component vapour-pressure equation is Eq. (15) of the paper; the
 caption of Table 2 mislabels it "Equation (1)".
+
+Update 2026-10-12: pref_R124 - and with it dew_T, tdew_by_tsol_xi and
+abs_vap_flow - no longer uses Eq. (15) for R124.  Eq. (15) reads
+systematically low against the NIST saturation table (-5.13 % at
+-30 degC narrowing to -1.18 % at 120 degC; arbitration in the materials
+library dossier on the R124 NIST fit vs Borde).  pref_R124 is now the
+NIST-table Wagner-type fit held in pure_fluids (identical coefficients),
+and Eq. (15) remains in psat() for the absorbent-side components and
+for the xi = 1 endpoint comparison of Eq. (16).  See 公式说明.md.
 """
 import math
 
@@ -43,15 +52,33 @@ def psat(comp, T_C):
     T = T_C + 273.15
     return math.exp(A + B / (T + C) + D * T + E * math.log(T) + F * T * T)
 
+# Pure-R124 saturation pressure: NIST WebBook saturation-table fit
+# (Wagner type, exponents 1, 1.5, 3, 6), identical to
+# pure_fluids.R124_Pref.  Band -40..110 degC, max deviation vs the
+# NIST table 0.111 %.  Changed 2026-10-12 from Borde Eq. (15), which
+# reads systematically low against NIST (see module docstring).
+_R124_NIST_TC = 395.428
+_R124_NIST_PC = 36.245
+_R124_NIST_W = (-7.401179377235425, 1.4613603991162563,
+                -3.476435267708954, -1.772232810745864)
+
 def pref_R124(T_C):
-    return psat("R124", T_C)
+    """Pure R124 saturation pressure (bar): NIST-table Wagner fit
+    (same coefficients as pure_fluids.R124_Pref), band -40..110 degC."""
+    T = T_C + 273.15
+    tau = 1.0 - T / _R124_NIST_TC
+    a = _R124_NIST_W
+    return _R124_NIST_PC * math.exp((_R124_NIST_TC / T) * (
+        a[0] * tau + a[1] * tau ** 1.5 + a[2] * tau ** 3.0
+        + a[3] * tau ** 6.0))
 
 def psat_DMAC(T_C):
     return psat("DMAC", T_C)
 
 def Tsat_R124(P_bar):
-    """Saturation temperature (degC) of pure R124 at P_bar (inverts Eq. 15)."""
-    lo, hi = -60.0, 120.0
+    """Saturation temperature (degC) of pure R124 at P_bar
+    (inverts pref_R124, the NIST-table fit; span -40..110 degC)."""
+    lo, hi = -40.0, 110.0
     if not (pref_R124(lo) <= P_bar <= pref_R124(hi)):
         return None
     for _ in range(80):
@@ -133,8 +160,9 @@ def tdew_by_tsol_xi(T_C, xi):
     """Dew-point temperature [degC] of the solution at (T_C, xi)
     (library-wide TdewByTsolXi convention):
         Tdew = dew_T(psol(T_C, xi)),
-    i.e. the pure-R124 saturation temperature on this module's own
-    Borde Eq (15) line at the solution surface pressure Psol.
+    i.e. the pure-R124 saturation temperature on this module's
+    pure-R124 NIST-table fit line at the solution surface pressure
+    Psol (pref_R124; Borde Eq (15) before 2026-10-12).
     DMAC is treated as non-volatile.  None if the pressure lies
     outside the dew_T bisection span."""
     return dew_T(psol(T_C, xi))

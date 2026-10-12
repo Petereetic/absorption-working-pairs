@@ -21,7 +21,7 @@ Public Function TsatR124_R124NMP(P_bar As Double) As Variant
         TsatR124_R124NMP = Empty
         Exit Function
     End If
-    TsatR124_R124NMP = 2527.6371 / (14.750463 - Log(P_bar * 100#)) - 10.9815 - 273.15
+    TsatR124_R124NMP = 2527.6371 / (14.750463 - Log(P_bar * 100#)) + 10.9815 - 273.15
 End Function
 
 Private Function VL_R124NMP(T_C As Double) As Double   ' m3/mol

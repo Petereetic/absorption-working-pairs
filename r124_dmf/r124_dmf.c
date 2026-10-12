@@ -21,7 +21,7 @@ double R124DMF_PrefR124(double T_C)   /* Antoine fit to Table 5, bar */
 
 double R124DMF_TsatR124(double P_bar)
 { if (P_bar <= 0) return NAN;
-  return 2527.6371 / (14.750463 - log(P_bar * 100.0)) - 10.9815 - 273.15; }
+  return 2527.6371 / (14.750463 - log(P_bar * 100.0)) + 10.9815 - 273.15; }
 
 static double R124DMF_VL(double T_C)  /* m3/mol, quadratic fit to Table 5 */
 { return (3.43888821e-06 * T_C * T_C + 5.21631071e-06 * T_C

@@ -11,6 +11,9 @@
 ' (E+01 -> E+00) and Table 8 DMAC eta0/eta1 (x10 too large as printed).
 ' NOTE: Eq. (16) runs +13..+23 % above Eq. (15) at xi = 1 (property of
 ' the printed fit); use Pref_R124DMAC near xi = 1.
+' Update 2026-10-12: Pref_R124DMAC (and with it DewT/TdewByTsolXi/
+' AbsVapFlow) now uses the NIST-table Wagner fit (pure_fluids
+' Pref_R124 coefficients) instead of Eq. (15) for R124.
 ' NOTE: this VBA has NOT been compiled/tested in real Excel.
 
 Option Explicit
@@ -24,7 +27,17 @@ Private Function PsatEq15(A As Double, B As Double, C As Double, _
 End Function
 
 Public Function Pref_R124DMAC(T_C As Double) As Double
-    Pref_R124DMAC = PsatEq15(-119.33446, -1351.341, 0#, -0.12497, 27.21197, 0.0000832656, T_C)
+    ' Pure R124 saturation pressure [bar]: NIST WebBook saturation-
+    ' table Wagner-type fit (exponents 1, 1.5, 3, 6), identical
+    ' coefficients to pure_fluids Pref_R124. Band -40..110 degC,
+    ' max deviation vs the NIST table 0.111 %. Changed 2026-10-12
+    ' from Borde Eq. (15), which reads systematically low vs NIST.
+    Dim T As Double, tau As Double
+    T = T_C + 273.15
+    tau = 1# - T / 395.428
+    Pref_R124DMAC = 36.245 * Exp((395.428 / T) * (-7.401179377235425 * tau _
+        + 1.4613603991162563 * tau ^ 1.5 - 3.476435267708954 * tau ^ 3 _
+        - 1.772232810745864 * tau ^ 6))
 End Function
 
 Public Function PsatDMAC_R124DMAC(T_C As Double) As Double
@@ -33,7 +46,7 @@ End Function
 
 Public Function DewT_R124DMAC(P_bar As Double) As Variant
     Dim lo As Double, hi As Double, mid As Double, k As Long
-    lo = -60#: hi = 120#
+    lo = -40#: hi = 110#
     If P_bar < Pref_R124DMAC(lo) Or P_bar > Pref_R124DMAC(hi) Then
         DewT_R124DMAC = Empty
         Exit Function
@@ -108,8 +121,9 @@ End Function
 
 
 ' ---------- 露点温度（溶液）[°C]：全库 TdewByTsolXi 约定 ----------
-' Tdew = DewT_R124DMAC(Psol_R124DMAC(T_C, xi))：以本模块自有纯
-' R124 线（Borde 式(15)）评价溶液表面压力 Psol 所对应的饱和温度。
+' Tdew = DewT_R124DMAC(Psol_R124DMAC(T_C, xi))：以本模块纯 R124
+' 线（NIST 表 Wagner 拟合，2026-10-12 换源；此前为 Borde 式(15)）
+' 评价溶液表面压力 Psol 所对应的饱和温度。
 ' DMAC 视为不挥发。压力超出 DewT 二分跨度时返回 Empty。
 Public Function TdewByTsolXi_R124DMAC(T_C As Double, xi As Double) As Variant
     TdewByTsolXi_R124DMAC = DewT_R124DMAC(Psol_R124DMAC(T_C, xi))

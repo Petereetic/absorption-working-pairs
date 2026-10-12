@@ -83,39 +83,50 @@ Public Function NL_Tbub(ByVal P_kPa As Double, ByVal x As Double) As Variant
 End Function
 
 ' ---------- 纯氨饱和线 (露点口径, 供 NL_XiByTsolTdew 用) ----------
-' LiNO3 不挥发, 气相视为纯氨。纯氨饱和温度按本工质对说明的口径:
-' 氨水模块 Patek-Klomfar 式 (6) 在氨摩尔分数 = 1 处。x = 1 时式 (6)
-' 只剩 m = 0 项: Tsat[K] = 100*(3.22302 - 0.384206 L + 0.0460965 L^2
-' - 0.00378945 L^3 + 0.000135610 L^4), L = Log(2 MPa / P)。
-' 式 (6) 辖区 P = 0.002-2 MPa。
-Private Function TsatNH3Pure(ByVal P_kPa As Double) As Double
-    Dim L As Double
-    L = Log(2# / (P_kPa / 1000#))
-    TsatNH3Pure = 100# * ((((0.00013561 * L - 0.00378945) * L _
-                   + 0.0460965) * L - 0.384206) * L + 3.22302)
+' LiNO3 不挥发, 气相视为纯氨。纯氨线 2026-10-12 换源: 改用氨 NIST
+' 饱和表紧凑拟合 (lnP-t 7 次多项式, P 以 MPa 计, t 为 degC; 源:
+' NIST WebBook 饱和表 210 点 -77~132 degC; 常用带 -50~+60 degC
+' 最大偏差 0.0027%)。此前用 Patek-Klomfar 式 (6) 纯氨端点, 其
+' 25 degC 给 1012 kPa, 较 NIST 表值 1002.69 kPa 高约 0.9%, 自此
+' 只作历史口径分账。混合物泡点式不变。辖区 t = -77~132 degC。
+Private Function PrefNH3Pure(ByVal T_K As Double) As Variant
+    Dim t As Double, lnP As Double, k As Long, c As Variant
+    t = T_K - 273.15
+    If t < -77# Or t > 132# Then
+        PrefNH3Pure = Empty: Exit Function
+    End If
+    c = Array(-0.8457026848887617, 0.03739502393748032, _
+              -0.00015333383280607642, 6.551063627525382E-07, _
+              -2.4759314474490567E-09, 9.070213653911228E-12, _
+              -3.681466540446358E-14, 1.1501679663496297E-16)
+    lnP = 0#
+    For k = 7 To 0 Step -1
+        lnP = lnP * t + c(k)
+    Next k
+    PrefNH3Pure = 1000# * Exp(lnP)
 End Function
 
-' 纯氨饱和压力 [kPa]: 二分 80 次反解 TsatNH3Pure(P) = T_K;
-' T_K 落在式 (6) 压力跨度之外时返回 Empty。
-Private Function PrefNH3Pure(ByVal T_K As Double) As Variant
+' 纯氨饱和温度 [K]: 二分 80 次反解 PrefNH3Pure(T) = P_kPa;
+' P 落在拟合辖区压力跨度 (约 6.4~11280 kPa) 之外时返回 Empty。
+Private Function TsatNH3Pure(ByVal P_kPa As Double) As Variant
     Dim lo As Double, hi As Double, mid As Double, k As Long
-    lo = 2#: hi = 2000#
-    If T_K < TsatNH3Pure(lo) Or T_K > TsatNH3Pure(hi) Then
-        PrefNH3Pure = Empty: Exit Function
+    lo = 196.15: hi = 405.15
+    If P_kPa < PrefNH3Pure(lo) Or P_kPa > PrefNH3Pure(hi) Then
+        TsatNH3Pure = Empty: Exit Function
     End If
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If TsatNH3Pure(mid) < T_K Then lo = mid Else hi = mid
+        If PrefNH3Pure(mid) < P_kPa Then lo = mid Else hi = mid
     Next k
-    PrefNH3Pure = 0.5 * (lo + hi)
+    TsatNH3Pure = 0.5 * (lo + hi)
 End Function
 
 ' ---------- 由露点温度与溶液温度反解氨质量分数 x ----------
 ' 露点定压 P = PrefNH3Pure(Tdew_K) (纯氨饱和压, 口径见上);
 ' 再二分 80 次反解 NL_Psol(Tsol_K, x) = P, 括号取泡点函数有效
 ' 浓度域 x = 0.35-0.65。无根时返回 Empty (P 落在 Tsol 下泡点压力
-' 跨度之外, 如溶液温度明显低于露点温度; 或 Tdew 超出纯氨式 (6)
-' 辖区; 或 Tsol 越界)。与 C/Python 同算法; 未在真实 Excel 编译。
+' 跨度之外, 如溶液温度明显低于露点温度; 或 Tdew 超出纯氨 NIST
+' 拟合辖区; 或 Tsol 越界)。与 C/Python 同算法; 未在真实 Excel 编译。
 Public Function NL_XiByTsolTdew(ByVal Tsol_K As Double, ByVal Tdew_K As Double) As Variant
     Dim P As Variant, lo As Double, hi As Double, mid As Double, k As Long
     P = PrefNH3Pure(Tdew_K)
@@ -138,16 +149,17 @@ End Function
 
 
 ' ---------- 露点温度（溶液）[K]：全库 TdewByTsolXi 约定 ----------
-' Tdew = TsatNH3Pure(NL_Psol(T_K, x))：以本模块自有纯氨线
-' （Pátek–Klomfar 式(6) 纯氨端点）评价溶液表面压力 Psol 所对应的
-' 饱和温度。LiNO3 不挥发，气相视为纯氨。NL_Psol 无解（Empty）或
-' P 超出纯氨线辖区 2~2000 kPa 时返回 Empty。
+' Tdew = TsatNH3Pure(NL_Psol(T_K, x))：以纯氨 NIST 拟合线
+' （2026-10-12 换源，见上）评价溶液表面压力 Psol 所对应的饱和
+' 温度。LiNO3 不挥发，气相视为纯氨。NL_Psol 无解或 P 超出纯氨
+' 拟合辖区压力跨度时返回 Empty。
 Public Function NL_TdewByTsolX(ByVal T_K As Double, ByVal x As Double) As Variant
-    Dim P As Variant
+    Dim P As Variant, T As Variant
     P = NL_Psol(T_K, x)
     If IsEmpty(P) Then NL_TdewByTsolX = Empty: Exit Function
-    If P < 2# Or P > 2000# Then NL_TdewByTsolX = Empty: Exit Function
-    NL_TdewByTsolX = TsatNH3Pure(P)
+    T = TsatNH3Pure(P)
+    If IsEmpty(T) Then NL_TdewByTsolX = Empty: Exit Function
+    NL_TdewByTsolX = T
 End Function
 
 ' ---------- 由溶液比焓反解溶液温度 [K] ----------

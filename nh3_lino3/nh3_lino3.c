@@ -76,32 +76,46 @@ double nl_T_bubble_PX(double P_kPa, double x)
 }
 
 /* Pure-NH3 saturation (dew-point convention for nl_XiByTsolTdew):
- * LiNO3 is non-volatile, vapour is pure NH3.  Pure-NH3 saturation
- * temperature follows the ammonia-water module's Patek-Klomfar
- * Eq. (6) at NH3 mole fraction = 1 (the convention stated in this
- * pair's documentation for its glide curves).  At x = 1 only the
- * m = 0 terms of Eq. (6) survive:
- *   Tsat[K] = 100 * (3.22302 - 0.384206 L + 0.0460965 L^2
- *                    - 0.00378945 L^3 + 0.000135610 L^4),
- *   L = ln(2 MPa / P).  Eq. (6) range: P = 0.002-2 MPa. */
-static double nl_Tsat_NH3_pure(double P_kPa)
-{
-    double L = log(2.0 / (P_kPa / 1000.0));
-    return 100.0 * ((((0.000135610 * L - 0.00378945) * L + 0.0460965) * L
-                     - 0.384206) * L + 3.22302);
-}
+ * LiNO3 is non-volatile, vapour is pure NH3.  Source changed
+ * 2026-10-12: the pure line is now the ammonia NIST saturation-table
+ * compact fit (lnP-t 7th-degree polynomial, P in MPa, t in degC;
+ * source: NIST WebBook saturation table, 210 points, -77..132 degC;
+ * common band -50..+60 degC max deviation 0.0027%; see the materials
+ * library dossier for the NH3 NIST fit).  It replaces the former
+ * Patek-Klomfar Eq. (6) x = 1 endpoint, which reads ~0.9 % high
+ * against NIST at 25 degC (1012 vs 1002.69 kPa); the Eq. (6)
+ * endpoint is kept as a historical reference only.  The mixture
+ * bubble-pressure formula above is unchanged. */
+static const double NL_NH3_FIT[8] = {
+    -0.8457026848887617, 0.03739502393748032, -0.00015333383280607642,
+    6.551063627525382e-07, -2.4759314474490567e-09, 9.070213653911228e-12,
+    -3.681466540446358e-14, 1.1501679663496297e-16
+};
 
-/* Pure-NH3 saturation pressure [kPa] by 80-step bisection on the
- * function above; NAN if T_K is outside the Eq. (6) pressure span. */
+/* Pure-NH3 saturation pressure [kPa]; NAN outside the fit band
+ * t = -77..132 degC. */
 static double nl_pref_NH3_pure(double T_K)
 {
-    double lo = 2.0, hi = 2000.0, mid;
+    double t = T_K - 273.15, lnP = 0.0;
     int k;
-    if (T_K < nl_Tsat_NH3_pure(lo) || T_K > nl_Tsat_NH3_pure(hi))
+    if (t < -77.0 || t > 132.0)
+        return NAN;
+    for (k = 7; k >= 0; k--) lnP = lnP * t + NL_NH3_FIT[k];
+    return 1000.0 * exp(lnP);
+}
+
+/* Pure-NH3 saturation temperature [K] by 80-step bisection on the
+ * fit above; NAN if P_kPa is outside the fit band's pressure span
+ * (about 6.4..11280 kPa). */
+static double nl_Tsat_NH3_pure(double P_kPa)
+{
+    double lo = 196.15, hi = 405.15, mid;
+    int k;
+    if (P_kPa < nl_pref_NH3_pure(lo) || P_kPa > nl_pref_NH3_pure(hi))
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (nl_Tsat_NH3_pure(mid) < T_K) lo = mid; else hi = mid;
+        if (nl_pref_NH3_pure(mid) < P_kPa) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }
@@ -112,7 +126,7 @@ static double nl_pref_NH3_pure(double T_K)
  * bisection over the bubble function's valid concentration range
  * x = 0.35-0.65.  Returns NAN if no root (P outside the bubble-
  * pressure span at Tsol, e.g. Tsol well below Tdew, Tdew outside
- * the pure-NH3 Eq. (6) range, or Tsol out of range). */
+ * the pure-NH3 fit band, or Tsol out of range). */
 double nl_XiByTsolTdew(double Tsol_K, double Tdew_K)
 {
     double P = nl_pref_NH3_pure(Tdew_K);
@@ -148,8 +162,8 @@ double nl_hsol(double T_K, double x)
 
 /* Dew-point temperature [K] of the solution at (T_K, x)
    (library-wide TdewByTsolXi convention):
-   nl_Tsat_NH3_pure(nl_psol_TX(T_K, x)) on this module's own pure-NH3
-   line (Patek-Klomfar Eq (6) endpoint).  NAN if nl_psol_TX is NAN. */
+   nl_Tsat_NH3_pure(nl_psol_TX(T_K, x)) on the pure-NH3 NIST fit
+   line (see nl_pref_NH3_pure).  NAN if nl_psol_TX is NAN. */
 double nl_TdewFromTsolX(double T_K, double x)
 {
     double P = nl_psol_TX(T_K, x);

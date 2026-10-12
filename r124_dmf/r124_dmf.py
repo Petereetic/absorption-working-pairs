@@ -26,7 +26,7 @@ the NRTL works in mole fractions, converted internally.
 M(R124) = 136.50, M(DMF) = 73.09 g/mol.
 
 VALID RANGE: T = 303.15-363.15 K (30-90 degC), the measured range.
-Functions return NaN outside it - the parameters were fitted there
+Functions return None outside it - the parameters were fitted there
 and this library does not extrapolate past a model's fitted edge.
 Bubble pressure reproduces the paper's 60 measured points with
 AARD 1.17 % (paper reports 1.17 %); see verify_r124_dmf.py.
@@ -57,7 +57,6 @@ _M1 = 136.50          # R124
 _M2 = 73.09          # DMF
 _TMIN, _TMAX = 30.0, 90.0
 
-NAN = float("nan")
 
 
 def pref_R124(T_C):
@@ -68,8 +67,8 @@ def pref_R124(T_C):
 
 def Tsat_R124(P_bar):
     """Pure R124 saturation temperature [degC] (= dew point here)."""
-    if P_bar <= 0:
-        return NAN
+    if P_bar is None or P_bar <= 0:
+        return None
     T = _ANT_B / (_ANT_A - math.log(P_bar * 100.0)) - _ANT_C
     return T - 273.15
 
@@ -93,14 +92,14 @@ def x_to_xi(x):
 
 
 def gamma1(T_C, xi):
-    """Activity coefficient of R124 (NRTL), NaN outside the range."""
+    """Activity coefficient of R124 (NRTL), None outside the range."""
     if not (_TMIN <= T_C <= _TMAX):
-        return NAN
+        return None
     T = T_C + 273.15
     x1 = xi_to_x(xi)
     x2 = 1.0 - x1
     if x1 <= 0.0:
-        return NAN
+        return None
     if x1 >= 1.0:
         return 1.0
     lnT = math.log(T)
@@ -116,7 +115,7 @@ def gamma1(T_C, xi):
 def psol(T_C, xi):
     """Bubble-point pressure [bar]; vapor = pure R124."""
     if not (_TMIN <= T_C <= _TMAX) or not (0.0 < xi < 1.0):
-        return NAN
+        return None
     T = T_C + 273.15
     ps1 = pref_R124(T_C)                      # bar
     x1 = xi_to_x(xi)
@@ -133,12 +132,12 @@ def psol(T_C, xi):
 
 
 def bubble_T(P_bar, xi, iters=60):
-    """Bubble-point temperature [degC] at P [bar]; NaN if the root is
+    """Bubble-point temperature [degC] at P [bar]; None if the root is
     outside the validated 30-90 degC window."""
     lo, hi = _TMIN, _TMAX
     plo, phi = psol(lo, xi), psol(hi, xi)
-    if math.isnan(plo) or math.isnan(phi) or not (plo <= P_bar <= phi):
-        return NAN
+    if plo is None or phi is None or not (plo <= P_bar <= phi):
+        return None
     for _ in range(iters):
         mid = 0.5 * (lo + hi)
         if psol(mid, xi) < P_bar:
@@ -156,13 +155,13 @@ def xi_by_tsol_tdew(Tsol_C, Tdew_C):
     psol is defined on the open interval 0 < xi < 1; its limits
     there, 0 at xi -> 0 and pref_R124(Tsol) at xi -> 1, serve as the
     bracket, and the bisection only ever evaluates interior points.
-    NaN if there is no root (e.g. Tsol below Tdew, or Tsol outside
+    None if there is no root (e.g. Tsol below Tdew, or Tsol outside
     the validated 30-90 degC window)."""
     if not (_TMIN <= Tsol_C <= _TMAX):
-        return NAN
+        return None
     P = pref_R124(Tdew_C)
     if not (P <= pref_R124(Tsol_C)):
-        return NAN
+        return None
     lo, hi = 0.0, 1.0
     for _ in range(80):
         mid = 0.5 * (lo + hi)
@@ -178,8 +177,10 @@ def dew_T(P_bar, xi=None):
     The mixture model is windowed to 30-90 degC, but the dew point is
     a pure-fluid reference: below 30 degC the Antoine (anchored on
     REFPROP at 303-363 K) is extrapolated a short way, to -30 degC."""
+    if P_bar is None:
+        return None
     T = Tsat_R124(P_bar)
-    return T if -30.0 <= T <= _TMAX else NAN
+    return T if T is not None and -30.0 <= T <= _TMAX else None
 
 
 
@@ -189,7 +190,7 @@ def tdew_by_tsol_xi(T_C, xi):
         Tdew = dew_T(psol(T_C, xi)),
     the pure-R124 saturation temperature on this module's own
     Antoine line at the solution surface pressure Psol.  Absorbent
-    treated as non-volatile.  NaN where psol or dew_T is NaN
+    treated as non-volatile.  None where psol or dew_T is None
     (model window 30-90 degC; dew window -30..90 degC)."""
     return dew_T(psol(T_C, xi))
 

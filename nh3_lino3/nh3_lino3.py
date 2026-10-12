@@ -144,36 +144,48 @@ def T_bubble_PX(P_kPa, x):
 # ---------------------------------------------------------------------------
 # 纯氨饱和线 (露点口径, 供 x_by_tsol_tdew 用)
 # ---------------------------------------------------------------------------
-# LiNO3 不挥发, 气相视为纯氨。本模块自有口径 (见 公式说明.md 滑移图节):
-# 纯氨饱和温度由氨水模块 Patek-Klomfar 式 (6) 在氨摩尔分数 = 1 处求得。
-# x = 1 时式 (6) 中 (1-x)^m 只剩 m = 0 项, 故纯氨端点为 L 的四次多项式:
-#   T_sat[K] = 100 * sum_i a_i L^i,  L = ln(2 MPa / P)
-# 系数即式 (6) 系数表 m = 0 的五行 (a: 3.22302, -0.384206, 0.0460965,
-# -0.00378945, 0.000135610)。式 (6) 辖区 P = 0.002-2 MPa。
+# LiNO3 不挥发, 气相视为纯氨。纯氨线 2026-10-12 换源 (见 公式说明.md):
+# 改用氨 NIST 饱和表紧凑拟合 -- lnP-t 7 次多项式 (源: NIST WebBook
+# 饱和表 210 点, -77~132 degC; 拟合常用带 -50~+60 degC 最大偏差
+# 0.0027%; 系数与验算见 工质对公式素材库《纯氨饱和性质拟合-NIST表》,
+# 与 pure_fluids 的氨拟合同源)。此前用氨水模块 Patek-Klomfar 式 (6)
+# 在氨摩尔分数 = 1 处的端点: 该端点 25 degC 给 1012 kPa, 较 NIST
+# 表值 1002.69 kPa 高约 0.9%, 自此只作历史口径, 与本线分账。
+# 混合物泡点式 (psol_TX) 不变。拟合辖区 t = -77~132 degC
+# (P 约 6.4~11280 kPa)。
 
-_PK6_PURE = (3.22302, -0.384206, 0.0460965, -0.00378945, 0.000135610)
-
-
-def _Tsat_NH3_pure(P_kPa):
-    """纯氨饱和温度 [K] (Patek-Klomfar 式 (6) 纯氨端点)。P_kPa 为 kPa。"""
-    L = math.log(2.0 / (P_kPa / 1000.0))
-    s = 0.0
-    for a in reversed(_PK6_PURE):
-        s = s * L + a
-    return 100.0 * s
+_NH3_FIT = (-0.8457026848887617, 0.03739502393748032,
+            -0.00015333383280607642, 6.551063627525382e-07,
+            -2.4759314474490567e-09, 9.070213653911228e-12,
+            -3.681466540446358e-14, 1.1501679663496297e-16)
+_NH3_TLO, _NH3_THI = -77.0, 132.0    # degC, NIST 表拟合辖区
 
 
 def _pref_NH3_pure(T_K):
-    """纯氨饱和压力 [kPa]: 二分 80 次反解 _Tsat_NH3_pure(P) = T_K。
+    """纯氨饱和压力 [kPa] (NIST 表 lnP-t 7 次多项式拟合, 式中 P 以 MPa 计)。
 
-    辖区 P = 2-2000 kPa (式 (6)); T_K 落在该压力跨度之外时返回 None。
+    T_K 落在拟合辖区 -77~132 degC 之外时返回 None。
     """
-    lo, hi = 2.0, 2000.0
-    if not (_Tsat_NH3_pure(lo) <= T_K <= _Tsat_NH3_pure(hi)):
+    t = T_K - 273.15
+    if not (_NH3_TLO <= t <= _NH3_THI):
+        return None
+    lnP = 0.0
+    for c in reversed(_NH3_FIT):
+        lnP = lnP * t + c
+    return 1000.0 * math.exp(lnP)
+
+
+def _Tsat_NH3_pure(P_kPa):
+    """纯氨饱和温度 [K]: 对 _pref_NH3_pure 二分 80 次反解。
+
+    P_kPa 落在拟合辖区压力跨度 (约 6.4~11280 kPa) 之外时返回 None。
+    """
+    lo, hi = _NH3_TLO + 273.15, _NH3_THI + 273.15
+    if not (_pref_NH3_pure(lo) <= P_kPa <= _pref_NH3_pure(hi)):
         return None
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if _Tsat_NH3_pure(mid) < T_K:
+        if _pref_NH3_pure(mid) < P_kPa:
             lo = mid
         else:
             hi = mid
@@ -187,7 +199,7 @@ def x_by_tsol_tdew(Tsol_K, Tdew_K):
     再二分 80 次反解 psol_TX(Tsol_K, x) = P, 括号取泡点函数
     有效浓度域 x = 0.35-0.65 (泡点压力在该域内随 x 单调增)。
     无根时返回 None (P 落在 Tsol 下泡点压力跨度之外, 如溶液温度
-    明显低于露点温度; 或 Tdew_K 超出纯氨式 (6) 辖区)。注意本函数
+    明显低于露点温度; 或 Tdew_K 超出纯氨 NIST 拟合辖区)。注意本函数
     按跨工质对统一约定返回 None, 不沿用本模块其余函数的
     raise ValueError 约定。
     """
@@ -231,9 +243,9 @@ def hsol(T_K, x):
 def tdew_from_tsol_x(T_K, x):
     """溶液在 (T_K, x) 的露点温度 [K]（全库 TdewByTsolXi 约定）：
         Tdew = _Tsat_NH3_pure(psol_TX(T_K, x))，
-    即以本模块自有纯氨线（Pátek–Klomfar 式 (6) 纯氨端点）评价溶液
-    表面压力 Psol 所对应的饱和温度。LiNO₃ 不挥发，气相视为纯氨，
-    无端点约定问题。辖区随 psol_TX（T 293.15–353.15 K，
+    即以纯氨 NIST 拟合线（2026-10-12 换源，见 _pref_NH3_pure 上方
+    注释）评价溶液表面压力 Psol 所对应的饱和温度。LiNO₃ 不挥发，
+    气相视为纯氨，无端点约定问题。辖区随 psol_TX（T 293.15–353.15 K，
     x 0.35–0.65），越界时 psol_TX 的 ValueError 照常抛出。"""
     return _Tsat_NH3_pure(psol_TX(T_K, x))
 

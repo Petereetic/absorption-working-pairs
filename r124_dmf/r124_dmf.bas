@@ -21,7 +21,7 @@ Public Function TsatR124_R124DMF(P_bar As Double) As Variant
         TsatR124_R124DMF = Empty
         Exit Function
     End If
-    TsatR124_R124DMF = 2527.6371 / (14.750463 - Log(P_bar * 100#)) - 10.9815 - 273.15
+    TsatR124_R124DMF = 2527.6371 / (14.750463 - Log(P_bar * 100#)) + 10.9815 - 273.15
 End Function
 
 Private Function VL_R124DMF(T_C As Double) As Double   ' m3/mol

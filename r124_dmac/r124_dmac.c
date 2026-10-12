@@ -11,13 +11,22 @@
  * and Table 8 DMAC eta0/eta1 (x10 too large as printed).
  * NOTE: Eq. (16) runs +13..+23 % above Eq. (15) at xi = 1 (property of
  * the printed fit); use R124DMAC_PrefR124 near xi = 1.
+ *
+ * Update 2026-10-12: R124DMAC_PrefR124 (and with it DewT,
+ * TdewByTsolXi, AbsVapFlow) no longer uses Eq. (15) for R124, which
+ * reads systematically low against the NIST saturation table
+ * (-5.13 % at -30 C to -1.18 % at 120 C).  It is now the NIST-table
+ * Wagner-type fit held in pure_fluids (identical coefficients).
+ * psat_eq15 remains for DMAC.  See the module documentation.
  */
 #include <math.h>
 
 static const double M_R124 = 136.50, M_DMAC = 87.12;
 
-/* Eq. (15) pure vapour pressure coefficients (Table 2): A,B,C,D,E,F */
-static const double PS_R124[6] = {-119.33446, -1351.341, 0.0, -0.12497, 27.21197, 8.32656e-5};
+/* Eq. (15) pure vapour pressure coefficients (Table 2): A,B,C,D,E,F.
+ * The R124 row (-119.33446, -1351.341, 0.0, -0.12497, 27.21197,
+ * 8.32656e-5) is no longer evaluated since the 2026-10-12 Pref
+ * source change below; it is recorded here for reference. */
 static const double PS_DMAC[6] = {6.01834, -1800.240, -138.5, 0.0, 0.0, 0.0};
 
 static double psat_eq15(const double c[6], double T_C)
@@ -26,12 +35,25 @@ static double psat_eq15(const double c[6], double T_C)
     return exp(c[0] + c[1] / (T + c[2]) + c[3] * T + c[4] * log(T) + c[5] * T * T);
 }
 
-double R124DMAC_PrefR124(double T_C) { return psat_eq15(PS_R124, T_C); }
+/* Pure-R124 saturation pressure: NIST WebBook saturation-table fit
+ * (Wagner type, exponents 1, 1.5, 3, 6), identical to
+ * pure_fluids R124_Pref.  Band -40..110 C, max deviation vs the
+ * NIST table 0.111 %.  Changed 2026-10-12 from Borde Eq. (15)
+ * (coefficients recorded above; no longer evaluated). */
+double R124DMAC_PrefR124(double T_C)
+{
+    static const double W[4] = {-7.401179377235425, 1.4613603991162563,
+                                -3.476435267708954, -1.772232810745864};
+    double T = T_C + 273.15, tau = 1.0 - T / 395.428;
+    return 36.245 * exp((395.428 / T) * (W[0] * tau + W[1] * pow(tau, 1.5)
+                                         + W[2] * tau * tau * tau
+                                         + W[3] * pow(tau, 6.0)));
+}
 double R124DMAC_PsatDMAC(double T_C) { return psat_eq15(PS_DMAC, T_C); }
 
 double R124DMAC_DewT(double P_bar)
 {
-    double lo = -60.0, hi = 120.0, mid;
+    double lo = -40.0, hi = 110.0, mid;
     int k;
     if (P_bar < R124DMAC_PrefR124(lo) || P_bar > R124DMAC_PrefR124(hi))
         return NAN;
@@ -103,8 +125,9 @@ double R124DMAC_XiByTsolTdew(double Tsol_C, double Tdew_C)
 
 /* Dew-point temperature [degC] of the solution at (T_C, xi)
    (library-wide TdewByTsolXi convention):
-   R124DMAC_DewT(R124DMAC_Psol(T_C, xi)) on this module's own Borde
-   Eq (15) pure line.  NAN if DewT has no root. */
+   R124DMAC_DewT(R124DMAC_Psol(T_C, xi)) on this module's pure-R124
+   NIST-table fit line (PrefR124; Borde Eq (15) before 2026-10-12).
+   NAN if DewT has no root. */
 double R124DMAC_TdewByTsolXi(double T_C, double xi)
 {
     return R124DMAC_DewT(R124DMAC_Psol(T_C, xi));
@@ -247,7 +270,7 @@ double R124DMAC_EtaMix(double T_C, double xi)
 #include <stdio.h>
 int main(void)
 {
-    printf("Psat R124 at -11 C   = %.3f bar (expect ~1.013)\n", R124DMAC_PrefR124(-11.0));
+    printf("Psat R124 at 20 C    = %.3f bar (expect ~3.269, NIST)\n", R124DMAC_PrefR124(20.0));
     printf("Psol(80 C, 0.5)   = %.3f bar\n", R124DMAC_Psol(80.0, 0.5));
     printf("BubbleT(2.977, 0.5)  = %.2f C (expect ~80)\n", R124DMAC_BubbleT(2.977, 0.5));
     printf("HExcess(20 C, 0.557) = %.2f kJ/kg\n", R124DMAC_HExcess(20.0, 0.557));
