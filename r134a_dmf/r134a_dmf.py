@@ -117,6 +117,31 @@ def bubble_T(p_MPa, x1, Tguess=330.0):
     return T
 
 
+def xi_from_dew_T(Tdew, Tsol):
+    """
+    已知露点温度与溶液温度反算浓度 (二分迭代 80 次).
+    输入: Tdew (K) 露点温度, Tsol (K) 溶液温度
+    返回: x1 (R134a 液相摩尔分数); 无根时返回 None
+    原理: DMF 视为不挥发, 露点定压 P = psat_r134a(Tdew);
+          再二分求 bubble_p(Tsol, x1) = P, 括号取 x1 in [0, 1]
+          (泡点压力在该区间内随 x1 单调增).
+    无根情形: P 超出 Tsol 下泡点压力区间 (如 Tsol 明显低于 Tdew).
+    """
+    P = psat_r134a(Tdew)
+    Plo = bubble_p(Tsol, 0.0)[0]
+    Phi = bubble_p(Tsol, 1.0)[0]
+    if not (Plo <= P <= Phi):
+        return None
+    lo, hi = 0.0, 1.0
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if bubble_p(Tsol, mid)[0] < P:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
 def h_r134a_L(T):
     """
     R134a 饱和液体焓, kJ/kg.

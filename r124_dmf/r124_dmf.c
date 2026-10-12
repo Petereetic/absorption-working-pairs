@@ -68,6 +68,23 @@ double R124DMF_BubbleT(double P_bar, double xi)
       if (R124DMF_BubbleP(mid, xi) < P_bar) lo = mid; else hi = mid; }
   return 0.5 * (lo + hi); }
 
+/* Concentration from dew-point temperature and solution temperature:
+ * the dew point fixes the pressure, P = PsatR124(Tdew) (DMF treated as
+ * non-volatile), then solve BubbleP(Tsol, xi) = P for xi by bisection.
+ * BubbleP is only defined on the open interval 0 < xi < 1; its limits
+ * there, 0 (xi -> 0) and PsatR124(Tsol) (xi -> 1), serve as the
+ * bracket - the bisection only ever evaluates interior points.
+ * Returns NAN if no root (e.g. Tsol below Tdew, or Tsol outside the
+ * validated 30-90 degC window). */
+double R124DMF_XiFromDewT(double Tdew_C, double Tsol_C)
+{ double P, lo = 0.0, hi = 1.0, mid; int i;
+  if (Tsol_C < 30.0 || Tsol_C > 90.0) return NAN;
+  P = R124DMF_PsatR124(Tdew_C);
+  if (!(P <= R124DMF_PsatR124(Tsol_C))) return NAN;
+  for (i = 0; i < 80; i++) { mid = 0.5 * (lo + hi);
+      if (R124DMF_BubbleP(Tsol_C, mid) < P) lo = mid; else hi = mid; }
+  return 0.5 * (lo + hi); }
+
 double R124DMF_DewT(double P_bar)  /* absorbent non-volatile */
 { double T = R124DMF_TsatR124(P_bar);
   return (T >= -30.0 && T <= 90.0) ? T : NAN;  /* dew = pure-fluid reference; Antoine extrapolated to -30 C */ }

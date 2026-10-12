@@ -9,6 +9,7 @@ Attribute VB_Name = "R22DEGDME"
 '
 ' 工作表函数：
 '   =R22DEGDME_Pvap(X, t_C)    泡点压力，bar
+'   =R22DEGDME_XiFromDewT(Tdew_C, Tsol_C)  由露点/溶液温度反解 X，无根返回 Empty
 '   =R22DEGDME_CpMol(X, t_C)   摩尔热容，J/mol/°C
 '   =R22DEGDME_dHm(X)          混合热，J/mol（10°C 测定）
 '   =R22DEGDME_Hsol(X, t_C)    溶液比焓，kJ/kg
@@ -106,6 +107,27 @@ End Function
 ' 式(1)：泡点压力，bar（t_C 摄氏度）
 Public Function R22DEGDME_Pvap(ByVal X As Double, ByVal t_C As Double) As Double
     R22DEGDME_Pvap = R22DEGDME_Pvap_kgcm2(X, t_C + 273.15) * KGCM2_TO_BAR
+End Function
+
+' 由露点温度与溶液温度反解浓度 X（R22 摩尔分数），二分 80 次。
+' 露点定压 P = R22DEGDME_Pvap(1, Tdew_C)：式(1) 在 X=1 端即本模块的
+' 纯 R22 饱和压力（DEGDME 视为不挥发）；再二分求
+' R22DEGDME_Pvap(X, Tsol_C) = P，括号取式(1) 有效浓度域 X ∈ [0.1, 1]。
+' 无根时返回 Empty（如 Tsol 明显低于 Tdew）。
+' 注：与 C/Python 同算法，本 VBA 未在真实 Excel 中编译测试。
+Public Function R22DEGDME_XiFromDewT(ByVal Tdew_C As Double, ByVal Tsol_C As Double) As Variant
+    Dim P As Double, lo As Double, hi As Double, mid As Double, k As Long
+    P = R22DEGDME_Pvap(1#, Tdew_C)
+    If P < R22DEGDME_Pvap(0.1, Tsol_C) Or P > R22DEGDME_Pvap(1#, Tsol_C) Then
+        R22DEGDME_XiFromDewT = Empty
+        Exit Function
+    End If
+    lo = 0.1: hi = 1#
+    For k = 1 To 80
+        mid = 0.5 * (lo + hi)
+        If R22DEGDME_Pvap(mid, Tsol_C) < P Then lo = mid Else hi = mid
+    Next k
+    R22DEGDME_XiFromDewT = 0.5 * (lo + hi)
 End Function
 
 ' 式(6)：摩尔热容，J/mol/°C

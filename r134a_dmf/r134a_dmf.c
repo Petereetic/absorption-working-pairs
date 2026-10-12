@@ -138,6 +138,31 @@ double bubble_T(double p_MPa, double x1, double Tguess)
     return T;
 }
 
+/* ---------- 已知露点温度与溶液温度反算浓度 (二分 80 次) ---------- */
+/*
+ * 输入: Tdew(K) 露点温度, Tsol(K) 溶液温度
+ * 返回: x1 (R134a 液相摩尔分数); 无根时返回 NAN
+ * 原理: DMF 视为不挥发, 露点定压 P = psat_r134a(Tdew);
+ *       再二分求 bubble_p(Tsol, x1) = P, 括号取 x1 in [0, 1]。
+ * 无根情形: P 超出 Tsol 下泡点压力区间 (如 Tsol 明显低于 Tdew)。
+ */
+double xi_from_dew_T(double Tdew, double Tsol)
+{
+    double P = psat_r134a(Tdew);
+    double Plo, Phi, lo = 0.0, hi = 1.0, mid;
+    int i;
+    bubble_p(Tsol, 0.0, &Plo, NULL);
+    bubble_p(Tsol, 1.0, &Phi, NULL);
+    if (P < Plo || P > Phi) return NAN;
+    for (i = 0; i < 80; i++) {
+        double pm;
+        mid = 0.5 * (lo + hi);
+        bubble_p(Tsol, mid, &pm, NULL);
+        if (pm < P) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
 /* ---------- 纯组分液体焓 (kJ/kg), 参考态 273.15K=100 ---------- */
 
 /* R134a 饱和液体: 拟合自 Tillner-Roth & Baehr (1994), 233-353K */

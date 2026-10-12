@@ -87,6 +87,25 @@ Public Function R124DMAC_BubbleT(P_bar As Double, xi As Double) As Variant
     R124DMAC_BubbleT = 0.5 * (lo + hi)
 End Function
 
+' Concentration from dew-point temperature and solution temperature:
+' the dew point fixes the pressure, P = PsatR124(Tdew) (DMAC treated as
+' non-volatile), then solve BubbleP(Tsol, xi) = P for xi by bisection.
+' Returns Empty if no root (P outside the bubble-pressure span at Tsol).
+Public Function R124DMAC_XiFromDewT(Tdew_C As Double, Tsol_C As Double) As Variant
+    Dim P As Double, lo As Double, hi As Double, mid As Double, k As Long
+    P = R124DMAC_PsatR124(Tdew_C)
+    If P < R124DMAC_BubbleP(Tsol_C, 0#) Or P > R124DMAC_BubbleP(Tsol_C, 1#) Then
+        R124DMAC_XiFromDewT = Empty
+        Exit Function
+    End If
+    lo = 0#: hi = 1#
+    For k = 1 To 80
+        mid = 0.5 * (lo + hi)
+        If R124DMAC_BubbleP(Tsol_C, mid) < P Then lo = mid Else hi = mid
+    Next k
+    R124DMAC_XiFromDewT = 0.5 * (lo + hi)
+End Function
+
 Private Function HCoef() As Variant
     HCoef = Array( _
         Array(-34.981, -184.79, 273.1, -22.155, 0#, -49.058, 6.1147, 1.6635), _

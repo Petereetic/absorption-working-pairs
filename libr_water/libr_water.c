@@ -289,6 +289,30 @@ double p_sat_chua(double X, double T)
     return wagner_psat_water(Tdp_C);
 }
 
+/* 由露点温度与溶液温度反解 LiBr 浓度 X [wt%] (Chua 路线):
+   P = 纯水在 Tdew 下的饱和压 (模块自有 Wagner 纯水函数
+   wagner_psat_water); 二分 80 次反解 p_sat_chua(X, Tsol) = P,
+   括号 X∈[0,60] (p_sat_chua 有效浓度域)。p_sat_chua 随 X 单调
+   递减, 二分方向与递增型相反。选 Chua 路线因 p_sat_chua 本身即
+   由 Dühring 露点经同一 Wagner 函数构造, 定义自洽; 与 Patterson
+   PRESS 差约 0.5-1.4%, 不可混用。无根返回 NAN (如 Tsol 明显
+   低于 Tdew)。 */
+double x_from_dew_chua(double Tdew_C, double Tsol_C)
+{
+    double P = wagner_psat_water(Tdew_C);
+    double Pmax = p_sat_chua(0.0, Tsol_C);
+    double Pmin = p_sat_chua(60.0, Tsol_C);
+    double lo = 0.0, hi = 60.0, mid;
+    int k;
+    if (isnan(P) || isnan(Pmin) || isnan(Pmax) || P < Pmin || P > Pmax)
+        return NAN;
+    for (k = 0; k < 80; k++) {
+        mid = 0.5 * (lo + hi);
+        if (p_sat_chua(mid, Tsol_C) > P) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
 double rho_chua(double X, double T)
 {
     double s = 0.0, xk = 1.0;

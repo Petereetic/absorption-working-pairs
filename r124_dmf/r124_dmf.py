@@ -148,6 +148,31 @@ def bubble_T(P_bar, xi, iters=60):
     return 0.5 * (lo + hi)
 
 
+def xi_from_dew(Tdew_C, Tsol_C):
+    """Concentration from dew-point temperature and solution temperature.
+
+    The dew point fixes the pressure, P = psat_R124(Tdew) (DMF treated
+    as non-volatile); then solve bubble_P(Tsol, xi) = P by bisection.
+    bubble_P is defined on the open interval 0 < xi < 1; its limits
+    there, 0 at xi -> 0 and psat_R124(Tsol) at xi -> 1, serve as the
+    bracket, and the bisection only ever evaluates interior points.
+    NaN if there is no root (e.g. Tsol below Tdew, or Tsol outside
+    the validated 30-90 degC window)."""
+    if not (_TMIN <= Tsol_C <= _TMAX):
+        return NAN
+    P = psat_R124(Tdew_C)
+    if not (P <= psat_R124(Tsol_C)):
+        return NAN
+    lo, hi = 0.0, 1.0
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if bubble_P(Tsol_C, mid) < P:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
 def dew_T(P_bar, xi=None):
     """Dew point [degC]: absorbent non-volatile -> pure R124 Tsat.
     The mixture model is windowed to 30-90 degC, but the dew point is

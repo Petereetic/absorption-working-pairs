@@ -299,6 +299,38 @@ def p_bubble_TX(T_K, x, p_lo=0.002, p_hi=2.0, tol=1e-9):
     return 0.5 * (p_lo + p_hi)
 
 
+def x_from_dew_T(Tdew_K, Tsol_K):
+    """NH3 mole fraction x from a dew-point temperature [K] and a
+    solution temperature [K] -- bisection inverse of p_bubble_TX.
+
+    Construction (pure-NH3 endpoint): the dew point fixes the pressure
+    through the PURE ammonia saturation pressure at Tdew,
+        P = p_bubble_TX(Tdew_K, x=1),
+    i.e. the x = 1 endpoint of Eq (6); then solve
+    p_bubble_TX(Tsol_K, x) = P for x by 80 bisection steps over
+    x in [0, 1] (the full concentration domain of Eq (6)).
+
+    NOTE / approximation: ammonia-water vapour in reality contains
+    water (equilibrium y < 1 for x < 1), so this is NOT the true
+    mixture dew curve of Eq (7).  It treats the given dew-point
+    temperature as a pure-NH3 saturation temperature -- the same
+    x = 1 endpoint convention used in the dual-adiabatic-chamber
+    scans.  None if there is no root (P outside the bubble-pressure
+    span at Tsol_K, e.g. Tsol_K well below Tdew_K)."""
+    P = p_bubble_TX(Tdew_K, 1.0)
+    Plo, Phi = p_bubble_TX(Tsol_K, 0.0), p_bubble_TX(Tsol_K, 1.0)
+    if not (Plo <= P <= Phi):
+        return None
+    lo, hi = 0.0, 1.0
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if p_bubble_TX(Tsol_K, mid) < P:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
 def p_dew_TY(T_K, y, p_lo=0.02, p_hi=2.0, tol=1e-9):
     """Dew pressure [MPa] at temperature T [K] and vapour NH3 mole
     fraction y -- numerical inverse of Eq (7)."""

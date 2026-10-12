@@ -75,6 +75,62 @@ double nl_T_bubble_PX(double P_kPa, double x)
     return T_K;
 }
 
+/* Pure-NH3 saturation (dew-point convention for nl_XiFromDewT):
+ * LiNO3 is non-volatile, vapour is pure NH3.  Pure-NH3 saturation
+ * temperature follows the ammonia-water module's Patek-Klomfar
+ * Eq. (6) at NH3 mole fraction = 1 (the convention stated in this
+ * pair's documentation for its glide curves).  At x = 1 only the
+ * m = 0 terms of Eq. (6) survive:
+ *   Tsat[K] = 100 * (3.22302 - 0.384206 L + 0.0460965 L^2
+ *                    - 0.00378945 L^3 + 0.000135610 L^4),
+ *   L = ln(2 MPa / P).  Eq. (6) range: P = 0.002-2 MPa. */
+static double nl_Tsat_NH3_pure(double P_kPa)
+{
+    double L = log(2.0 / (P_kPa / 1000.0));
+    return 100.0 * ((((0.000135610 * L - 0.00378945) * L + 0.0460965) * L
+                     - 0.384206) * L + 3.22302);
+}
+
+/* Pure-NH3 saturation pressure [kPa] by 80-step bisection on the
+ * function above; NAN if T_K is outside the Eq. (6) pressure span. */
+static double nl_psat_NH3_pure(double T_K)
+{
+    double lo = 2.0, hi = 2000.0, mid;
+    int k;
+    if (T_K < nl_Tsat_NH3_pure(lo) || T_K > nl_Tsat_NH3_pure(hi))
+        return NAN;
+    for (k = 0; k < 80; k++) {
+        mid = 0.5 * (lo + hi);
+        if (nl_Tsat_NH3_pure(mid) < T_K) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
+/* NH3 mass fraction from dew-point temperature and solution
+ * temperature: the dew point fixes P = psat_NH3_pure(Tdew) (see
+ * above), then solve nl_p_bubble_TX(Tsol, x) = P for x by 80-step
+ * bisection over the bubble function's valid concentration range
+ * x = 0.35-0.65.  Returns NAN if no root (P outside the bubble-
+ * pressure span at Tsol, e.g. Tsol well below Tdew, Tdew outside
+ * the pure-NH3 Eq. (6) range, or Tsol out of range). */
+double nl_XiFromDewT(double Tdew_K, double Tsol_K)
+{
+    double P = nl_psat_NH3_pure(Tdew_K);
+    double lo = 0.35, hi = 0.65, mid;
+    int k;
+    if (isnan(P))
+        return NAN;
+    if (!nl_in(Tsol_K, 293.15, 353.15))
+        return NAN;
+    if (P < nl_p_bubble_TX(Tsol_K, 0.35) || P > nl_p_bubble_TX(Tsol_K, 0.65))
+        return NAN;
+    for (k = 0; k < 80; k++) {
+        mid = 0.5 * (lo + hi);
+        if (nl_p_bubble_TX(Tsol_K, mid) < P) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
 /* Liquid enthalpy [kJ/kg]: H = ha + hb T + hc T^2.
  * Reference state: H = 0 at 0 degC, x = 0.5 (source definition). */
 double nl_h_liq(double T_K, double x)

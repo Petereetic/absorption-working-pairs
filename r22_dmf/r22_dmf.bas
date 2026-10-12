@@ -9,6 +9,7 @@ Attribute VB_Name = "R22DMF"
 '   参考态 273.15K 饱和液体=100 kJ/kg。适用约 T -20~95C。
 ' 用法: =R22DMF_BubbleP(40, 0.5)   -> 泡点压力 bar
 '       =R22DMF_BubbleT(3.8, 0.5)  -> 泡点温度 C
+'       =R22DMF_XiFromDewT(0, 60)  -> 由露点/溶液温度反解浓度 xi
 '       =R22DMF_Hsol(30, 0.5)      -> 溶液焓 kJ/kg
 '==============================================================================
 Option Explicit
@@ -91,6 +92,25 @@ Public Function R22DMF_BubbleT(P_bar As Double, xi As Double) As Variant
         If BubbleP_K(mid + 273.15, xi) < P_bar Then lo = mid Else hi = mid
     Next i
     R22DMF_BubbleT = 0.5 * (lo + hi)
+End Function
+
+Public Function R22DMF_XiFromDewT(Tdew_C As Double, Tsol_C As Double) As Variant
+    ' 由露点温度与溶液温度反解浓度 xi (R22 质量分数):
+    ' 露点定压 P = 纯 R22 饱和压 (本模块 xi=1.0 等浓度线; DMF 视为不挥发),
+    ' 再二分 (80 次) 求 BubbleP(Tsol, xi) = P, 括号取泡点有效浓度域 0.10~1.00。
+    ' 无根 (P 超出 Tsol 处泡点压力跨度, 如溶液温度低于露点温度) 返回 Empty。
+    ' 注: 与 C/Python 同算法; 本 VBA 未经真实 Excel 编译测试。
+    Dim P As Double, lo As Double, hi As Double, mid As Double, i As Long
+    P = BubbleP_K(Tdew_C + 273.15, 1#)
+    If P < BubbleP_K(Tsol_C + 273.15, 0.1) Or P > BubbleP_K(Tsol_C + 273.15, 1#) Then
+        R22DMF_XiFromDewT = Empty: Exit Function
+    End If
+    lo = 0.1: hi = 1#
+    For i = 1 To 80
+        mid = 0.5 * (lo + hi)
+        If BubbleP_K(Tsol_C + 273.15, mid) < P Then lo = mid Else hi = mid
+    Next i
+    R22DMF_XiFromDewT = 0.5 * (lo + hi)
 End Function
 
 Private Function FPoly(F0 As Double, F1 As Double, F2 As Double, T As Double) As Double

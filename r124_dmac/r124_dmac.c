@@ -82,6 +82,24 @@ double R124DMAC_BubbleT(double P_bar, double xi)
     return 0.5 * (lo + hi);
 }
 
+/* Concentration from dew-point temperature and solution temperature:
+ * the dew point fixes the pressure, P = PsatR124(Tdew) (DMAC treated as
+ * non-volatile), then solve BubbleP(Tsol, xi) = P for xi by bisection.
+ * Returns NAN if no root (P outside the bubble-pressure span at Tsol). */
+double R124DMAC_XiFromDewT(double Tdew_C, double Tsol_C)
+{
+    double P = R124DMAC_PsatR124(Tdew_C);
+    double lo = 0.0, hi = 1.0, mid;
+    int k;
+    if (P < R124DMAC_BubbleP(Tsol_C, 0.0) || P > R124DMAC_BubbleP(Tsol_C, 1.0))
+        return NAN;
+    for (k = 0; k < 80; k++) {
+        mid = 0.5 * (lo + hi);
+        if (R124DMAC_BubbleP(Tsol_C, mid) < P) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
 /* Eq. (19) excess enthalpy, Table 4: hE = 4.1868 sum_j sum_i h_ij x^i T^j */
 static const double HTAB[8][8] = {
     {-0.34981e+02, -0.18479e+03,  0.27310e+03, -0.22155e+02,  0.0,         -0.49058e+02,  0.61147e+01,  0.16635e+01},

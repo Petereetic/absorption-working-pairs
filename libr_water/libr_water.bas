@@ -23,6 +23,8 @@ Attribute VB_Name = "LiBrWater"
 '   LW_PsatChua(X,T) 水蒸气分压 [Pa] (Chua Dühring, 0-190°C/0-60wt%;
 '                      x>60 的 <x-60> 项按原文印刷值无法复现, 不实现)
 '   LW_RhoChua(X,T)  密度 [kg/m^3] (Chua, 0-200°C/0-70%)
+'   LW_XFromDewTChua(Tdew,Tsol)  由露点温度与溶液温度反解浓度 X [wt%]
+'                      (Chua 路线, Wagner 纯水定压; 无根返回 Empty)
 '
 ' 范围外或结晶区内返回 #VALUE! 错误值。
 ' ==========================================================================
@@ -267,6 +269,30 @@ Public Function LW_PsatChua(ByVal X As Double, ByVal T As Double) As Variant
     Next i
     TdpC = (T - BD) / AD
     LW_PsatChua = WagnerPsat(TdpC)
+End Function
+
+' 由露点温度与溶液温度反解 LiBr 浓度 X [wt%] (Chua 路线):
+' P = 纯水在 Tdew 下的饱和压 (模块自有 WagnerPsat 纯水函数);
+' 二分 80 次反解 LW_PsatChua(X, Tsol) = P, 括号 X∈[0,60]
+' (LW_PsatChua 有效浓度域)。LW_PsatChua 随 X 单调递减,
+' 二分方向与递增型相反。与 Python/C 同算法。
+' 无根返回 Empty (如 Tsol 明显低于 Tdew)。
+Public Function LW_XFromDewTChua(ByVal Tdew_C As Double, ByVal Tsol_C As Double) As Variant
+    Dim P As Double, Pmin As Double, Pmax As Double
+    Dim lo As Double, hi As Double, mid As Double, k As Long
+    P = WagnerPsat(Tdew_C)
+    Pmax = LW_PsatChua(0#, Tsol_C)
+    Pmin = LW_PsatChua(60#, Tsol_C)
+    If P < Pmin Or P > Pmax Then
+        LW_XFromDewTChua = Empty
+        Exit Function
+    End If
+    lo = 0#: hi = 60#
+    For k = 1 To 80
+        mid = 0.5 * (lo + hi)
+        If LW_PsatChua(mid, Tsol_C) > P Then lo = mid Else hi = mid
+    Next k
+    LW_XFromDewTChua = 0.5 * (lo + hi)
 End Function
 
 Public Function LW_RhoChua(ByVal X As Double, ByVal T As Double) As Variant

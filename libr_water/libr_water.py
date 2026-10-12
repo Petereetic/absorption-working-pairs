@@ -338,6 +338,34 @@ def p_sat_chua(X, T):
     return _wagner_psat_water(Tdp_C)
 
 
+def x_from_dew_chua(Tdew_C, Tsol_C):
+    """由露点温度与溶液温度反解 LiBr 浓度 X [wt%] (Chua 路线)。
+
+    构造: 露点定压 P = 纯水在 Tdew 下的饱和压, 用模块自有纯水饱和压
+    函数 _wagner_psat_water (Wagner 方程); 再二分 80 次反解溶液蒸气压
+    函数 p_sat_chua(X, Tsol_C) = P, 括号取 X∈[0,60] (p_sat_chua 的有
+    效浓度域)。p_sat_chua 随 X 单调递减, 二分方向与递增型相反。
+    选 Chua 路线的原因: p_sat_chua 本身即由 Dühring 露点经同一 Wagner
+    纯水函数构造, 露点定义自洽; Patterson PRESS 与之差约 0.5–1.4%
+    (见公式说明第四节), 两路线不可混用。
+    无根返回 None (如 Tsol 明显低于 Tdew 时 P 高于 X=0 端的蒸气压,
+    或 P 低于 X=60 端的蒸气压)。Tsol 超出 p_sat_chua 范围时其
+    ValueError 照常抛出 (模块既有约定)。"""
+    P = _wagner_psat_water(Tdew_C)
+    Pmax = p_sat_chua(0.0, Tsol_C)    # X=0 端: 蒸气压最高
+    Pmin = p_sat_chua(60.0, Tsol_C)   # X=60 端: 蒸气压最低
+    if not (Pmin <= P <= Pmax):
+        return None
+    lo, hi = 0.0, 60.0
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if p_sat_chua(mid, Tsol_C) > P:
+            lo = mid   # 蒸气压偏高 → 需更高浓度压低它
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
 def rho_chua(X, T):
     """密度 [kg/m^3] (Chua Table 2); X wt%, T °C。范围: 0-200°C, 0-70%。
 

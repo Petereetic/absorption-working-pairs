@@ -55,6 +55,27 @@ def bubble_T(P_bar, xi, Tlo_C=-25.0, Thi_C=120.0):
         else: hi = mid
     return 0.5*(lo+hi)
 
+def xi_from_dew(Tdew_C, Tsol_C):
+    """Concentration from dew-point temperature and solution temperature.
+
+    The dew point fixes the pressure, P = bubble_P(Tdew, 1.0) (the pure-R22
+    isopleth of this module; DMF treated as non-volatile); then solve
+    bubble_P(Tsol, xi) = P by bisection over the valid xi range
+    0.10..1.00. None if no root (P outside the bubble-pressure span
+    at Tsol)."""
+    P = bubble_P(Tdew_C, 1.0)
+    Plo, Phi = bubble_P(Tsol_C, _XI_LO), bubble_P(Tsol_C, _XI_HI)
+    if not (Plo <= P <= Phi):
+        return None
+    lo, hi = _XI_LO, _XI_HI
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if bubble_P(Tsol_C, mid) < P:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
 # ---- Solution enthalpy: Fatouh et al. 1993 (thesis eq 2.38-2.43), T in K, h in kJ/kg ----
 _MR22, _MDMF, _R = 86.47, 73.09, 8.314  # g/mol, kJ/(kmol K)
 _F_R22_L = [(-68.14840, 0.0631300, 0.0020200, 253.15, 323.15),

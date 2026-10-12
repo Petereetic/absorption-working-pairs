@@ -182,6 +182,30 @@ def meoh_Tsat_bar(P_bar):
     return B / (A - math.log10(P_bar / 1.3332239e-3)) - C
 
 
+def w_from_dew(Tdew_K, Tsol_K):
+    """由露点温度与溶液温度反解甲醇质量分数 w。
+
+    露点定压：P = meoh_psat_bar(Tdew_K)（盐不挥发，气相为纯甲醇，
+    纯甲醇饱和压取本模块自有 Antoine 式，见上）；再二分 80 次反解
+    p_bubble_TW(Tsol_K, w) = P，括号取泡点函数有效浓度域
+    w = 0.243~0.509（泡点压力在该域内随 w 单调增）。
+    无根时返回 None（P 落在 Tsol 下泡点压力跨度之外，
+    如溶液温度明显低于露点温度）。"""
+    P = meoh_psat_bar(Tdew_K)
+    Plo = p_bubble_TW(Tsol_K, _W_NODES[0])
+    Phi = p_bubble_TW(Tsol_K, _W_NODES[-1])
+    if not (Plo <= P <= Phi):
+        return None
+    lo, hi = _W_NODES[0], _W_NODES[-1]
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if p_bubble_TW(Tsol_K, mid) < P:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
 # ---- 未核实式（仅供存档，勿用于计算；见文件头说明） ----
 def density_printed_UNVERIFIED(T_K, w):
     """式(4.10) 按印刷转录：rho = 2.55 - 2.366w - 0.0068t [g/cc]，返回 kg/m3。

@@ -69,6 +69,29 @@ def p_vap_bar(X, t_C):
     return p_vap_kgcm2(X, t_C + 273.15) * _KGCM2_TO_BAR
 
 
+def xi_from_dew_T(Tdew_C, Tsol_C):
+    """由露点温度与溶液温度反解浓度 X（R22 摩尔分数），二分 80 次。
+
+    露点定压 P = p_vap_bar(1.0, Tdew_C)：式(1) 在 X=1 端即本模块的纯
+    R22 饱和压力（DEGDME 视为不挥发）；再二分求
+    p_vap_bar(X, Tsol_C) = P，括号取式(1) 有效浓度域 X ∈ [0.1, 1.0]。
+    无根时返回 None（如 Tsol 明显低于 Tdew，P 超出 Tsol 下的泡点
+    压力区间）。
+    """
+    P = p_vap_bar(1.0, Tdew_C)
+    Plo, Phi = p_vap_bar(0.1, Tsol_C), p_vap_bar(1.0, Tsol_C)
+    if not (Plo <= P <= Phi):
+        return None
+    lo, hi = 0.1, 1.0
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if p_vap_bar(mid, Tsol_C) < P:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
 def cp_molar(X, t_C):
     """式(6)：混合物摩尔定压热容，J/mol/°C。"""
     sA = _poly([r[0] for r in _T3], X)

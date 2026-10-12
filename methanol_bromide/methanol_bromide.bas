@@ -36,6 +36,7 @@ Attribute VB_Name = "MethanolBromide"
 '   =MB_Hvap(T_K, w)    气相比焓，kJ/kg
 '   =MB_RhoIedema(T_K, w, w_H)  密度（Iedema 1984），kg/m3
 '   =MB_EtaIedema(T_K, w)       动力黏度（Iedema 1984），Pa·s
+'   =MB_XiFromDewT(Tdew_K, Tsol_K)  由露点温度与溶液温度反解 w，无根返回 Empty
 '
 ' 注意：本模块未在真实 Excel 中编译运行过，使用前请先编译验证。
 
@@ -156,6 +157,33 @@ Public Function MB_Tbub(ByVal P_bar As Double, ByVal w As Double) As Double
     Dim log10p As Double
     log10p = Log(P_bar * 1000#) / Log(10#)
     MB_Tbub = 1000# / ((log10p - PchipEval(1, w)) / PchipEval(2, w) + 2.3)
+End Function
+
+' 纯甲醇饱和压（私有辅助，与 Python 版 meoh_psat_bar 同常数）：
+' Antoine 拟合自论文附录 A 表：log10 P[mmHg] = 8.885298 - 2070.3714/(T[K] + 6.3818)
+Private Function MeohPsatBar(ByVal T_K As Double) As Double
+    MeohPsatBar = 10# ^ (8.885298 - 2070.3714 / (T_K + 6.3818)) * 0.0013332239
+End Function
+
+' 由露点温度与溶液温度反解甲醇质量分数 w：
+' 露点定压 P = MeohPsatBar(Tdew_K)（盐不挥发，气相为纯甲醇），
+' 再二分 80 次反解 MB_Pbub(Tsol_K, w) = P，
+' 括号取泡点函数有效浓度域 w = 0.243~0.509。
+' 无根时返回 Empty（如溶液温度明显低于露点温度）。
+' 与 C/Python 同算法；本函数未在真实 Excel 中编译运行。
+Public Function MB_XiFromDewT(ByVal Tdew_K As Double, ByVal Tsol_K As Double) As Variant
+    Dim P As Double, lo As Double, hi As Double, mid As Double, k As Long
+    P = MeohPsatBar(Tdew_K)
+    If P < MB_Pbub(Tsol_K, 0.243) Or P > MB_Pbub(Tsol_K, 0.509) Then
+        MB_XiFromDewT = Empty
+        Exit Function
+    End If
+    lo = 0.243: hi = 0.509
+    For k = 1 To 80
+        mid = 0.5 * (lo + hi)
+        If MB_Pbub(Tsol_K, mid) < P Then lo = mid Else hi = mid
+    Next k
+    MB_XiFromDewT = 0.5 * (lo + hi)
 End Function
 
 ' 式(3.4)：溶液比热，kJ/(kg·K)

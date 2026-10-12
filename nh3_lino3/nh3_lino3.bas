@@ -22,6 +22,9 @@ Attribute VB_Name = "NH3LiNO3"
 '   NL_Rho(T_K, x)      密度 [kg/m^3]       (T 293.15-353.15, x 0.35-0.65)
 '   NL_K(T_K, x)        导热系数 [W/(m K)]  (T 303.15-353.15, x 0.35-0.60)
 '   NL_Xcris(T_C, x)    结晶界限量 XCRIS    (x 0-1, 原文十分段伪代码)
+'   NL_XiFromDewT(Tdew_K, Tsol_K)  由露点温度与溶液温度反解 x;
+'                       无根返回 Empty (本函数按跨工质对统一约定,
+'                       不用本模块其余函数的 #VALUE! 约定)
 '
 ' 焓参考态 (来源原文): 0 °C、x=0.5 时 H = 0 kJ/kg。与本库其他工质对
 ' 的参考态不同, 跨工质对作焓差比较时注意。
@@ -77,6 +80,60 @@ Public Function NL_Tbub(ByVal P_kPa As Double, ByVal x As Double) As Variant
         NL_Tbub = CVErr(xlErrValue): Exit Function
     End If
     NL_Tbub = T_K
+End Function
+
+' ---------- 纯氨饱和线 (露点口径, 供 NL_XiFromDewT 用) ----------
+' LiNO3 不挥发, 气相视为纯氨。纯氨饱和温度按本工质对说明的口径:
+' 氨水模块 Patek-Klomfar 式 (6) 在氨摩尔分数 = 1 处。x = 1 时式 (6)
+' 只剩 m = 0 项: Tsat[K] = 100*(3.22302 - 0.384206 L + 0.0460965 L^2
+' - 0.00378945 L^3 + 0.000135610 L^4), L = Log(2 MPa / P)。
+' 式 (6) 辖区 P = 0.002-2 MPa。
+Private Function TsatNH3Pure(ByVal P_kPa As Double) As Double
+    Dim L As Double
+    L = Log(2# / (P_kPa / 1000#))
+    TsatNH3Pure = 100# * ((((0.00013561 * L - 0.00378945) * L _
+                   + 0.0460965) * L - 0.384206) * L + 3.22302)
+End Function
+
+' 纯氨饱和压力 [kPa]: 二分 80 次反解 TsatNH3Pure(P) = T_K;
+' T_K 落在式 (6) 压力跨度之外时返回 Empty。
+Private Function PsatNH3Pure(ByVal T_K As Double) As Variant
+    Dim lo As Double, hi As Double, mid As Double, k As Long
+    lo = 2#: hi = 2000#
+    If T_K < TsatNH3Pure(lo) Or T_K > TsatNH3Pure(hi) Then
+        PsatNH3Pure = Empty: Exit Function
+    End If
+    For k = 1 To 80
+        mid = 0.5 * (lo + hi)
+        If TsatNH3Pure(mid) < T_K Then lo = mid Else hi = mid
+    Next k
+    PsatNH3Pure = 0.5 * (lo + hi)
+End Function
+
+' ---------- 由露点温度与溶液温度反解氨质量分数 x ----------
+' 露点定压 P = PsatNH3Pure(Tdew_K) (纯氨饱和压, 口径见上);
+' 再二分 80 次反解 NL_Pbub(Tsol_K, x) = P, 括号取泡点函数有效
+' 浓度域 x = 0.35-0.65。无根时返回 Empty (P 落在 Tsol 下泡点压力
+' 跨度之外, 如溶液温度明显低于露点温度; 或 Tdew 超出纯氨式 (6)
+' 辖区; 或 Tsol 越界)。与 C/Python 同算法; 未在真实 Excel 编译。
+Public Function NL_XiFromDewT(ByVal Tdew_K As Double, ByVal Tsol_K As Double) As Variant
+    Dim P As Variant, lo As Double, hi As Double, mid As Double, k As Long
+    P = PsatNH3Pure(Tdew_K)
+    If IsEmpty(P) Then
+        NL_XiFromDewT = Empty: Exit Function
+    End If
+    If Not InRng(Tsol_K, 293.15, 353.15) Then
+        NL_XiFromDewT = Empty: Exit Function
+    End If
+    If P < NL_Pbub(Tsol_K, 0.35) Or P > NL_Pbub(Tsol_K, 0.65) Then
+        NL_XiFromDewT = Empty: Exit Function
+    End If
+    lo = 0.35: hi = 0.65
+    For k = 1 To 80
+        mid = 0.5 * (lo + hi)
+        If NL_Pbub(Tsol_K, mid) < P Then lo = mid Else hi = mid
+    Next k
+    NL_XiFromDewT = 0.5 * (lo + hi)
 End Function
 
 ' ---------- 溶液比焓 [kJ/kg]: H = ha + hb T + hc T^2 ----------

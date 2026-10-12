@@ -105,6 +105,33 @@ Public Function R124NMP_BubbleT(P_bar As Double, xi As Double) As Variant
     R124NMP_BubbleT = 0.5 * (lo + hi)
 End Function
 
+' Concentration from dew-point temperature and solution temperature:
+' the dew point fixes the pressure, P = PsatR124(Tdew) (NMP treated as
+' non-volatile), then solve BubbleP(Tsol, xi) = P for xi by bisection.
+' BubbleP is only defined on the open interval 0 < xi < 1; its limits
+' there, 0 (xi -> 0) and PsatR124(Tsol) (xi -> 1), serve as the
+' bracket - the bisection only ever evaluates interior points.
+' Returns Empty if no root (e.g. Tsol below Tdew, or Tsol outside the
+' validated 30-90 degC window).
+Public Function R124NMP_XiFromDewT(Tdew_C As Double, Tsol_C As Double) As Variant
+    Dim P As Double, lo As Double, hi As Double, mid As Double, k As Long
+    If Tsol_C < 30# Or Tsol_C > 90# Then
+        R124NMP_XiFromDewT = Empty
+        Exit Function
+    End If
+    P = R124NMP_PsatR124(Tdew_C)
+    If P > R124NMP_PsatR124(Tsol_C) Then
+        R124NMP_XiFromDewT = Empty
+        Exit Function
+    End If
+    lo = 0#: hi = 1#
+    For k = 1 To 80
+        mid = 0.5 * (lo + hi)
+        If R124NMP_BubbleP(Tsol_C, mid) < P Then lo = mid Else hi = mid
+    Next k
+    R124NMP_XiFromDewT = 0.5 * (lo + hi)
+End Function
+
 Public Function R124NMP_DewT(P_bar As Double) As Variant   ' absorbent non-volatile
     Dim T As Variant
     T = R124NMP_TsatR124(P_bar)

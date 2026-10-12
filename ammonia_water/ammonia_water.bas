@@ -12,6 +12,8 @@ Attribute VB_Name = "AmmoniaWater"
 '  AW_Hliq(T, x)    Eq(9) saturated-liquid enthalpy [kJ/kg]
 '  AW_Hvap(T, y)    Eq(10) vapour enthalpy [kJ/kg]
 '  AW_Glide(p, z)   true glide [K] = T_dew(p,z)-T_bubble(p,z)
+'  AW_XFromDewT(Tdew, Tsol)  NH3 mole fraction from dew-point T and
+'                    solution T (pure-NH3 endpoint construction; Empty if no root)
 '  AW_Xi2X(xi)      NH3 mass fraction -> mole fraction
 '  AW_X2Xi(x)       NH3 mole fraction -> mass fraction
 '
@@ -215,6 +217,30 @@ Public Function AW_Pdew_T(ByVal T_K As Double, ByVal y As Double) As Double
         If (fm > 0#) = (flo > 0#) Then p_lo = pm: flo = fm Else p_hi = pm
     Next k
     AW_Pdew_T = 0.5 * (p_lo + p_hi)
+End Function
+
+' NH3 mole fraction x from dew-point temperature [K] and solution
+' temperature [K].  Construction (pure-NH3 endpoint): P is the PURE
+' ammonia saturation pressure at Tdew, P = AW_Pbub_T(Tdew, x=1); then
+' solve AW_Pbub_T(Tsol, x) = P by 80 bisection steps over x in [0, 1].
+' NOTE / approximation: the real vapour contains water (y < 1), so
+' this is NOT the true mixture dew curve Eq(7); Tdew is treated as a
+' pure-NH3 saturation temperature (x=1 endpoint convention, same as
+' the dual-adiabatic-chamber scans).  Empty if there is no root
+' (e.g. Tsol well below Tdew).  Same algorithm as Python/C.
+Public Function AW_XFromDewT(ByVal Tdew_K As Double, ByVal Tsol_K As Double) As Variant
+    Dim P As Double, lo As Double, hi As Double, mid As Double, k As Long
+    P = AW_Pbub_T(Tdew_K, 1#)
+    If P < AW_Pbub_T(Tsol_K, 0#) Or P > AW_Pbub_T(Tsol_K, 1#) Then
+        AW_XFromDewT = Empty
+        Exit Function
+    End If
+    lo = 0#: hi = 1#
+    For k = 1 To 80
+        mid = 0.5 * (lo + hi)
+        If AW_Pbub_T(Tsol_K, mid) < P Then lo = mid Else hi = mid
+    Next k
+    AW_XFromDewT = 0.5 * (lo + hi)
 End Function
 
 Public Function AW_Xi2X(ByVal xi As Double) As Double

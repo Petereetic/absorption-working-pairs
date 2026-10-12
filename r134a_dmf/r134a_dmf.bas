@@ -132,6 +132,32 @@ Public Function Bubble_T(p_MPa As Double, x1 As Double, Optional Tguess As Doubl
     Bubble_T = T
 End Function
 
+'---------- 已知露点温度与溶液温度反算浓度 (二分 80 次) ----------
+' 输入: Tdew(K) 露点温度, Tsol(K) 溶液温度
+' 返回: x1 (R134a 液相摩尔分数); 无根时返回 Empty
+' 原理: DMF 视为不挥发, 露点定压 P = Psat_R134a(Tdew);
+'       再二分求 Bubble_P(Tsol, x1) = P, 括号取 x1 in [0, 1]。
+' 无根情形: P 超出 Tsol 下泡点压力区间 (如 Tsol 明显低于 Tdew)。
+' 注: 与 C/Python 同算法, 本 VBA 未在真实 Excel 中编译测试。
+
+Public Function Xi_From_Dew_T(Tdew As Double, Tsol As Double) As Variant
+    Dim P As Double, Plo As Double, Phi As Double
+    Dim lo As Double, hi As Double, mid As Double, dummy As Double, k As Long
+    P = Psat_R134a(Tdew)
+    Plo = Bubble_P(Tsol, 0#, dummy)
+    Phi = Bubble_P(Tsol, 1#, dummy)
+    If P < Plo Or P > Phi Then
+        Xi_From_Dew_T = Empty
+        Exit Function
+    End If
+    lo = 0#: hi = 1#
+    For k = 1 To 80
+        mid = 0.5 * (lo + hi)
+        If Bubble_P(Tsol, mid, dummy) < P Then lo = mid Else hi = mid
+    Next k
+    Xi_From_Dew_T = 0.5 * (lo + hi)
+End Function
+
 '---------- 纯组分液体焓 (kJ/kg) ----------
 
 Public Function H_R134a_L(T As Double) As Double

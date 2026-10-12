@@ -59,6 +59,25 @@ double r22degdme_pvap_bar(double X, double t_C)
     return r22degdme_pvap_kgcm2(X, t_C + 273.15) * KGCM2_TO_BAR;
 }
 
+/* 由露点温度与溶液温度反解浓度 X（R22 摩尔分数），二分 80 次。
+ * 露点定压 P = r22degdme_pvap_bar(1.0, Tdew_C)：式(1) 在 X=1 端即
+ * 本模块的纯 R22 饱和压力（DEGDME 视为不挥发）；再二分求
+ * r22degdme_pvap_bar(X, Tsol_C) = P，括号取式(1) 有效浓度域
+ * X ∈ [0.1, 1.0]。无根时返回 NAN（如 Tsol 明显低于 Tdew）。 */
+double r22degdme_XiFromDewT(double Tdew_C, double Tsol_C)
+{
+    double P = r22degdme_pvap_bar(1.0, Tdew_C);
+    double lo = 0.1, hi = 1.0, mid;
+    int k;
+    if (P < r22degdme_pvap_bar(0.1, Tsol_C) || P > r22degdme_pvap_bar(1.0, Tsol_C))
+        return NAN;
+    for (k = 0; k < 80; k++) {
+        mid = 0.5 * (lo + hi);
+        if (r22degdme_pvap_bar(mid, Tsol_C) < P) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
 /* 式(6)：摩尔热容 J/mol/°C */
 double r22degdme_cp_molar(double X, double t_C)
 {

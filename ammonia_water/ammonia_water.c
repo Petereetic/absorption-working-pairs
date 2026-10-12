@@ -193,6 +193,30 @@ double p_bubble_TX(double T_K, double x)
     return 0.5 * (p_lo + p_hi);
 }
 
+/* NH3 mole fraction x from a dew-point temperature [K] and a solution
+   temperature [K]: bisection inverse of p_bubble_TX.
+   Construction (pure-NH3 endpoint): P = p_bubble_TX(Tdew_K, x=1), the
+   x=1 endpoint of Eq (6); then solve p_bubble_TX(Tsol_K, x) = P by
+   80 bisection steps over x in [0, 1] (full domain of Eq (6)).
+   NOTE / approximation: the real vapour contains water (y < 1), so
+   this is NOT the true mixture dew curve of Eq (7); the dew-point
+   temperature is treated as a pure-NH3 saturation temperature, the
+   same x=1 endpoint convention used in the dual-adiabatic-chamber
+   scans.  NAN if there is no root (e.g. Tsol_K well below Tdew_K). */
+double x_from_dew_T(double Tdew_K, double Tsol_K)
+{
+    double P = p_bubble_TX(Tdew_K, 1.0);
+    double lo = 0.0, hi = 1.0, mid;
+    int k;
+    if (P < p_bubble_TX(Tsol_K, 0.0) || P > p_bubble_TX(Tsol_K, 1.0))
+        return NAN;
+    for (k = 0; k < 80; k++) {
+        mid = 0.5 * (lo + hi);
+        if (p_bubble_TX(Tsol_K, mid) < P) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
 /* Dew pressure [MPa] at (T, y): bisection inverse of Eq (7). */
 double p_dew_TY(double T_K, double y)
 {

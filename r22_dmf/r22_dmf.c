@@ -78,6 +78,26 @@ double R22DMF_BubbleT(double P_bar, double xi)
     return 0.5*(lo+hi);
 }
 
+/* Concentration from dew-point temperature and solution temperature:
+ * the dew point fixes the pressure, P = R22DMF_BubbleP(Tdew, 1.0)
+ * (pure-R22 isopleth of this module; DMF treated as non-volatile),
+ * then solve R22DMF_BubbleP(Tsol, xi) = P for xi by bisection over
+ * the valid xi range 0.10..1.00. Returns NAN if no root (P outside
+ * the bubble-pressure span at Tsol). */
+double R22DMF_XiFromDewT(double Tdew_C, double Tsol_C)
+{
+    double P = R22DMF_BubbleP(Tdew_C, 1.0);
+    double lo = 0.10, hi = 1.0, mid;
+    int i;
+    if (P < R22DMF_BubbleP(Tsol_C, 0.10) || P > R22DMF_BubbleP(Tsol_C, 1.0))
+        return NAN;
+    for (i = 0; i < 80; i++) {
+        mid = 0.5*(lo+hi);
+        if (R22DMF_BubbleP(Tsol_C, mid) < P) lo = mid; else hi = mid;
+    }
+    return 0.5*(lo+hi);
+}
+
 /* ---- Fatouh solution enthalpy (kJ/kg), T_C in degC ---- */
 static double fpoly(double F0, double F1, double F2, double T) /* T in K */
 { return F0 + F1*T + F2*T*T; }

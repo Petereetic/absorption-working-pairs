@@ -101,6 +101,25 @@ def bubble_T(P_bar, xi, Tlo_C=0.0, Thi_C=150.0):
             hi = mid
     return 0.5 * (lo + hi)
 
+def xi_from_dew(Tdew_C, Tsol_C):
+    """Concentration from dew-point temperature and solution temperature.
+
+    The dew point fixes the pressure, P = psat_R124(Tdew) (DMAC treated
+    as non-volatile); then solve bubble_P(Tsol, xi) = P by bisection.
+    None if no root (P outside the bubble-pressure span at Tsol)."""
+    P = psat_R124(Tdew_C)
+    Plo, Phi = bubble_P(Tsol_C, 0.0), bubble_P(Tsol_C, 1.0)
+    if not (Plo <= P <= Phi):
+        return None
+    lo, hi = 0.0, 1.0
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if bubble_P(Tsol_C, mid) < P:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
 def dew_T(P_bar, xi=None):
     """Dew-point temperature (degC): pure-R124 saturation temperature.
 

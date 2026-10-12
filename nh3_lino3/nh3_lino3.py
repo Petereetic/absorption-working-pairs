@@ -142,6 +142,75 @@ def T_bubble_PX(P_kPa, x):
 
 
 # ---------------------------------------------------------------------------
+# 纯氨饱和线 (露点口径, 供 x_from_dew 用)
+# ---------------------------------------------------------------------------
+# LiNO3 不挥发, 气相视为纯氨。本模块自有口径 (见 公式说明.md 滑移图节):
+# 纯氨饱和温度由氨水模块 Patek-Klomfar 式 (6) 在氨摩尔分数 = 1 处求得。
+# x = 1 时式 (6) 中 (1-x)^m 只剩 m = 0 项, 故纯氨端点为 L 的四次多项式:
+#   T_sat[K] = 100 * sum_i a_i L^i,  L = ln(2 MPa / P)
+# 系数即式 (6) 系数表 m = 0 的五行 (a: 3.22302, -0.384206, 0.0460965,
+# -0.00378945, 0.000135610)。式 (6) 辖区 P = 0.002-2 MPa。
+
+_PK6_PURE = (3.22302, -0.384206, 0.0460965, -0.00378945, 0.000135610)
+
+
+def _Tsat_NH3_pure(P_kPa):
+    """纯氨饱和温度 [K] (Patek-Klomfar 式 (6) 纯氨端点)。P_kPa 为 kPa。"""
+    L = math.log(2.0 / (P_kPa / 1000.0))
+    s = 0.0
+    for a in reversed(_PK6_PURE):
+        s = s * L + a
+    return 100.0 * s
+
+
+def _psat_NH3_pure(T_K):
+    """纯氨饱和压力 [kPa]: 二分 80 次反解 _Tsat_NH3_pure(P) = T_K。
+
+    辖区 P = 2-2000 kPa (式 (6)); T_K 落在该压力跨度之外时返回 None。
+    """
+    lo, hi = 2.0, 2000.0
+    if not (_Tsat_NH3_pure(lo) <= T_K <= _Tsat_NH3_pure(hi)):
+        return None
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if _Tsat_NH3_pure(mid) < T_K:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+def x_from_dew(Tdew_K, Tsol_K):
+    """由露点温度与溶液温度反解氨质量分数 x。
+
+    露点定压: P = _psat_NH3_pure(Tdew_K) (纯氨饱和压, 口径见上);
+    再二分 80 次反解 p_bubble_TX(Tsol_K, x) = P, 括号取泡点函数
+    有效浓度域 x = 0.35-0.65 (泡点压力在该域内随 x 单调增)。
+    无根时返回 None (P 落在 Tsol 下泡点压力跨度之外, 如溶液温度
+    明显低于露点温度; 或 Tdew_K 超出纯氨式 (6) 辖区)。注意本函数
+    按跨工质对统一约定返回 None, 不沿用本模块其余函数的
+    raise ValueError 约定。
+    """
+    P = _psat_NH3_pure(Tdew_K)
+    if P is None:
+        return None
+    if not (_T_VLE[0] <= Tsol_K <= _T_VLE[1]):
+        return None
+    Plo = p_bubble_TX(Tsol_K, _X_VLE[0])
+    Phi = p_bubble_TX(Tsol_K, _X_VLE[1])
+    if not (Plo <= P <= Phi):
+        return None
+    lo, hi = _X_VLE
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if p_bubble_TX(Tsol_K, mid) < P:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+# ---------------------------------------------------------------------------
 # 液体焓 / 比热 / 密度 / 导热
 # ---------------------------------------------------------------------------
 

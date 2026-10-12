@@ -110,6 +110,33 @@ double mb_T_bubble_PW(double P_bar, double w)
                      / pchip_eval(W_NODES, C2_NODES, w) + 2.3);
 }
 
+/* 纯甲醇饱和压（私有辅助，与 Python 版 meoh_psat_bar 同常数）：
+ * Antoine 拟合自 El-Shamarka 附录 A 表（见 methanol_bromide.py 文件头）：
+ * log10 P[mmHg] = 8.885298 - 2070.3714/(T[K] + 6.3818)，返回 bar */
+static double meoh_psat_bar(double T_K)
+{
+    return pow(10.0, 8.885298 - 2070.3714 / (T_K + 6.3818)) * 1.3332239e-3;
+}
+
+/* 由露点温度与溶液温度反解甲醇质量分数 w：
+ * 露点定压 P = meoh_psat_bar(Tdew_K)（盐不挥发，气相为纯甲醇），
+ * 再二分 80 次反解 mb_p_bubble_TW(Tsol_K, w) = P，
+ * 括号取泡点函数有效浓度域 w = 0.243~0.509。
+ * 无根时返回 NAN（如溶液温度明显低于露点温度）。 */
+double mb_XiFromDewT(double Tdew_K, double Tsol_K)
+{
+    double P = meoh_psat_bar(Tdew_K);
+    double lo = 0.243, hi = 0.509, mid;
+    int k;
+    if (P < mb_p_bubble_TW(Tsol_K, lo) || P > mb_p_bubble_TW(Tsol_K, hi))
+        return NAN;
+    for (k = 0; k < 80; k++) {
+        mid = 0.5 * (lo + hi);
+        if (mb_p_bubble_TW(Tsol_K, mid) < P) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
 /* 式(3.4)：溶液比热，kJ/(kg·K) */
 double mb_cp(double T_K, double w)
 {
