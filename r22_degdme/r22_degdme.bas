@@ -8,11 +8,11 @@ Attribute VB_Name = "R22DEGDME"
 '   式(9) 溶液比焓 kJ/kg；参考态：纯组分液体 10°C 焓为 0（本文档约定）
 '
 ' 工作表函数：
-'   =R22DEGDME_Pvap(X, t_C)    泡点压力，bar
-'   =R22DEGDME_XiFromDewT(Tdew_C, Tsol_C)  由露点/溶液温度反解 X，无根返回 Empty
-'   =R22DEGDME_CpMol(X, t_C)   摩尔热容，J/mol/°C
-'   =R22DEGDME_dHm(X)          混合热，J/mol（10°C 测定）
-'   =R22DEGDME_Hsol(X, t_C)    溶液比焓，kJ/kg
+'   =Pvap_R22DEGDME(X, t_C)    泡点压力，bar
+'   =XibyTdewTsol_R22DEGDME(Tdew_C, Tsol_C)  由露点/溶液温度反解 X，无根返回 Empty
+'   =CpMol_R22DEGDME(X, t_C)   摩尔热容，J/mol/°C
+'   =dHm_R22DEGDME(X)          混合热，J/mol（10°C 测定）
+'   =Hsol_R22DEGDME(X, t_C)    溶液比焓，kJ/kg
 '
 ' 注意：本模块未在真实 Excel 中编译运行过，使用前请先编译验证。
 
@@ -92,7 +92,7 @@ Private Function Gk(ByVal i As Long) As Double
 End Function
 
 ' 式(1)：泡点压力，kg/cm2（T_K 开尔文）
-Public Function R22DEGDME_Pvap_kgcm2(ByVal X As Double, ByVal T_K As Double) As Double
+Public Function Pvap_kgcm2_R22DEGDME(ByVal X As Double, ByVal T_K As Double) As Double
     Dim sA As Double, sB As Double, sC As Double, xn As Double, n As Long
     xn = 1#
     For n = 0 To 5
@@ -101,37 +101,37 @@ Public Function R22DEGDME_Pvap_kgcm2(ByVal X As Double, ByVal T_K As Double) As 
         sC = sC + T2C(n) * xn
         xn = xn * X
     Next n
-    R22DEGDME_Pvap_kgcm2 = Exp(sA + sB / T_K + sC * Log(T_K))
+    Pvap_kgcm2_R22DEGDME = Exp(sA + sB / T_K + sC * Log(T_K))
 End Function
 
 ' 式(1)：泡点压力，bar（t_C 摄氏度）
-Public Function R22DEGDME_Pvap(ByVal X As Double, ByVal t_C As Double) As Double
-    R22DEGDME_Pvap = R22DEGDME_Pvap_kgcm2(X, t_C + 273.15) * KGCM2_TO_BAR
+Public Function Pvap_R22DEGDME(ByVal X As Double, ByVal t_C As Double) As Double
+    Pvap_R22DEGDME = Pvap_kgcm2_R22DEGDME(X, t_C + 273.15) * KGCM2_TO_BAR
 End Function
 
 ' 由露点温度与溶液温度反解浓度 X（R22 摩尔分数），二分 80 次。
-' 露点定压 P = R22DEGDME_Pvap(1, Tdew_C)：式(1) 在 X=1 端即本模块的
+' 露点定压 P = Pvap_R22DEGDME(1, Tdew_C)：式(1) 在 X=1 端即本模块的
 ' 纯 R22 饱和压力（DEGDME 视为不挥发）；再二分求
-' R22DEGDME_Pvap(X, Tsol_C) = P，括号取式(1) 有效浓度域 X ∈ [0.1, 1]。
+' Pvap_R22DEGDME(X, Tsol_C) = P，括号取式(1) 有效浓度域 X ∈ [0.1, 1]。
 ' 无根时返回 Empty（如 Tsol 明显低于 Tdew）。
 ' 注：与 C/Python 同算法，本 VBA 未在真实 Excel 中编译测试。
-Public Function R22DEGDME_XiFromDewT(ByVal Tdew_C As Double, ByVal Tsol_C As Double) As Variant
+Public Function XibyTdewTsol_R22DEGDME(ByVal Tdew_C As Double, ByVal Tsol_C As Double) As Variant
     Dim P As Double, lo As Double, hi As Double, mid As Double, k As Long
-    P = R22DEGDME_Pvap(1#, Tdew_C)
-    If P < R22DEGDME_Pvap(0.1, Tsol_C) Or P > R22DEGDME_Pvap(1#, Tsol_C) Then
-        R22DEGDME_XiFromDewT = Empty
+    P = Pvap_R22DEGDME(1#, Tdew_C)
+    If P < Pvap_R22DEGDME(0.1, Tsol_C) Or P > Pvap_R22DEGDME(1#, Tsol_C) Then
+        XibyTdewTsol_R22DEGDME = Empty
         Exit Function
     End If
     lo = 0.1: hi = 1#
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If R22DEGDME_Pvap(mid, Tsol_C) < P Then lo = mid Else hi = mid
+        If Pvap_R22DEGDME(mid, Tsol_C) < P Then lo = mid Else hi = mid
     Next k
-    R22DEGDME_XiFromDewT = 0.5 * (lo + hi)
+    XibyTdewTsol_R22DEGDME = 0.5 * (lo + hi)
 End Function
 
 ' 式(6)：摩尔热容，J/mol/°C
-Public Function R22DEGDME_CpMol(ByVal X As Double, ByVal t_C As Double) As Double
+Public Function CpMol_R22DEGDME(ByVal X As Double, ByVal t_C As Double) As Double
     Dim sA As Double, sB As Double, sC As Double, xn As Double, n As Long
     xn = 1#
     For n = 0 To 3
@@ -140,22 +140,22 @@ Public Function R22DEGDME_CpMol(ByVal X As Double, ByVal t_C As Double) As Doubl
         sC = sC + T3C(n) * xn
         xn = xn * X
     Next n
-    R22DEGDME_CpMol = sA + t_C * sB + t_C * t_C * sC
+    CpMol_R22DEGDME = sA + t_C * sB + t_C * t_C * sC
 End Function
 
 ' 式(7)：混合热，J/mol（10°C 测定，放热为负）
-Public Function R22DEGDME_dHm(ByVal X As Double) As Double
+Public Function dHm_R22DEGDME(ByVal X As Double) As Double
     Dim s As Double, p As Double, d As Double, i As Long
     d = 1# - 2# * X: p = 1#: s = 0#
     For i = 1 To 4
         s = s + Gk(i) * p
         p = p * d
     Next i
-    R22DEGDME_dHm = X * (1# - X) * s
+    dHm_R22DEGDME = X * (1# - X) * s
 End Function
 
 ' 式(9)：溶液比焓，kJ/kg；参考态：纯组分液体 10°C 焓为 0
-Public Function R22DEGDME_Hsol(ByVal X As Double, ByVal t_C As Double) As Double
+Public Function Hsol_R22DEGDME(ByVal X As Double, ByVal t_C As Double) As Double
     Dim sA As Double, sB As Double, sC As Double, xn As Double, n As Long
     Dim sensible As Double, h_mol As Double, M_mix As Double, t0 As Double
     xn = 1#
@@ -169,7 +169,7 @@ Public Function R22DEGDME_Hsol(ByVal X As Double, ByVal t_C As Double) As Double
     sensible = sA * (t_C - t0) _
              + sB * (t_C * t_C - t0 * t0) / 2# _
              + sC * (t_C * t_C * t_C - t0 * t0 * t0) / 3#
-    h_mol = R22DEGDME_dHm(X) + sensible
+    h_mol = dHm_R22DEGDME(X) + sensible
     M_mix = X * M_R22 + (1# - X) * M_DEGDME
-    R22DEGDME_Hsol = h_mol / M_mix
+    Hsol_R22DEGDME = h_mol / M_mix
 End Function

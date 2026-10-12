@@ -10,52 +10,52 @@ Attribute VB_Name = "R124NMP"
 
 Option Explicit
 
-Public Function R124NMP_PsatR124(T_C As Double) As Double
+Public Function PsatR124_R124NMP(T_C As Double) As Double
     Dim T As Double
     T = T_C + 273.15
-    R124NMP_PsatR124 = Exp(14.750463 - 2527.6371 / (T - 10.9815)) / 100#
+    PsatR124_R124NMP = Exp(14.750463 - 2527.6371 / (T - 10.9815)) / 100#
 End Function
 
-Public Function R124NMP_TsatR124(P_bar As Double) As Variant
+Public Function TsatR124_R124NMP(P_bar As Double) As Variant
     If P_bar <= 0# Then
-        R124NMP_TsatR124 = Empty
+        TsatR124_R124NMP = Empty
         Exit Function
     End If
-    R124NMP_TsatR124 = 2527.6371 / (14.750463 - Log(P_bar * 100#)) - 10.9815 - 273.15
+    TsatR124_R124NMP = 2527.6371 / (14.750463 - Log(P_bar * 100#)) - 10.9815 - 273.15
 End Function
 
-Private Function R124NMP_VL(T_C As Double) As Double   ' m3/mol
-    R124NMP_VL = (0.00000343888821 * T_C * T_C + 0.00000521631071 * T_C + 0.0989804979) / 1000#
+Private Function VL_R124NMP(T_C As Double) As Double   ' m3/mol
+    VL_R124NMP = (0.00000343888821 * T_C * T_C + 0.00000521631071 * T_C + 0.0989804979) / 1000#
 End Function
 
-Public Function R124NMP_XiToX(xi As Double) As Double
+Public Function XiToX_R124NMP(xi As Double) As Double
     Dim n1 As Double
     n1 = xi / 136.5
-    R124NMP_XiToX = n1 / (n1 + (1# - xi) / 99.13)
+    XiToX_R124NMP = n1 / (n1 + (1# - xi) / 99.13)
 End Function
 
-Public Function R124NMP_XToXi(x As Double) As Double
+Public Function XToXi_R124NMP(x As Double) As Double
     Dim m1 As Double
     m1 = x * 136.5
-    R124NMP_XToXi = m1 / (m1 + (1# - x) * 99.13)
+    XToXi_R124NMP = m1 / (m1 + (1# - x) * 99.13)
 End Function
 
-Public Function R124NMP_Gamma1(T_C As Double, xi As Double) As Variant
+Public Function Gamma1_R124NMP(T_C As Double, xi As Double) As Variant
     Dim T As Double, x1 As Double, x2 As Double, lnT As Double
     Dim t12 As Double, t21 As Double, G12 As Double, G21 As Double
     If T_C < 30# Or T_C > 90# Then
-        R124NMP_Gamma1 = Empty
+        Gamma1_R124NMP = Empty
         Exit Function
     End If
     T = T_C + 273.15
-    x1 = R124NMP_XiToX(xi)
+    x1 = XiToX_R124NMP(xi)
     x2 = 1# - x1
     If x1 <= 0# Then
-        R124NMP_Gamma1 = Empty
+        Gamma1_R124NMP = Empty
         Exit Function
     End If
     If x1 >= 1# Then
-        R124NMP_Gamma1 = 1#
+        Gamma1_R124NMP = 1#
         Exit Function
     End If
     lnT = Log(T)
@@ -63,22 +63,22 @@ Public Function R124NMP_Gamma1(T_C As Double, xi As Double) As Variant
     t21 = (-166747# + (30875.3) * lnT) / (8.314 * T)
     G12 = Exp(-(-0.0515) * t12)
     G21 = Exp(-(-0.0515) * t21)
-    R124NMP_Gamma1 = Exp(x2 * x2 * (t21 * (G21 / (x1 + x2 * G21)) ^ 2 _
+    Gamma1_R124NMP = Exp(x2 * x2 * (t21 * (G21 / (x1 + x2 * G21)) ^ 2 _
                       + t12 * G12 / (x2 + x1 * G12) ^ 2))
 End Function
 
-Public Function R124NMP_BubbleP(T_C As Double, xi As Double) As Variant
+Public Function BubbleP_R124NMP(T_C As Double, xi As Double) As Variant
     Dim T As Double, ps1 As Double, x1 As Double, g1 As Variant
     Dim vl As Double, p As Double, pn As Double, k As Long
     If T_C < 30# Or T_C > 90# Or xi <= 0# Or xi >= 1# Then
-        R124NMP_BubbleP = Empty
+        BubbleP_R124NMP = Empty
         Exit Function
     End If
     T = T_C + 273.15
-    ps1 = R124NMP_PsatR124(T_C)
-    x1 = R124NMP_XiToX(xi)
-    g1 = R124NMP_Gamma1(T_C, xi)
-    vl = R124NMP_VL(T_C)
+    ps1 = PsatR124_R124NMP(T_C)
+    x1 = XiToX_R124NMP(xi)
+    g1 = Gamma1_R124NMP(T_C, xi)
+    vl = VL_R124NMP(T_C)
     p = ps1 * x1 * g1
     For k = 1 To 50
         pn = ps1 * x1 * g1 * Exp(vl * (p - ps1) * 100000# / (8.314 * T))
@@ -88,21 +88,21 @@ Public Function R124NMP_BubbleP(T_C As Double, xi As Double) As Variant
         End If
         p = pn
     Next k
-    R124NMP_BubbleP = p
+    BubbleP_R124NMP = p
 End Function
 
-Public Function R124NMP_BubbleT(P_bar As Double, xi As Double) As Variant
+Public Function BubbleT_R124NMP(P_bar As Double, xi As Double) As Variant
     Dim lo As Double, hi As Double, mid As Double, k As Long
     lo = 30#: hi = 90#
-    If P_bar < R124NMP_BubbleP(lo, xi) Or P_bar > R124NMP_BubbleP(hi, xi) Then
-        R124NMP_BubbleT = Empty
+    If P_bar < BubbleP_R124NMP(lo, xi) Or P_bar > BubbleP_R124NMP(hi, xi) Then
+        BubbleT_R124NMP = Empty
         Exit Function
     End If
     For k = 1 To 60
         mid = 0.5 * (lo + hi)
-        If R124NMP_BubbleP(mid, xi) < P_bar Then lo = mid Else hi = mid
+        If BubbleP_R124NMP(mid, xi) < P_bar Then lo = mid Else hi = mid
     Next k
-    R124NMP_BubbleT = 0.5 * (lo + hi)
+    BubbleT_R124NMP = 0.5 * (lo + hi)
 End Function
 
 ' Concentration from dew-point temperature and solution temperature:
@@ -113,31 +113,31 @@ End Function
 ' bracket - the bisection only ever evaluates interior points.
 ' Returns Empty if no root (e.g. Tsol below Tdew, or Tsol outside the
 ' validated 30-90 degC window).
-Public Function R124NMP_XiFromDewT(Tdew_C As Double, Tsol_C As Double) As Variant
+Public Function XibyTdewTsol_R124NMP(Tdew_C As Double, Tsol_C As Double) As Variant
     Dim P As Double, lo As Double, hi As Double, mid As Double, k As Long
     If Tsol_C < 30# Or Tsol_C > 90# Then
-        R124NMP_XiFromDewT = Empty
+        XibyTdewTsol_R124NMP = Empty
         Exit Function
     End If
-    P = R124NMP_PsatR124(Tdew_C)
-    If P > R124NMP_PsatR124(Tsol_C) Then
-        R124NMP_XiFromDewT = Empty
+    P = PsatR124_R124NMP(Tdew_C)
+    If P > PsatR124_R124NMP(Tsol_C) Then
+        XibyTdewTsol_R124NMP = Empty
         Exit Function
     End If
     lo = 0#: hi = 1#
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If R124NMP_BubbleP(Tsol_C, mid) < P Then lo = mid Else hi = mid
+        If BubbleP_R124NMP(Tsol_C, mid) < P Then lo = mid Else hi = mid
     Next k
-    R124NMP_XiFromDewT = 0.5 * (lo + hi)
+    XibyTdewTsol_R124NMP = 0.5 * (lo + hi)
 End Function
 
-Public Function R124NMP_DewT(P_bar As Double) As Variant   ' absorbent non-volatile
+Public Function DewT_R124NMP(P_bar As Double) As Variant   ' absorbent non-volatile
     Dim T As Variant
-    T = R124NMP_TsatR124(P_bar)
+    T = TsatR124_R124NMP(P_bar)
     If IsEmpty(T) Or T < -30# Or T > 90# Then
-        R124NMP_DewT = Empty
+        DewT_R124NMP = Empty
     Else
-        R124NMP_DewT = T
+        DewT_R124NMP = T
     End If
 End Function

@@ -10,7 +10,7 @@
 ' verification record in this folder): Table 9 rho_00 exponent
 ' (E+01 -> E+00) and Table 8 DMAC eta0/eta1 (x10 too large as printed).
 ' NOTE: Eq. (16) runs +13..+23 % above Eq. (15) at xi = 1 (property of
-' the printed fit); use DmacR124_PsatR124 near xi = 1.
+' the printed fit); use PsatR124_R124DMAC near xi = 1.
 ' NOTE: this VBA has NOT been compiled/tested in real Excel.
 
 Option Explicit
@@ -23,26 +23,26 @@ Private Function PsatEq15(A As Double, B As Double, C As Double, _
     PsatEq15 = Exp(A + B / (T + C) + D * T + E * Log(T) + F * T * T)
 End Function
 
-Public Function DmacR124_PsatR124(T_C As Double) As Double
-    DmacR124_PsatR124 = PsatEq15(-119.33446, -1351.341, 0#, -0.12497, 27.21197, 0.0000832656, T_C)
+Public Function PsatR124_R124DMAC(T_C As Double) As Double
+    PsatR124_R124DMAC = PsatEq15(-119.33446, -1351.341, 0#, -0.12497, 27.21197, 0.0000832656, T_C)
 End Function
 
-Public Function DmacR124_PsatDMAC(T_C As Double) As Double
-    DmacR124_PsatDMAC = PsatEq15(6.01834, -1800.24, -138.5, 0#, 0#, 0#, T_C)
+Public Function PsatDMAC_R124DMAC(T_C As Double) As Double
+    PsatDMAC_R124DMAC = PsatEq15(6.01834, -1800.24, -138.5, 0#, 0#, 0#, T_C)
 End Function
 
-Public Function DmacR124_DewT(P_bar As Double) As Variant
+Public Function DewT_R124DMAC(P_bar As Double) As Variant
     Dim lo As Double, hi As Double, mid As Double, k As Long
     lo = -60#: hi = 120#
-    If P_bar < DmacR124_PsatR124(lo) Or P_bar > DmacR124_PsatR124(hi) Then
-        DmacR124_DewT = Empty
+    If P_bar < PsatR124_R124DMAC(lo) Or P_bar > PsatR124_R124DMAC(hi) Then
+        DewT_R124DMAC = Empty
         Exit Function
     End If
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If DmacR124_PsatR124(mid) < P_bar Then lo = mid Else hi = mid
+        If PsatR124_R124DMAC(mid) < P_bar Then lo = mid Else hi = mid
     Next k
-    DmacR124_DewT = 0.5 * (lo + hi)
+    DewT_R124DMAC = 0.5 * (lo + hi)
 End Function
 
 Private Function PCoef() As Variant
@@ -57,7 +57,7 @@ Private Function PCoef() As Variant
         Array(-6.7036E-18, -5.344E-17, 1.414E-16, -9.4881E-17, 0#, 5.6692E-16, -1.0014E-15, 5.334E-16))
 End Function
 
-Public Function DmacR124_BubbleP(T_C As Double, xi As Double) As Double
+Public Function BubbleP_R124DMAC(T_C As Double, xi As Double) As Double
     Dim pc As Variant, T As Double, s As Double, row As Double
     Dim i As Long, j As Long
     pc = PCoef()
@@ -70,40 +70,40 @@ Public Function DmacR124_BubbleP(T_C As Double, xi As Double) As Double
         Next i
         s = s + row * T ^ j
     Next j
-    DmacR124_BubbleP = s
+    BubbleP_R124DMAC = s
 End Function
 
-Public Function DmacR124_BubbleT(P_bar As Double, xi As Double) As Variant
+Public Function BubbleT_R124DMAC(P_bar As Double, xi As Double) As Variant
     Dim lo As Double, hi As Double, mid As Double, k As Long
     lo = 0#: hi = 150#
-    If P_bar < DmacR124_BubbleP(lo, xi) Or P_bar > DmacR124_BubbleP(hi, xi) Then
-        DmacR124_BubbleT = Empty
+    If P_bar < BubbleP_R124DMAC(lo, xi) Or P_bar > BubbleP_R124DMAC(hi, xi) Then
+        BubbleT_R124DMAC = Empty
         Exit Function
     End If
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If DmacR124_BubbleP(mid, xi) < P_bar Then lo = mid Else hi = mid
+        If BubbleP_R124DMAC(mid, xi) < P_bar Then lo = mid Else hi = mid
     Next k
-    DmacR124_BubbleT = 0.5 * (lo + hi)
+    BubbleT_R124DMAC = 0.5 * (lo + hi)
 End Function
 
 ' Concentration from dew-point temperature and solution temperature:
 ' the dew point fixes the pressure, P = PsatR124(Tdew) (DMAC treated as
 ' non-volatile), then solve BubbleP(Tsol, xi) = P for xi by bisection.
 ' Returns Empty if no root (P outside the bubble-pressure span at Tsol).
-Public Function DmacR124_XiFromDewT(Tdew_C As Double, Tsol_C As Double) As Variant
+Public Function XibyTdewTsol_R124DMAC(Tdew_C As Double, Tsol_C As Double) As Variant
     Dim P As Double, lo As Double, hi As Double, mid As Double, k As Long
-    P = DmacR124_PsatR124(Tdew_C)
-    If P < DmacR124_BubbleP(Tsol_C, 0#) Or P > DmacR124_BubbleP(Tsol_C, 1#) Then
-        DmacR124_XiFromDewT = Empty
+    P = PsatR124_R124DMAC(Tdew_C)
+    If P < BubbleP_R124DMAC(Tsol_C, 0#) Or P > BubbleP_R124DMAC(Tsol_C, 1#) Then
+        XibyTdewTsol_R124DMAC = Empty
         Exit Function
     End If
     lo = 0#: hi = 1#
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If DmacR124_BubbleP(Tsol_C, mid) < P Then lo = mid Else hi = mid
+        If BubbleP_R124DMAC(Tsol_C, mid) < P Then lo = mid Else hi = mid
     Next k
-    DmacR124_XiFromDewT = 0.5 * (lo + hi)
+    XibyTdewTsol_R124DMAC = 0.5 * (lo + hi)
 End Function
 
 Private Function HCoef() As Variant
@@ -118,7 +118,7 @@ Private Function HCoef() As Variant
         Array(-4.3652E-18, 3.4001E-17, -5.0197E-17, -1.008E-17, 0#, 6.78E-17, 0#, -3.1527E-17))
 End Function
 
-Public Function DmacR124_HExcess(T_C As Double, xi As Double) As Double
+Public Function HExcess_R124DMAC(T_C As Double, xi As Double) As Double
     Dim hc As Variant, T As Double, x As Double, s As Double, row As Double
     Dim nr As Double, na As Double, i As Long, j As Long
     hc = HCoef()
@@ -134,35 +134,35 @@ Public Function DmacR124_HExcess(T_C As Double, xi As Double) As Double
         Next i
         s = s + row * T ^ j
     Next j
-    DmacR124_HExcess = 4.1868 * s
+    HExcess_R124DMAC = 4.1868 * s
 End Function
 
-Public Function DmacR124_Ha(T_C As Double) As Double
-    DmacR124_Ha = 100# + 4.1868 * (0.4578 * T_C + 0.5 * 0.000839 * T_C ^ 2)
+Public Function Ha_R124DMAC(T_C As Double) As Double
+    Ha_R124DMAC = 100# + 4.1868 * (0.4578 * T_C + 0.5 * 0.000839 * T_C ^ 2)
 End Function
 
-Public Function DmacR124_Hr(T_C As Double) As Double
+Public Function Hr_R124DMAC(T_C As Double) As Double
     Dim hr As Variant, s As Double, i As Long
     hr = Array(0.250767, 0.000347753, 0.00000100977, 3.42458E-09, 0#, 0#, 6.99612E-15)
     s = 0#
     For i = 1 To 7
         s = s + hr(i - 1) * T_C ^ i
     Next i
-    DmacR124_Hr = 100# + 4.1868 * s
+    Hr_R124DMAC = 100# + 4.1868 * s
 End Function
 
-Public Function DmacR124_Hsol(T_C As Double, xi As Double) As Double
-    DmacR124_Hsol = DmacR124_Hr(T_C) * xi + DmacR124_Ha(T_C) * (1# - xi) _
-                  + DmacR124_HExcess(T_C, xi)
+Public Function Hsol_R124DMAC(T_C As Double, xi As Double) As Double
+    Hsol_R124DMAC = Hr_R124DMAC(T_C) * xi + Ha_R124DMAC(T_C) * (1# - xi) _
+                  + HExcess_R124DMAC(T_C, xi)
 End Function
 
-Public Function DmacR124_RhoR124(T_C As Double) As Double
-    DmacR124_RhoR124 = 1000# * (1.466 - 0.003394 * T_C - 0.0000016063 * T_C ^ 2 _
+Public Function RhoR124_R124DMAC(T_C As Double) As Double
+    RhoR124_R124DMAC = 1000# * (1.466 - 0.003394 * T_C - 0.0000016063 * T_C ^ 2 _
                                 - 2.004E-07 * T_C ^ 3)
 End Function
 
-Public Function DmacR124_RhoDMAC(T_C As Double) As Double
-    DmacR124_RhoDMAC = 1000# * (0.9528 - 0.0005856 * T_C - 0.0000033632 * T_C ^ 2)
+Public Function RhoDMAC_R124DMAC(T_C As Double) As Double
+    RhoDMAC_R124DMAC = 1000# * (0.9528 - 0.0005856 * T_C - 0.0000033632 * T_C ^ 2)
 End Function
 
 Private Function RCoef() As Variant
@@ -173,7 +173,7 @@ Private Function RCoef() As Variant
         Array(6.0941E-08, -9.7547E-08, 3.3531E-07, -5.0554E-07))
 End Function
 
-Public Function DmacR124_RhoMix(T_C As Double, xi As Double) As Double
+Public Function RhoMix_R124DMAC(T_C As Double, xi As Double) As Double
     Dim rc As Variant, s As Double, row As Double, i As Long, j As Long
     rc = RCoef()
     s = 0#
@@ -184,20 +184,20 @@ Public Function DmacR124_RhoMix(T_C As Double, xi As Double) As Double
         Next i
         s = s + row * T_C ^ j
     Next j
-    DmacR124_RhoMix = 1000# * s
+    RhoMix_R124DMAC = 1000# * s
 End Function
 
-Public Function DmacR124_EtaR124(T_C As Double) As Double
+Public Function EtaR124_R124DMAC(T_C As Double) As Double
     Dim T As Double
     T = T_C + 273.15
-    DmacR124_EtaR124 = Exp(-8.9301 + 5094.9 / (T + 357.4))
+    EtaR124_R124DMAC = Exp(-8.9301 + 5094.9 / (T + 357.4))
 End Function
 
-Public Function DmacR124_EtaDMAC(T_C As Double) As Double
+Public Function EtaDMAC_R124DMAC(T_C As Double) As Double
     ' Corrected coefficients; printed Table 8 values are x10 (see notes).
     Dim T As Double
     T = T_C + 273.15
-    DmacR124_EtaDMAC = Exp(-1.684 + 134.88 / (T - 223.2))
+    EtaDMAC_R124DMAC = Exp(-1.684 + 134.88 / (T - 223.2))
 End Function
 
 Private Function ECoef() As Variant
@@ -208,7 +208,7 @@ Private Function ECoef() As Variant
         Array(0#, -64446000#, 0#, -106310000#))
 End Function
 
-Public Function DmacR124_EtaMix(T_C As Double, xi As Double) As Double
+Public Function EtaMix_R124DMAC(T_C As Double, xi As Double) As Double
     Dim ec As Variant, T As Double, s As Double, row As Double
     Dim i As Long, j As Long
     ec = ECoef()
@@ -225,5 +225,5 @@ Public Function DmacR124_EtaMix(T_C As Double, xi As Double) As Double
             s = s + row * T ^ (-j)
         End If
     Next j
-    DmacR124_EtaMix = Exp(s)
+    EtaMix_R124DMAC = Exp(s)
 End Function
