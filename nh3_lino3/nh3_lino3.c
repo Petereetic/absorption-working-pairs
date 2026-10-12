@@ -18,8 +18,8 @@
  * p in kPa; h in kJ/kg; cp in kJ/(kg K); rho in kg/m^3; k in W/(m K).
  * Enthalpy reference state (source): H = 0 at 0 degC and x = 0.5.
  * Out-of-range inputs return NAN (no silent extrapolation):
- *   p_bubble/T_bubble : T 293.15-353.15 K, x 0.35-0.65
- *   h_liq             : T 273.15-353.15 K, x 0.35-0.65
+ *   psol/T_bubble : T 293.15-353.15 K, x 0.35-0.65
+ *   hsol             : T 273.15-353.15 K, x 0.35-0.65
  *   cp, rho           : T 293.15-353.15 K, x 0.35-0.65
  *   k_therm           : T 303.15-353.15 K, x 0.35-0.60
  *   x_cris            : x 0-1
@@ -48,7 +48,7 @@ static int nl_in(double v, double lo, double hi)
 }
 
 /* Bubble pressure [kPa]: ln P = pa(x) + pb(x)/T */
-double nl_p_bubble_TX(double T_K, double x)
+double nl_psol_TX(double T_K, double x)
 {
     double pa, pb;
     if (!nl_in(T_K, 293.15, 353.15) || !nl_in(x, 0.35, 0.65))
@@ -75,7 +75,7 @@ double nl_T_bubble_PX(double P_kPa, double x)
     return T_K;
 }
 
-/* Pure-NH3 saturation (dew-point convention for nl_XiFromDewT):
+/* Pure-NH3 saturation (dew-point convention for nl_XiByTsolTdew):
  * LiNO3 is non-volatile, vapour is pure NH3.  Pure-NH3 saturation
  * temperature follows the ammonia-water module's Patek-Klomfar
  * Eq. (6) at NH3 mole fraction = 1 (the convention stated in this
@@ -93,7 +93,7 @@ static double nl_Tsat_NH3_pure(double P_kPa)
 
 /* Pure-NH3 saturation pressure [kPa] by 80-step bisection on the
  * function above; NAN if T_K is outside the Eq. (6) pressure span. */
-static double nl_psat_NH3_pure(double T_K)
+static double nl_pref_NH3_pure(double T_K)
 {
     double lo = 2.0, hi = 2000.0, mid;
     int k;
@@ -108,32 +108,32 @@ static double nl_psat_NH3_pure(double T_K)
 
 /* NH3 mass fraction from dew-point temperature and solution
  * temperature: the dew point fixes P = psat_NH3_pure(Tdew) (see
- * above), then solve nl_p_bubble_TX(Tsol, x) = P for x by 80-step
+ * above), then solve nl_psol_TX(Tsol, x) = P for x by 80-step
  * bisection over the bubble function's valid concentration range
  * x = 0.35-0.65.  Returns NAN if no root (P outside the bubble-
  * pressure span at Tsol, e.g. Tsol well below Tdew, Tdew outside
  * the pure-NH3 Eq. (6) range, or Tsol out of range). */
-double nl_XiFromDewT(double Tdew_K, double Tsol_K)
+double nl_XiByTsolTdew(double Tsol_K, double Tdew_K)
 {
-    double P = nl_psat_NH3_pure(Tdew_K);
+    double P = nl_pref_NH3_pure(Tdew_K);
     double lo = 0.35, hi = 0.65, mid;
     int k;
     if (isnan(P))
         return NAN;
     if (!nl_in(Tsol_K, 293.15, 353.15))
         return NAN;
-    if (P < nl_p_bubble_TX(Tsol_K, 0.35) || P > nl_p_bubble_TX(Tsol_K, 0.65))
+    if (P < nl_psol_TX(Tsol_K, 0.35) || P > nl_psol_TX(Tsol_K, 0.65))
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (nl_p_bubble_TX(Tsol_K, mid) < P) lo = mid; else hi = mid;
+        if (nl_psol_TX(Tsol_K, mid) < P) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }
 
 /* Liquid enthalpy [kJ/kg]: H = ha + hb T + hc T^2.
  * Reference state: H = 0 at 0 degC, x = 0.5 (source definition). */
-double nl_h_liq(double T_K, double x)
+double nl_hsol(double T_K, double x)
 {
     double ha, hb, hc;
     if (!nl_in(T_K, 273.15, 353.15) || !nl_in(x, 0.35, 0.65))
@@ -145,6 +145,34 @@ double nl_h_liq(double T_K, double x)
 }
 
 /* Specific heat [kJ/(kg K)] (source in J/(g K), numerically equal) */
+
+/* Dew-point temperature [K] of the solution at (T_K, x)
+   (library-wide TdewByTsolXi convention):
+   nl_Tsat_NH3_pure(nl_psol_TX(T_K, x)) on this module's own pure-NH3
+   line (Patek-Klomfar Eq (6) endpoint).  NAN if nl_psol_TX is NAN. */
+double nl_TdewFromTsolX(double T_K, double x)
+{
+    double P = nl_psol_TX(T_K, x);
+    if (isnan(P)) return NAN;
+    return nl_Tsat_NH3_pure(P);
+}
+
+/* Solution temperature [K] from h [kJ/kg] and NH3 mass fraction x:
+   bisection inverse of nl_hsol over its T domain [273.15, 353.15] K.
+   NAN if h is outside the nl_hsol span at x or x is out of domain. */
+double nl_TsolByHsol(double h, double x)
+{
+    double lo = 273.15, hi = 353.15, mid;
+    double hlo = nl_hsol(lo, x), hhi = nl_hsol(hi, x);
+    int k;
+    if (isnan(hlo) || isnan(hhi) || h < hlo || h > hhi) return NAN;
+    for (k = 0; k < 100; k++) {
+        mid = 0.5 * (lo + hi);
+        if (nl_hsol(mid, x) < h) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
 double nl_cp(double T_K, double x)
 {
     double cpa, cpb;
@@ -213,9 +241,9 @@ double nl_x_cris(double T_C, double x)
 #include <stdio.h>
 int main(void)
 {
-    printf("p_bubble(313.15,0.5) = %.4f kPa\n", nl_p_bubble_TX(313.15, 0.5));
+    printf("psol(313.15,0.5) = %.4f kPa\n", nl_psol_TX(313.15, 0.5));
     printf("T_bubble(502.3,0.5)  = %.4f K\n", nl_T_bubble_PX(502.3, 0.5));
-    printf("h_liq(273.15,0.5)    = %.4f kJ/kg\n", nl_h_liq(273.15, 0.5));
+    printf("hsol(273.15,0.5)    = %.4f kJ/kg\n", nl_hsol(273.15, 0.5));
     printf("rho(313.15,0.45)     = %.2f kg/m3\n", nl_rho(313.15, 0.45));
     printf("cp(313.15,0.45)      = %.4f kJ/kgK\n", nl_cp(313.15, 0.45));
     printf("k_therm(313.15,0.45) = %.4f W/mK\n", nl_k_therm(313.15, 0.45));

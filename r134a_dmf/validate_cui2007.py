@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """用现有 R134a-DMF 模型 (NRTL+gamma-phi, 拟合自 Zehioua 2009)
 对 Cui et al. 2007 (ICR07) 的 90 点 p-T-x 数据做独立验证。"""
-import os, csv, sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from r134a_dmf import bubble_p
+import csv, sys
+sys.path.insert(0, "/home/hatch/workspace/your_files/r134a_dmf")
+from r134a_dmf import psol
 
 pts = []
-with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "cui2007.csv")) as f:
+with open("/home/hatch/workspace/your_files/r134a_dmf/cui2007.csv") as f:
     for row in csv.DictReader(f):
         T = float(row["T_K"]); x1 = float(row["x1"]); pe = float(row["p_kPa"])
-        p_MPa, _ = bubble_p(T, x1)
+        p_MPa, _ = psol(T, x1)
         pc = p_MPa * 1000.0
         dev = (pc - pe) / pe * 100.0
         pts.append((T, x1, pe, pc, dev))

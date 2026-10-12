@@ -133,7 +133,7 @@ static const double A_SIG[15] = {
 /* ------------------------------------------------------------------ */
 /* 公开函数 (Patterson)                                                */
 /* ------------------------------------------------------------------ */
-double h_libr(double X, double T)
+double hsol(double X, double T)
 {
     if (range_check(X, T, 0, 70, 0, 180))
         return NAN;
@@ -157,7 +157,7 @@ double t_dew(double X, double T)
     return 5.0 / 9.0 * (tdew_poly(X, T) - 32.0);
 }
 
-double p_sat(double X, double T)
+double psol(double X, double T)
 {
     double tdew_f, TR;
     if (range_check(X, T, 0, 70, 4.4, 182.2))
@@ -233,7 +233,7 @@ double crystallization_T(double X)
 /* ------------------------------------------------------------------ */
 /* Chua 2000: Dühring 蒸气压 (Table 1) + 密度 (Table 2)                */
 /* 注记见 .py: B_12 取 -3.12628E-16 (原文漏负号); B_14 读 E-19;       */
-/* A_10 读 E-15; <x-60> 项按印刷值发散, p_sat_chua 限 x≤60%。         */
+/* A_10 读 E-15; <x-60> 项按印刷值发散, psol_chua 限 x≤60%。         */
 /* ------------------------------------------------------------------ */
 static const double DUHR_A[21] = {
     1.0,
@@ -261,7 +261,7 @@ static const double G_RHO[5][3] = {
 };
 
 /* 纯水 Psat: Wagner 方程 (IAPWS-95, 6 项) */
-static double wagner_psat_water(double T_C)
+static double wagner_pref_water(double T_C)
 {
     static const double a[6] = {-7.85951783, 1.84408259, -11.7866497,
                                 22.6807411, -15.9618719, 1.80122502};
@@ -273,7 +273,7 @@ static double wagner_psat_water(double T_C)
     return 22.064e6 * exp((647.096 / T) * s);
 }
 
-double p_sat_chua(double X, double T)
+double psol_chua(double X, double T)
 {
     double AD = 0.0, BD = 0.0, xk = 1.0, Tdp_C;
     int i;
@@ -286,29 +286,78 @@ double p_sat_chua(double X, double T)
         BD += DUHR_B[i] * xk;
     }
     Tdp_C = (T - BD) / AD;
-    return wagner_psat_water(Tdp_C);
+    return wagner_pref_water(Tdp_C);
 }
 
 /* 由露点温度与溶液温度反解 LiBr 浓度 X [wt%] (Chua 路线):
    P = 纯水在 Tdew 下的饱和压 (模块自有 Wagner 纯水函数
-   wagner_psat_water); 二分 80 次反解 p_sat_chua(X, Tsol) = P,
-   括号 X∈[0,60] (p_sat_chua 有效浓度域)。p_sat_chua 随 X 单调
-   递减, 二分方向与递增型相反。选 Chua 路线因 p_sat_chua 本身即
+   wagner_pref_water); 二分 80 次反解 psol_chua(X, Tsol) = P,
+   括号 X∈[0,60] (psol_chua 有效浓度域)。psol_chua 随 X 单调
+   递减, 二分方向与递增型相反。选 Chua 路线因 psol_chua 本身即
    由 Dühring 露点经同一 Wagner 函数构造, 定义自洽; 与 Patterson
    PRESS 差约 0.5-1.4%, 不可混用。无根返回 NAN (如 Tsol 明显
    低于 Tdew)。 */
-double x_from_dew_chua(double Tdew_C, double Tsol_C)
+double x_by_tsol_tdew_chua(double Tsol_C, double Tdew_C)
 {
-    double P = wagner_psat_water(Tdew_C);
-    double Pmax = p_sat_chua(0.0, Tsol_C);
-    double Pmin = p_sat_chua(60.0, Tsol_C);
+    double P = wagner_pref_water(Tdew_C);
+    double Pmax = psol_chua(0.0, Tsol_C);
+    double Pmin = psol_chua(60.0, Tsol_C);
     double lo = 0.0, hi = 60.0, mid;
     int k;
     if (isnan(P) || isnan(Pmin) || isnan(Pmax) || P < Pmin || P > Pmax)
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (p_sat_chua(mid, Tsol_C) > P) lo = mid; else hi = mid;
+        if (psol_chua(mid, Tsol_C) > P) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
+
+/* Pure-water saturation temperature [degC]: analytic inverse of the
+   Patterson log10 relation built into psol (quadratic in 1/TR). */
+static double tsat_water_patterson(double P_Pa)
+{
+    double L = log10(P_Pa / 6894.757);
+    double a = 2886.373, b = 337269.46;
+    double disc = a * a - 4.0 * b * (L - 6.21147), u;
+    if (disc < 0.0) return NAN;
+    u = (-a + sqrt(disc)) / (2.0 * b);
+    return (1.0 / u - 459.7 - 32.0) * 5.0 / 9.0;
+}
+
+/* Dew-point temperature [degC] of the solution at (X, T)
+   (library-wide TdewByTsolXi convention): Tsat_water(psol(X, T)) on
+   the Patterson route.  Equals t_dew(X, T) by construction.  NAN if
+   psol is NAN. */
+double tdew_by_tsol_x(double X, double T)
+{
+    double P = psol(X, T);
+    if (isnan(P)) return NAN;
+    return tsat_water_patterson(P);
+}
+
+/* Solution temperature [degC] from h [kJ/kg] and X [wt%]: inverse
+   of hsol.  hsol is NAN outside the Patterson standard region, so
+   the bracket is located by scanning T = 0..180 degC in 5 degC steps
+   over the evaluable points, then refined by 80 bisection steps.
+   NAN if no evaluable bracket contains h. */
+double tsol_by_hsol(double h, double X)
+{
+    double prev_T = 0.0, prev_h = 0.0, lo = 0.0, hi = 0.0, mid;
+    int have_prev = 0, have_bracket = 0, k;
+    for (k = 0; k <= 36 && !have_bracket; k++) {
+        double T = 5.0 * k, hv = hsol(X, T);
+        if (isnan(hv)) continue;
+        if (have_prev && prev_h <= h && h <= hv) {
+            lo = prev_T; hi = T; have_bracket = 1;
+        }
+        prev_T = T; prev_h = hv; have_prev = 1;
+    }
+    if (!have_bracket) return NAN;
+    for (k = 0; k < 80; k++) {
+        mid = 0.5 * (lo + hi);
+        if (hsol(X, mid) < h) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }

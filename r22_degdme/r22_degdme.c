@@ -45,7 +45,7 @@ static double poly(const double *c, int n, double x)
 }
 
 /* 式(1)：泡点压力 kg/cm2，T_K 开尔文 */
-double r22degdme_pvap_kgcm2(double X, double T_K)
+double r22degdme_psol_kgcm2(double X, double T_K)
 {
     double A[6], B[6], C[6];
     for (int i = 0; i < 6; i++) { A[i] = T2[i][0]; B[i] = T2[i][1]; C[i] = T2[i][2]; }
@@ -54,26 +54,62 @@ double r22degdme_pvap_kgcm2(double X, double T_K)
 }
 
 /* 式(1)：泡点压力 bar，t_C 摄氏度 */
-double r22degdme_pvap_bar(double X, double t_C)
+double r22degdme_psol_bar(double X, double t_C)
 {
-    return r22degdme_pvap_kgcm2(X, t_C + 273.15) * KGCM2_TO_BAR;
+    return r22degdme_psol_kgcm2(X, t_C + 273.15) * KGCM2_TO_BAR;
 }
 
 /* 由露点温度与溶液温度反解浓度 X（R22 摩尔分数），二分 80 次。
- * 露点定压 P = r22degdme_pvap_bar(1.0, Tdew_C)：式(1) 在 X=1 端即
+ * 露点定压 P = r22degdme_psol_bar(1.0, Tdew_C)：式(1) 在 X=1 端即
  * 本模块的纯 R22 饱和压力（DEGDME 视为不挥发）；再二分求
- * r22degdme_pvap_bar(X, Tsol_C) = P，括号取式(1) 有效浓度域
+ * r22degdme_psol_bar(X, Tsol_C) = P，括号取式(1) 有效浓度域
  * X ∈ [0.1, 1.0]。无根时返回 NAN（如 Tsol 明显低于 Tdew）。 */
-double r22degdme_XiFromDewT(double Tdew_C, double Tsol_C)
+double r22degdme_XiByTsolTdew(double Tsol_C, double Tdew_C)
 {
-    double P = r22degdme_pvap_bar(1.0, Tdew_C);
+    double P = r22degdme_psol_bar(1.0, Tdew_C);
     double lo = 0.1, hi = 1.0, mid;
     int k;
-    if (P < r22degdme_pvap_bar(0.1, Tsol_C) || P > r22degdme_pvap_bar(1.0, Tsol_C))
+    if (P < r22degdme_psol_bar(0.1, Tsol_C) || P > r22degdme_psol_bar(1.0, Tsol_C))
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (r22degdme_pvap_bar(mid, Tsol_C) < P) lo = mid; else hi = mid;
+        if (r22degdme_psol_bar(mid, Tsol_C) < P) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
+
+/* 溶液在 (X, t_C) 的露点温度 [°C]（全库 TdewByTsolXi 约定）：
+ * 本模块自有纯 R22 线（式(1) X=1 端）上满足
+ * r22degdme_psol_bar(1.0, Tdew) = r22degdme_psol_bar(X, t_C) 的
+ * 温度，二分 80 次反解，括号 t ∈ [-50, 190] °C。注意：式(1)
+ * 标称温度辖区 -20~190 °C，Tdew < -20 °C 为纯端外推。无根返回 NAN。 */
+double r22degdme_TdewByTsolXi(double X, double t_C)
+{
+    double P = r22degdme_psol_bar(X, t_C);
+    double lo = -50.0, hi = 190.0, mid;
+    int k;
+    if (P < r22degdme_psol_bar(1.0, lo) || P > r22degdme_psol_bar(1.0, hi))
+        return NAN;
+    for (k = 0; k < 80; k++) {
+        mid = 0.5 * (lo + hi);
+        if (r22degdme_psol_bar(1.0, mid) < P) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
+double r22degdme_hsol(double X, double t_C);  /* forward: defined below */
+/* 由溶液比焓 h [kJ/kg] 与 R22 摩尔分数 X 反解溶液温度 [°C]：
+ * r22degdme_hsol 在固定 X 下随 t 单调增，二分 100 次反解，
+ * 括号 t ∈ [-30, 110] °C。无根返回 NAN。 */
+double r22degdme_TsolByHsol(double h, double X)
+{
+    double lo = -30.0, hi = 110.0, mid;
+    int k;
+    if (h < r22degdme_hsol(X, lo) || h > r22degdme_hsol(X, hi)) return NAN;
+    for (k = 0; k < 100; k++) {
+        mid = 0.5 * (lo + hi);
+        if (r22degdme_hsol(X, mid) < h) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }
@@ -96,7 +132,7 @@ double r22degdme_heat_of_mixing(double X)
 }
 
 /* 式(9)：溶液比焓 kJ/kg；参考态：纯组分液体 10°C 焓为 0 */
-double r22degdme_h_solution(double X, double t_C)
+double r22degdme_hsol(double X, double t_C)
 {
     double A[4], B[4], C[4];
     for (int i = 0; i < 4; i++) { A[i] = T3[i][0]; B[i] = T3[i][1]; C[i] = T3[i][2]; }
@@ -120,10 +156,10 @@ int main(void)
         for (int j = 0; j < 6; j++) {
             double X = Xs[i], t = ts[j];
             printf("%.1f %.1f %.6f %.6f %.6f %.6f\n", X, t,
-                   r22degdme_pvap_bar(X, t),
+                   r22degdme_psol_bar(X, t),
                    r22degdme_cp_molar(X, t),
                    r22degdme_heat_of_mixing(X),
-                   r22degdme_h_solution(X, t));
+                   r22degdme_hsol(X, t));
         }
     return 0;
 }

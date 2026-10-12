@@ -30,7 +30,7 @@
 /* ---------- 纯组分饱和压力 (MPa), T in K ---------- */
 
 /* R134a: 拟合自 Zehioua 表3, 298-353K 内误差 < 0.2% */
-double psat_r134a(double T)
+double pref_r134a(double T)
 {
     return exp(7.89191 - 2310.84 / (T - 19.79));
 }
@@ -94,14 +94,14 @@ double nrtl_hE(double T, double x1)
  * 输出: *p_MPa 泡点压力, *y1 气相摩尔分数 (可传 NULL)
  * 返回: 0 成功
  */
-int bubble_p(double T, double x1, double *p_MPa, double *y1)
+int psol(double T, double x1, double *p_MPa, double *y1)
 {
     double x2 = 1.0 - x1;
     double g1, g2, p1s, p2s, V1, V2, p, Poy1, Poy2;
     int i;
 
     nrtl_gamma(T, x1, &g1, &g2);
-    p1s = psat_r134a(T);
+    p1s = pref_r134a(T);
     p2s = psat_dmf(T);
     V1 = vl_r134a(T);
     V2 = vl_dmf(T);
@@ -128,8 +128,8 @@ double bubble_T(double p_MPa, double x1, double Tguess)
     int i;
     for (i = 0; i < 50; i++) {
         double dummy;
-        bubble_p(T, x1, &pc, &dummy);
-        bubble_p(T + dT, x1, &p2, &dummy);
+        psol(T, x1, &pc, &dummy);
+        psol(T + dT, x1, &p2, &dummy);
         dpdT = (p2 - pc) / dT;
         if (fabs(dpdT) < 1e-12) break;
         T = T - (pc - p_MPa) / dpdT;
@@ -142,22 +142,22 @@ double bubble_T(double p_MPa, double x1, double Tguess)
 /*
  * 输入: Tdew(K) 露点温度, Tsol(K) 溶液温度
  * 返回: x1 (R134a 液相摩尔分数); 无根时返回 NAN
- * 原理: DMF 视为不挥发, 露点定压 P = psat_r134a(Tdew);
- *       再二分求 bubble_p(Tsol, x1) = P, 括号取 x1 in [0, 1]。
+ * 原理: DMF 视为不挥发, 露点定压 P = pref_r134a(Tdew);
+ *       再二分求 psol(Tsol, x1) = P, 括号取 x1 in [0, 1]。
  * 无根情形: P 超出 Tsol 下泡点压力区间 (如 Tsol 明显低于 Tdew)。
  */
-double xi_from_dew_T(double Tdew, double Tsol)
+double xi_by_tsol_tdew(double Tsol, double Tdew)
 {
-    double P = psat_r134a(Tdew);
+    double P = pref_r134a(Tdew);
     double Plo, Phi, lo = 0.0, hi = 1.0, mid;
     int i;
-    bubble_p(Tsol, 0.0, &Plo, NULL);
-    bubble_p(Tsol, 1.0, &Phi, NULL);
+    psol(Tsol, 0.0, &Plo, NULL);
+    psol(Tsol, 1.0, &Phi, NULL);
     if (P < Plo || P > Phi) return NAN;
     for (i = 0; i < 80; i++) {
         double pm;
         mid = 0.5 * (lo + hi);
-        bubble_p(Tsol, mid, &pm, NULL);
+        psol(Tsol, mid, &pm, NULL);
         if (pm < P) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
@@ -166,7 +166,39 @@ double xi_from_dew_T(double Tdew, double Tsol)
 /* ---------- 纯组分液体焓 (kJ/kg), 参考态 273.15K=100 ---------- */
 
 /* R134a 饱和液体: 拟合自 Tillner-Roth & Baehr (1994), 233-353K */
-double h_r134a_L(double T)
+
+double hsol(double T, double x1);  /* forward: defined below */
+/* R134a saturation temperature [K]: analytic inverse of pref_r134a. */
+static double tsat_r134a(double P_MPa)
+{
+    return 2310.84 / (7.89191 - log(P_MPa)) + 19.79;
+}
+
+/* Dew-point temperature [K] of the solution at (T, x1)
+   (library-wide TdewByTsolXi convention): tsat_r134a of the Psol
+   pressure on this module's own pure-R134a line. */
+double tdew_by_tsol_xi(double T, double x1)
+{
+    double p, y1;
+    psol(T, x1, &p, &y1);
+    return tsat_r134a(p);
+}
+
+/* Solution temperature [K] from h [kJ/kg] and x1: bisection inverse
+   of hsol over T in [280, 360] K.  NAN if h is outside the span. */
+double tsol_by_hsol(double h, double x1)
+{
+    double lo = 280.0, hi = 360.0, mid;
+    int k;
+    if (h < hsol(lo, x1) || h > hsol(hi, x1)) return NAN;
+    for (k = 0; k < 100; k++) {
+        mid = 0.5 * (lo + hi);
+        if (hsol(mid, x1) < h) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
+double hliq_r134a(double T)
 {
     double t = T - 273.15;
     return 1.310235e-5 * t * t * t
@@ -194,14 +226,14 @@ double w_to_x(double w1)
 
 /* ---------- 溶液焓 (kJ/kg) ---------- */
 /* h = w1*h1 + w2*h2 + hE/Mbar */
-double h_solution(double T, double x1)
+double hsol(double T, double x1)
 {
     double x2 = 1.0 - x1;
     double Mbar = x1 * M1 + x2 * M2;   /* g/mol */
     double w1 = x1 * M1 / Mbar;
     double w2 = x2 * M2 / Mbar;
     double hE = nrtl_hE(T, x1);        /* J/mol */
-    return w1 * h_r134a_L(T) + w2 * h_dmf_L(T) + hE / Mbar;
+    return w1 * hliq_r134a(T) + w2 * h_dmf_L(T) + hE / Mbar;
 }
 
 /* ---------- 自检主函数 ---------- */
@@ -219,7 +251,7 @@ int main(void)
 
     printf("VLE 验证 (T, x1 -> p):\n");
     for (i = 0; i < 3; i++) {
-        bubble_p(chk[i][0], chk[i][1], &p, &y1);
+        psol(chk[i][0], chk[i][1], &p, &y1);
         printf("  T=%.2fK x1=%.4f: p=%.1f kPa (实验 %.1f), y1=%.4f\n",
                chk[i][0], chk[i][1], p * 1000.0, chk[i][2], y1);
     }
@@ -238,7 +270,7 @@ int main(void)
         for (ti = 0; ti < 3; ti++)
             for (xi = 0; xi < 3; xi++)
                 printf("  T=%.0fK x1=%.1f: h=%.2f\n",
-                       Ts[ti], xs[xi], h_solution(Ts[ti], xs[xi]));
+                       Ts[ti], xs[xi], hsol(Ts[ti], xs[xi]));
     }
 
     printf("\n质量分数换算示例: w1=0.5 -> x1=%.4f\n", w_to_x(0.5));

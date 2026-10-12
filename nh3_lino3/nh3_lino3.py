@@ -32,8 +32,8 @@ Universitat Rovira i Virgili, 附录 B (pp. A-6 ~ A-8) 转录的关联式:
 
 有效范围 (超出 raise ValueError, 不静默外推)
 --------------------------------------------
-  p_bubble_TX / T_bubble_PX : T 293.15-353.15 K, x 0.35-0.65
-  h_liq                     : T 273.15-353.15 K, x 0.35-0.65
+  psol_TX / T_bubble_PX : T 293.15-353.15 K, x 0.35-0.65
+  hsol                     : T 273.15-353.15 K, x 0.35-0.65
                               (下限为参考态温度: 焓式由 Haltenberger 法自
                               273.15 K 积分构造, 参考点按定义精确成立;
                               VLE 数据支撑区间为 293.15-353.15 K)
@@ -111,12 +111,12 @@ def _pa_pb(x):
     return _poly(_PA, x), _poly(_PB, x)
 
 
-def p_bubble_TX(T_K, x):
+def psol_TX(T_K, x):
     """泡点压力 [kPa]: 温度 T_K [K], 氨质量分数 x 的溶液。
 
     ln P = pa(x) + pb(x)/T  (Libotean et al. 2007)
     """
-    _check(T_K, x, _T_VLE, _X_VLE, "p_bubble_TX")
+    _check(T_K, x, _T_VLE, _X_VLE, "psol_TX")
     pa, pb = _pa_pb(x)
     return math.exp(pa + pb / T_K)
 
@@ -142,7 +142,7 @@ def T_bubble_PX(P_kPa, x):
 
 
 # ---------------------------------------------------------------------------
-# 纯氨饱和线 (露点口径, 供 x_from_dew 用)
+# 纯氨饱和线 (露点口径, 供 x_by_tsol_tdew 用)
 # ---------------------------------------------------------------------------
 # LiNO3 不挥发, 气相视为纯氨。本模块自有口径 (见 公式说明.md 滑移图节):
 # 纯氨饱和温度由氨水模块 Patek-Klomfar 式 (6) 在氨摩尔分数 = 1 处求得。
@@ -163,7 +163,7 @@ def _Tsat_NH3_pure(P_kPa):
     return 100.0 * s
 
 
-def _psat_NH3_pure(T_K):
+def _pref_NH3_pure(T_K):
     """纯氨饱和压力 [kPa]: 二分 80 次反解 _Tsat_NH3_pure(P) = T_K。
 
     辖区 P = 2-2000 kPa (式 (6)); T_K 落在该压力跨度之外时返回 None。
@@ -180,30 +180,30 @@ def _psat_NH3_pure(T_K):
     return 0.5 * (lo + hi)
 
 
-def x_from_dew(Tdew_K, Tsol_K):
+def x_by_tsol_tdew(Tsol_K, Tdew_K):
     """由露点温度与溶液温度反解氨质量分数 x。
 
-    露点定压: P = _psat_NH3_pure(Tdew_K) (纯氨饱和压, 口径见上);
-    再二分 80 次反解 p_bubble_TX(Tsol_K, x) = P, 括号取泡点函数
+    露点定压: P = _pref_NH3_pure(Tdew_K) (纯氨饱和压, 口径见上);
+    再二分 80 次反解 psol_TX(Tsol_K, x) = P, 括号取泡点函数
     有效浓度域 x = 0.35-0.65 (泡点压力在该域内随 x 单调增)。
     无根时返回 None (P 落在 Tsol 下泡点压力跨度之外, 如溶液温度
     明显低于露点温度; 或 Tdew_K 超出纯氨式 (6) 辖区)。注意本函数
     按跨工质对统一约定返回 None, 不沿用本模块其余函数的
     raise ValueError 约定。
     """
-    P = _psat_NH3_pure(Tdew_K)
+    P = _pref_NH3_pure(Tdew_K)
     if P is None:
         return None
     if not (_T_VLE[0] <= Tsol_K <= _T_VLE[1]):
         return None
-    Plo = p_bubble_TX(Tsol_K, _X_VLE[0])
-    Phi = p_bubble_TX(Tsol_K, _X_VLE[1])
+    Plo = psol_TX(Tsol_K, _X_VLE[0])
+    Phi = psol_TX(Tsol_K, _X_VLE[1])
     if not (Plo <= P <= Phi):
         return None
     lo, hi = _X_VLE
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if p_bubble_TX(Tsol_K, mid) < P:
+        if psol_TX(Tsol_K, mid) < P:
             lo = mid
         else:
             hi = mid
@@ -214,17 +214,47 @@ def x_from_dew(Tdew_K, Tsol_K):
 # 液体焓 / 比热 / 密度 / 导热
 # ---------------------------------------------------------------------------
 
-def h_liq(T_K, x):
+def hsol(T_K, x):
     """溶液比焓 [kJ/kg] (Valles & Salavera 2011, Haltenberger 法)。
 
     H = ha(x) + hb(x) T + hc(x) T^2, T 为 K。
     参考态: 0 °C、x=0.5 时 H = 0 (来源原文, 与本库其他工质对不同)。
     """
-    _check(T_K, x, _T_H, _X_VLE, "h_liq")
+    _check(T_K, x, _T_H, _X_VLE, "hsol")
     ha = _poly(_HA, x)
     hb = _poly(_HB, x)
     hc = _poly(_HC, x)
     return ha + hb * T_K + hc * T_K * T_K
+
+
+
+def tdew_from_tsol_x(T_K, x):
+    """溶液在 (T_K, x) 的露点温度 [K]（全库 TdewByTsolXi 约定）：
+        Tdew = _Tsat_NH3_pure(psol_TX(T_K, x))，
+    即以本模块自有纯氨线（Pátek–Klomfar 式 (6) 纯氨端点）评价溶液
+    表面压力 Psol 所对应的饱和温度。LiNO₃ 不挥发，气相视为纯氨，
+    无端点约定问题。辖区随 psol_TX（T 293.15–353.15 K，
+    x 0.35–0.65），越界时 psol_TX 的 ValueError 照常抛出。"""
+    return _Tsat_NH3_pure(psol_TX(T_K, x))
+
+
+def tsol_by_hsol(h, x):
+    """由溶液比焓 h [kJ/kg] 与氨质量分数 x 反解溶液温度 [K]：
+    hsol 在固定 x 下随 T 单调增（cp > 0），二分 100 次反解，
+    求解括号取 hsol 辖区 T ∈ [273.15, 353.15] K（_T_H）。
+    h 超出该 x 下 hsol 值域时返回 None；x 越界时 hsol 的
+    ValueError 照常抛出。"""
+    lo, hi = 273.15, 353.15
+    hlo, hhi = hsol(lo, x), hsol(hi, x)
+    if not (hlo <= h <= hhi):
+        return None
+    for _ in range(100):
+        mid = 0.5 * (lo + hi)
+        if hsol(mid, x) < h:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
 
 
 def cp(T_K, x):

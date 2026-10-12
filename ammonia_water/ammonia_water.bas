@@ -9,10 +9,10 @@ Attribute VB_Name = "AmmoniaWater"
 '  AW_Tbub_P(p, x)  Eq(6) bubble-point T [K]    0.002<=p<=2 MPa
 '  AW_Tdew_P(p, y)  Eq(7) dew-point T [K]       0.02<=p<=2 MPa
 '  AW_Yeq(p, x)     Eq(8) equilibrium vapour mole fraction, x>0.05 (mole)
-'  AW_Hliq(T, x)    Eq(9) saturated-liquid enthalpy [kJ/kg]
-'  AW_Hvap(T, y)    Eq(10) vapour enthalpy [kJ/kg]
+'  AW_hsol(T, x)    Eq(9) saturated-liquid enthalpy [kJ/kg]
+'  AW_hgas(T, y)    Eq(10) vapour enthalpy [kJ/kg]
 '  AW_Glide(p, z)   true glide [K] = T_dew(p,z)-T_bubble(p,z)
-'  AW_XFromDewT(Tdew, Tsol)  NH3 mole fraction from dew-point T and
+'  AW_XByTsolTdew(Tdew, Tsol)  NH3 mole fraction from dew-point T and
 '                    solution T (pure-NH3 endpoint construction; Empty if no root)
 '  AW_Xi2X(xi)      NH3 mass fraction -> mole fraction
 '  AW_X2Xi(x)       NH3 mole fraction -> mass fraction
@@ -174,38 +174,38 @@ Public Function AW_Yeq(ByVal p_MPa As Double, ByVal x As Double) As Double
     AW_Yeq = 1# - Exp(Log(1# - x) * s)
 End Function
 
-Public Function AW_Hliq(ByVal T_K As Double, ByVal x As Double) As Double
+Public Function AW_hsol(ByVal T_K As Double, ByVal x As Double) As Double
     Dim u As Double, s As Double, i As Long
     u = T_K / T0_9 - 1#: s = 0#
     For i = 1 To 16
         s = s + C9(i, 2) * u ^ C9(i, 0) * x ^ C9(i, 1)
     Next i
-    AW_Hliq = H0_9 * s
+    AW_hsol = H0_9 * s
 End Function
 
-Public Function AW_Hvap(ByVal T_K As Double, ByVal y As Double) As Double
+Public Function AW_hgas(ByVal T_K As Double, ByVal y As Double) As Double
     Dim v As Double, omy As Double, s As Double, i As Long
     v = 1# - T0_10 / T_K: omy = 1# - y: s = 0#
     If omy < 0# Then omy = 0#
     For i = 1 To 17
         s = s + C10(i, 2) * v ^ C10(i, 0) * omy ^ (C10(i, 1) / 4#)
     Next i
-    AW_Hvap = H0_10 * s
+    AW_hgas = H0_10 * s
 End Function
 
 Public Function AW_Glide(ByVal p_MPa As Double, ByVal z As Double) As Double
     AW_Glide = AW_Tdew_P(p_MPa, z) - AW_Tbub_P(p_MPa, z)
 End Function
 
-Public Function AW_Pbub_T(ByVal T_K As Double, ByVal x As Double) As Double
+Public Function AW_Psol_T(ByVal T_K As Double, ByVal x As Double) As Double
     Dim p_lo As Double, p_hi As Double, flo As Double, fm As Double, pm As Double, k As Long
     p_lo = 0.002: p_hi = 2#: flo = AW_Tbub_P(p_lo, x) - T_K
     For k = 1 To 200
         pm = 0.5 * (p_lo + p_hi): fm = AW_Tbub_P(pm, x) - T_K
-        If fm = 0# Or (p_hi - p_lo) < 0.000000001 * IIf(pm > 1#, pm, 1#) Then AW_Pbub_T = pm: Exit Function
+        If fm = 0# Or (p_hi - p_lo) < 0.000000001 * IIf(pm > 1#, pm, 1#) Then AW_Psol_T = pm: Exit Function
         If (fm > 0#) = (flo > 0#) Then p_lo = pm: flo = fm Else p_hi = pm
     Next k
-    AW_Pbub_T = 0.5 * (p_lo + p_hi)
+    AW_Psol_T = 0.5 * (p_lo + p_hi)
 End Function
 
 Public Function AW_Pdew_T(ByVal T_K As Double, ByVal y As Double) As Double
@@ -221,26 +221,54 @@ End Function
 
 ' NH3 mole fraction x from dew-point temperature [K] and solution
 ' temperature [K].  Construction (pure-NH3 endpoint): P is the PURE
-' ammonia saturation pressure at Tdew, P = AW_Pbub_T(Tdew, x=1); then
-' solve AW_Pbub_T(Tsol, x) = P by 80 bisection steps over x in [0, 1].
+' ammonia saturation pressure at Tdew, P = AW_Psol_T(Tdew, x=1); then
+' solve AW_Psol_T(Tsol, x) = P by 80 bisection steps over x in [0, 1].
 ' NOTE / approximation: the real vapour contains water (y < 1), so
 ' this is NOT the true mixture dew curve Eq(7); Tdew is treated as a
 ' pure-NH3 saturation temperature (x=1 endpoint convention, same as
 ' the dual-adiabatic-chamber scans).  Empty if there is no root
 ' (e.g. Tsol well below Tdew).  Same algorithm as Python/C.
-Public Function AW_XFromDewT(ByVal Tdew_K As Double, ByVal Tsol_K As Double) As Variant
+Public Function AW_XByTsolTdew(ByVal Tsol_K As Double, ByVal Tdew_K As Double) As Variant
     Dim P As Double, lo As Double, hi As Double, mid As Double, k As Long
-    P = AW_Pbub_T(Tdew_K, 1#)
-    If P < AW_Pbub_T(Tsol_K, 0#) Or P > AW_Pbub_T(Tsol_K, 1#) Then
-        AW_XFromDewT = Empty
+    P = AW_Psol_T(Tdew_K, 1#)
+    If P < AW_Psol_T(Tsol_K, 0#) Or P > AW_Psol_T(Tsol_K, 1#) Then
+        AW_XByTsolTdew = Empty
         Exit Function
     End If
     lo = 0#: hi = 1#
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If AW_Pbub_T(Tsol_K, mid) < P Then lo = mid Else hi = mid
+        If AW_Psol_T(Tsol_K, mid) < P Then lo = mid Else hi = mid
     Next k
-    AW_XFromDewT = 0.5 * (lo + hi)
+    AW_XByTsolTdew = 0.5 * (lo + hi)
+End Function
+
+
+' ---------- 露点温度（溶液）[K]：全库 TdewByTsolXi 约定 ----------
+' Tdew = AW_Tbub_P(AW_Psol_T(Tsol_K, x), 1)，即以本模块自身纯氨线
+' （式(6) 的 x=1 端点）评价溶液表面压力 Psol 所对应的饱和温度。
+' 注意：本工质对的吸收剂（水）挥发，此函数不等于式(7) 的真混合物
+' 露点 AW_Tdew_P(p, y)（滑移图口径），两函数不可互换。
+Public Function AW_TdewByTsolX(ByVal Tsol_K As Double, ByVal x As Double) As Double
+    AW_TdewByTsolX = AW_Tbub_P(AW_Psol_T(Tsol_K, x), 1#)
+End Function
+
+
+' 由溶液比焓 h [kJ/kg] 与氨摩尔分数 x 反解溶液温度 [K]：
+' hsol（式(9)）在固定 x 下随 T 单调增，二分 100 次反解；
+' 求解括号 T ∈ [240, 480] K。h 超出该 x 下 hsol 值域时返回 Empty。
+' 与 C/Python 同算法；本函数未在真实 Excel 中编译运行。
+Public Function AW_TsolByHsol(ByVal h As Double, ByVal x As Double) As Variant
+    Dim lo As Double, hi As Double, mid As Double, k As Long
+    lo = 240#: hi = 480#
+    If h < AW_hsol(lo, x) Or h > AW_hsol(hi, x) Then
+        AW_TsolByHsol = Empty: Exit Function
+    End If
+    For k = 1 To 100
+        mid = 0.5 * (lo + hi)
+        If AW_hsol(mid, x) < h Then lo = mid Else hi = mid
+    Next k
+    AW_TsolByHsol = 0.5 * (lo + hi)
 End Function
 
 Public Function AW_Xi2X(ByVal xi As Double) As Double

@@ -180,10 +180,10 @@ def _range_check(X, T, func_name, x_lo, x_hi, t_lo, t_hi):
 # --------------------------------------------------------------------------
 # 公开函数 (Patterson)
 # --------------------------------------------------------------------------
-def h_libr(X, T):
+def hsol(X, T):
     """溶液比焓 [kJ/kg]; X wt%, T °C。范围: X∈(0,70), T∈(0,180)。"""
-    _range_check(X, T, 'h_libr', 0, 70, 0, 180)
-    _check_region(X, T, 'h_libr', check_unknown=True)
+    _range_check(X, T, 'hsol', 0, 70, 0, 180)
+    _check_region(X, T, 'hsol', check_unknown=True)
     return _poly(X, T, _A_H, 6)
 
 
@@ -200,12 +200,12 @@ def t_dew(X, T):
     return 5.0 / 9.0 * (_tdew_poly(X, T) - 32.0)
 
 
-def p_sat(X, T):
+def psol(X, T):
     """水蒸气分压 [Pa] (Patterson PRESS); X wt%, T °C。
     先由 TDEW 多项式求露点(°F), 再 log10 P[psia]=6.21147-2886.373/TR-337269.46/TR²
     (TR 为 °R), ×6894.757 → Pa。"""
-    _range_check(X, T, 'p_sat', 0, 70, 4.4, 182.2)
-    _check_region(X, T, 'p_sat', check_unknown=False)
+    _range_check(X, T, 'psol', 0, 70, 4.4, 182.2)
+    _check_region(X, T, 'psol', check_unknown=False)
     tdew_f = _tdew_poly(X, T)
     TR = tdew_f + 459.7
     return 10.0 ** (6.21147 - 2886.373 / TR - 337269.46 / TR ** 2) * 6894.757
@@ -291,7 +291,7 @@ _DUHR_B = [
 #  * A_10 印刷为 "2.37604E.15", 按指数序列与量级读作 2.37604E-15。
 #  * ⟨x-60⟩ 修正项 (i=17..20) 按印刷值在 x>60 时发散
 #    (A_D(65)=4.45e9, Fig.1 应 ~1.225), 无法复现原文曲线,
-#    故 p_sat_chua 限 x≤60%。60-75% 段原文自称外推, 此处不实现。
+#    故 psol_chua 限 x≤60%。60-75% 段原文自称外推, 此处不实现。
 #
 # Table 2 密度: ρ = Σ_{k=1..5} x^{k-1}[G_{0,k}+T(G_{1,k}+T G_{2,k})],
 # x wt%, T °C, ρ kg/m³。G[k] = [G_{0,k},G_{1,k},G_{2,k}] (k=1..5)。
@@ -305,7 +305,7 @@ _G_RHO_CHUA = [
 ]
 
 
-def _wagner_psat_water(T_C):
+def _wagner_pref_water(T_C):
     """纯水饱和蒸气压 [Pa], T °C。Wagner 方程 (IAPWS-95 配套形式,
     Wagner & Pruss 1993):
     ln(p/pc) = (Tc/T)·Σ a_i·θ^e_i, θ = 1-T/Tc。
@@ -321,46 +321,109 @@ def _wagner_psat_water(T_C):
     return Pc * math.exp((Tc / T) * s)
 
 
-def p_sat_chua(X, T):
+def psol_chua(X, T):
     """水蒸气分压 [Pa] (Chua Dühring); X wt%, T °C。范围: 0-190°C, 0-60%。
 
     (T-273.15) = A_D(x)·(T_dp-273.15) + B_D(x), T/T_dp 为 K;
     由 T_dp 经 Wagner 方程求纯水 Psat 即得溶液蒸气压 (LiBr 不挥发)。
     x>60% 的 ⟨x-60⟩ 修正项按原文印刷值无法复现 Fig.1/2, 故不实现。"""
     if not (0 <= X <= 60 and 0 <= T <= 190):
-        raise ValueError("p_sat_chua: (X=%.2f%%, T=%.2f°C) 超出范围 [0-60%%, 0-190°C]"
+        raise ValueError("psol_chua: (X=%.2f%%, T=%.2f°C) 超出范围 [0-60%%, 0-190°C]"
                          % (X, T))
     x = X
     AD = sum(a * x ** i for i, a in enumerate(_DUHR_A[:17]))
     BD = sum(b * x ** i for i, b in enumerate(_DUHR_B[:17]))
     # T_C = AD*Tdp_C + BD  →  Tdp_C = (T_C-BD)/AD
     Tdp_C = (T - BD) / AD
-    return _wagner_psat_water(Tdp_C)
+    return _wagner_pref_water(Tdp_C)
 
 
-def x_from_dew_chua(Tdew_C, Tsol_C):
+def x_by_tsol_tdew_chua(Tsol_C, Tdew_C):
     """由露点温度与溶液温度反解 LiBr 浓度 X [wt%] (Chua 路线)。
 
     构造: 露点定压 P = 纯水在 Tdew 下的饱和压, 用模块自有纯水饱和压
-    函数 _wagner_psat_water (Wagner 方程); 再二分 80 次反解溶液蒸气压
-    函数 p_sat_chua(X, Tsol_C) = P, 括号取 X∈[0,60] (p_sat_chua 的有
-    效浓度域)。p_sat_chua 随 X 单调递减, 二分方向与递增型相反。
-    选 Chua 路线的原因: p_sat_chua 本身即由 Dühring 露点经同一 Wagner
+    函数 _wagner_pref_water (Wagner 方程); 再二分 80 次反解溶液蒸气压
+    函数 psol_chua(X, Tsol_C) = P, 括号取 X∈[0,60] (psol_chua 的有
+    效浓度域)。psol_chua 随 X 单调递减, 二分方向与递增型相反。
+    选 Chua 路线的原因: psol_chua 本身即由 Dühring 露点经同一 Wagner
     纯水函数构造, 露点定义自洽; Patterson PRESS 与之差约 0.5–1.4%
     (见公式说明第四节), 两路线不可混用。
     无根返回 None (如 Tsol 明显低于 Tdew 时 P 高于 X=0 端的蒸气压,
-    或 P 低于 X=60 端的蒸气压)。Tsol 超出 p_sat_chua 范围时其
+    或 P 低于 X=60 端的蒸气压)。Tsol 超出 psol_chua 范围时其
     ValueError 照常抛出 (模块既有约定)。"""
-    P = _wagner_psat_water(Tdew_C)
-    Pmax = p_sat_chua(0.0, Tsol_C)    # X=0 端: 蒸气压最高
-    Pmin = p_sat_chua(60.0, Tsol_C)   # X=60 端: 蒸气压最低
+    P = _wagner_pref_water(Tdew_C)
+    Pmax = psol_chua(0.0, Tsol_C)    # X=0 端: 蒸气压最高
+    Pmin = psol_chua(60.0, Tsol_C)   # X=60 端: 蒸气压最低
     if not (Pmin <= P <= Pmax):
         return None
     lo, hi = 0.0, 60.0
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if p_sat_chua(mid, Tsol_C) > P:
+        if psol_chua(mid, Tsol_C) > P:
             lo = mid   # 蒸气压偏高 → 需更高浓度压低它
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+
+def _tsat_water_patterson(P_Pa):
+    """Pure-water saturation temperature [degC] on the Patterson log10
+    relation built into psol:
+        log10(P[psia]) = 6.21147 - 2886.373/TR - 337269.46/TR^2,
+    TR in degR.  Analytic inverse (quadratic in 1/TR).  This is the
+    module's own pure-water line for the Patterson route."""
+    L = math.log10(P_Pa / 6894.757)
+    a, b = 2886.373, 337269.46
+    disc = a * a - 4.0 * b * (L - 6.21147)
+    if disc < 0.0:
+        return None
+    u = (-a + math.sqrt(disc)) / (2.0 * b)
+    return (1.0 / u - 459.7 - 32.0) * 5.0 / 9.0
+
+
+def tdew_by_tsol_x(X, T):
+    """Dew-point temperature [degC] of the solution at (X, T)
+    (library-wide TdewByTsolXi convention):
+        Tdew = Tsat_water(Psol(X, T)),
+    with Psol the Patterson surface pressure and Tsat_water the
+    analytic inverse of the pure-water relation inside psol.  By
+    construction this equals t_dew(X, T) (the Patterson TDEW
+    polynomial is that same dew temperature); LiBr is non-volatile,
+    so no endpoint convention is involved.  Domain/range errors of
+    psol propagate as ValueError, as for t_dew."""
+    P = psol(X, T)
+    return _tsat_water_patterson(P)
+
+
+def tsol_by_hsol(h, X):
+    """Solution temperature [degC] from specific enthalpy h [kJ/kg]
+    and LiBr mass percent X: inverse of hsol.  hsol is only defined
+    on the Patterson standard region (it raises ValueError in the
+    unknown region), so the bracket is first located by scanning
+    T = 0..180 degC in 5 degC steps over the evaluable points, then
+    refined by 80 bisection steps (hsol increases monotonically with
+    T at fixed X).  None if no evaluable bracket contains h."""
+    prev_T, prev_h, bracket = None, None, None
+    k = 0
+    while k <= 36:
+        T = 5.0 * k
+        k += 1
+        try:
+            hv = hsol(X, T)
+        except ValueError:
+            continue
+        if prev_h is not None and prev_h <= h <= hv:
+            bracket = (prev_T, T)
+            break
+        prev_T, prev_h = T, hv
+    if bracket is None:
+        return None
+    lo, hi = bracket
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if hsol(X, mid) < h:
+            lo = mid
         else:
             hi = mid
     return 0.5 * (lo + hi)
@@ -384,10 +447,10 @@ def rho_chua(X, T):
 
 if __name__ == '__main__':
     # 快速自检
-    print('h(0%%,25°C) = %.3f kJ/kg (期望 ~104.6)' % h_libr(0.0, 25.0))
+    print('h(0%%,25°C) = %.3f kJ/kg (期望 ~104.6)' % hsol(0.0, 25.0))
     print('rho(60%%,25°C) = %.1f kg/m³ (期望 ~1700)' % rho_libr(60.0, 25.0))
     print('eta(60%%,25°C) = %.2f mPa·s (期望 ~10 量级)' % (eta_libr(60.0, 25.0) * 1e3))
-    print('p_sat(50%%,80°C) = %.0f Pa' % p_sat(50.0, 80.0))
+    print('psol(50%%,80°C) = %.0f Pa' % psol(50.0, 80.0))
     print('t_dew(50%%,80°C) = %.2f °C' % t_dew(50.0, 80.0))
     print('lambda(50%%,80°C) = %.4f W/(m K)' % lambda_libr(50.0, 80.0))
     print('sigma(50%%,25°C) = %.1f mN/m' % (sigma_libr(50.0, 25.0) * 1e3))

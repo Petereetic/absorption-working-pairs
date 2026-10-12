@@ -23,7 +23,7 @@ DG21 = -929.1            # J/mol,  (g21 - g11)
 ALPHA = 0.3
 
 
-def psat_r134a(T):
+def pref_r134a(T):
     """R134a 饱和压力, MPa. T in K. (拟合自 Zehioua 表3, 298-353K, 误差<0.2%)"""
     return math.exp(7.89191 - 2310.84 / (T - 19.79))
 
@@ -78,7 +78,7 @@ def nrtl_hE(T, x1):
     return -R * T * x1 * x2 * (term1 + term2)
 
 
-def bubble_p(T, x1):
+def psol(T, x1):
     """
     泡点压力计算.
     输入: T (K), x1 (R134a 液相摩尔分数)
@@ -86,7 +86,7 @@ def bubble_p(T, x1):
     """
     x2 = 1.0 - x1
     g1, g2 = nrtl_gamma(T, x1)
-    p1s = psat_r134a(T)
+    p1s = pref_r134a(T)
     p2s = psat_dmf(T)
     V1 = vl_r134a(T)
     V2 = vl_dmf(T)
@@ -107,9 +107,9 @@ def bubble_T(p_MPa, x1, Tguess=330.0):
     """
     T = Tguess
     for _ in range(50):
-        pc, _ = bubble_p(T, x1)
+        pc, _ = psol(T, x1)
         dT = 0.2
-        p2, _ = bubble_p(T + dT, x1)
+        p2, _ = psol(T + dT, x1)
         dpdT = (p2 - pc) / dT
         T = T - (pc - p_MPa) / dpdT
         if abs(pc - p_MPa) < 1e-9:
@@ -117,32 +117,32 @@ def bubble_T(p_MPa, x1, Tguess=330.0):
     return T
 
 
-def xi_from_dew_T(Tdew, Tsol):
+def xi_by_tsol_tdew(Tsol, Tdew):
     """
     已知露点温度与溶液温度反算浓度 (二分迭代 80 次).
     输入: Tdew (K) 露点温度, Tsol (K) 溶液温度
     返回: x1 (R134a 液相摩尔分数); 无根时返回 None
-    原理: DMF 视为不挥发, 露点定压 P = psat_r134a(Tdew);
-          再二分求 bubble_p(Tsol, x1) = P, 括号取 x1 in [0, 1]
+    原理: DMF 视为不挥发, 露点定压 P = pref_r134a(Tdew);
+          再二分求 psol(Tsol, x1) = P, 括号取 x1 in [0, 1]
           (泡点压力在该区间内随 x1 单调增).
     无根情形: P 超出 Tsol 下泡点压力区间 (如 Tsol 明显低于 Tdew).
     """
-    P = psat_r134a(Tdew)
-    Plo = bubble_p(Tsol, 0.0)[0]
-    Phi = bubble_p(Tsol, 1.0)[0]
+    P = pref_r134a(Tdew)
+    Plo = psol(Tsol, 0.0)[0]
+    Phi = psol(Tsol, 1.0)[0]
     if not (Plo <= P <= Phi):
         return None
     lo, hi = 0.0, 1.0
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if bubble_p(Tsol, mid)[0] < P:
+        if psol(Tsol, mid)[0] < P:
             lo = mid
         else:
             hi = mid
     return 0.5 * (lo + hi)
 
 
-def h_r134a_L(T):
+def hliq_r134a(T):
     """
     R134a 饱和液体焓, kJ/kg.
     拟合自 Tillner-Roth & Baehr (1994) 表 C-1, 参考态已平移至 273.15K=100 kJ/kg.
@@ -170,7 +170,7 @@ def w_to_x(w1):
     return (w1 / M1) / (w1 / M1 + (1 - w1) / M2)
 
 
-def h_solution(T, x1):
+def hsol(T, x1):
     """
     R134a-DMF 溶液焓, kJ/kg.
     输入: T (K), x1 (R134a 液相摩尔分数)
@@ -182,15 +182,51 @@ def h_solution(T, x1):
     w1 = x1 * M1 / Mbar
     w2 = x2 * M2 / Mbar
     hE = nrtl_hE(T, x1)               # J/mol
-    return w1 * h_r134a_L(T) + w2 * h_dmf_L(T) + hE / Mbar  # J/mol / (g/mol) = kJ/kg
+    return w1 * hliq_r134a(T) + w2 * h_dmf_L(T) + hE / Mbar  # J/mol / (g/mol) = kJ/kg
+
+
+
+def _tsat_r134a(P_MPa):
+    """R134a 饱和温度 (K): pref_r134a 的解析反解
+    (P = exp(7.89191 - 2310.84/(T - 19.79)) 的逆函数)。"""
+    return 2310.84 / (7.89191 - math.log(P_MPa)) + 19.79
+
+
+def tdew_by_tsol_xi(T, x1):
+    """
+    溶液在 (T, x1) 的露点温度 (K) (全库 TdewByTsolXi 约定):
+        Tdew = _tsat_r134a(psol(T, x1) 的压力),
+    即以本模块自有纯 R134a 线评价溶液表面压力 Psol 所对应的
+    饱和温度。DMF 视为不挥发 (气相 y1 > 0.99)。
+    """
+    return _tsat_r134a(psol(T, x1)[0])
+
+
+def tsol_by_hsol(h, x1):
+    """
+    由溶液比焓 h (kJ/kg) 与 R134a 摩尔分数 x1 反解溶液温度 (K):
+    hsol 在固定 x1 下随 T 单调增, 二分 100 次反解,
+    求解括号 T in [280, 360] K。h 超出值域时返回 None。
+    """
+    lo, hi = 280.0, 360.0
+    hlo, hhi = hsol(lo, x1), hsol(hi, x1)
+    if not (hlo <= h <= hhi):
+        return None
+    for _ in range(100):
+        mid = 0.5 * (lo + hi)
+        if hsol(mid, x1) < h:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
 
 
 if __name__ == "__main__":
     print("VLE 验证 (T, x1 -> p):")
     for T, x1, pe in [(303.30, 0.4437, 337.0), (323.34, 0.7247, 923.8), (353.24, 0.6594, 1665.2)]:
-        p, y1 = bubble_p(T, x1)
+        p, y1 = psol(T, x1)
         print(f"  T={T}K x1={x1}: p={p*1000:.1f} kPa (实验 {pe:.1f}), y1={y1:.4f}")
     print("\n溶液焓 h(T,x1) [kJ/kg]:")
     for T in [300, 330, 350]:
         for x1 in [0.2, 0.5, 0.8]:
-            print(f"  T={T}K x1={x1}: h={h_solution(T, x1):.2f}")
+            print(f"  T={T}K x1={x1}: h={hsol(T, x1):.2f}")

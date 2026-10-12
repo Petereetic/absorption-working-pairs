@@ -203,7 +203,7 @@ def y_equil(p_MPa, x):
     return 1.0 - math.exp(math.log(1.0 - x) * s)
 
 
-def h_liq(T_K, x):
+def hsol(T_K, x):
     """Eq (9): saturated-liquid specific enthalpy [kJ/kg].
     Reference: h = 0 for liquid water at the triple point."""
     u = T_K / _T0_9 - 1.0
@@ -213,9 +213,9 @@ def h_liq(T_K, x):
     return _H0_9 * s
 
 
-def h_vap(T_K, y):
+def hgas(T_K, y):
     """Eq (10): vapour specific enthalpy [kJ/kg] (ideal-mixture fit).
-    Same reference state as h_liq."""
+    Same reference state as hsol."""
     v = 1.0 - _T0_10 / T_K
     omy = max(0.0, 1.0 - y)
     s = 0.0
@@ -248,8 +248,8 @@ def bubble_state_pX(p_MPa, x):
         "T_bubble": Tb,
         "y": y,
         "T_dew_of_y": T_dew_PY(p_MPa, y),
-        "h_l": h_liq(Tb, x),
-        "h_g": h_vap(Tb, y),
+        "h_l": hsol(Tb, x),
+        "h_g": hgas(Tb, y),
     }
 
 
@@ -281,7 +281,7 @@ def consistency_residual_pX(p_MPa, x):
 # Inverse functions (bisection on the forward equations)
 # ---------------------------------------------------------------------------
 
-def p_bubble_TX(T_K, x, p_lo=0.002, p_hi=2.0, tol=1e-9):
+def psol_TX(T_K, x, p_lo=0.002, p_hi=2.0, tol=1e-9):
     """Bubble pressure [MPa] at temperature T [K] and liquid NH3 mole
     fraction x -- numerical inverse of Eq (6).  T_bubble(p, x) is
     monotonically decreasing in p, so bisection is safe."""
@@ -299,15 +299,15 @@ def p_bubble_TX(T_K, x, p_lo=0.002, p_hi=2.0, tol=1e-9):
     return 0.5 * (p_lo + p_hi)
 
 
-def x_from_dew_T(Tdew_K, Tsol_K):
+def x_by_tsol_tdew(Tsol_K, Tdew_K):
     """NH3 mole fraction x from a dew-point temperature [K] and a
-    solution temperature [K] -- bisection inverse of p_bubble_TX.
+    solution temperature [K] -- bisection inverse of psol_TX.
 
     Construction (pure-NH3 endpoint): the dew point fixes the pressure
     through the PURE ammonia saturation pressure at Tdew,
-        P = p_bubble_TX(Tdew_K, x=1),
+        P = psol_TX(Tdew_K, x=1),
     i.e. the x = 1 endpoint of Eq (6); then solve
-    p_bubble_TX(Tsol_K, x) = P for x by 80 bisection steps over
+    psol_TX(Tsol_K, x) = P for x by 80 bisection steps over
     x in [0, 1] (the full concentration domain of Eq (6)).
 
     NOTE / approximation: ammonia-water vapour in reality contains
@@ -317,14 +317,51 @@ def x_from_dew_T(Tdew_K, Tsol_K):
     x = 1 endpoint convention used in the dual-adiabatic-chamber
     scans.  None if there is no root (P outside the bubble-pressure
     span at Tsol_K, e.g. Tsol_K well below Tdew_K)."""
-    P = p_bubble_TX(Tdew_K, 1.0)
-    Plo, Phi = p_bubble_TX(Tsol_K, 0.0), p_bubble_TX(Tsol_K, 1.0)
+    P = psol_TX(Tdew_K, 1.0)
+    Plo, Phi = psol_TX(Tsol_K, 0.0), psol_TX(Tsol_K, 1.0)
     if not (Plo <= P <= Phi):
         return None
     lo, hi = 0.0, 1.0
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if p_bubble_TX(Tsol_K, mid) < P:
+        if psol_TX(Tsol_K, mid) < P:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+
+def tdew_from_tsol_x(T_K, x):
+    """Dew-point temperature [K] of the solution at (T_K, x), under the
+    library-wide TdewByTsolXi convention (pure-refrigerant endpoint):
+
+        Tdew = T_bubble_PX(psol_TX(T_K, x), x=1),
+
+    i.e. the pure-ammonia saturation temperature on this module's own
+    pure line (the x = 1 endpoint of Eq (6)) evaluated at the solution
+    surface (bubble) pressure Psol.
+
+    CAUTION: the absorbent (water) IS volatile for this pair, so this
+    is NOT the true mixture dew point T_dew_PY(p, z) of Eq (7) that
+    the glide figures use; the two are different functions and must
+    not be interchanged."""
+    return T_bubble_PX(psol_TX(T_K, x), 1.0)
+
+
+
+def tsol_by_hsol(h, x):
+    """Solution temperature [K] from specific enthalpy h [kJ/kg] and
+    NH3 mole fraction x: bisection inverse of hsol (Eq 9), which
+    increases monotonically with T at fixed x.  Solver bracket
+    T in [240, 480] K.  None if h lies outside the hsol span at x."""
+    lo, hi = 240.0, 480.0
+    hlo, hhi = hsol(lo, x), hsol(hi, x)
+    if not (hlo <= h <= hhi):
+        return None
+    for _ in range(100):
+        mid = 0.5 * (lo + hi)
+        if hsol(mid, x) < h:
             lo = mid
         else:
             hi = mid
@@ -354,8 +391,8 @@ if __name__ == "__main__":
     print("Pure NH3, Eq(7) T(2 MPa, y=1)   = %.2f K  (expect ~324.0 K)" % T_dew_PY(2.0, 1.0))
     print("Pure H2O, Eq(7) T(2 MPa, y=0)   = %.2f K  (expect ~485.6 K)" % T_dew_PY(2.0, 0.0))
     print("Pure NH3, Eq(6) T(1 MPa, x=1)   = %.2f K  (NH3 Tsat@1MPa ~ 298.4 K)" % T_bubble_PX(1.0, 1.0))
-    print("h_l(273.16 K, x=0) = %.4f kJ/kg (reference state = 0)" % h_liq(273.16, 0.0))
-    print("h_l(273.16 K, x=1) = %.4f kJ/kg (expect ~0)" % h_liq(273.16, 1.0))
+    print("h_l(273.16 K, x=0) = %.4f kJ/kg (reference state = 0)" % hsol(273.16, 0.0))
+    print("h_l(273.16 K, x=1) = %.4f kJ/kg (expect ~0)" % hsol(273.16, 1.0))
     print()
     # --- A cycle-relevant point ---
     p, z = 1.0, 0.5

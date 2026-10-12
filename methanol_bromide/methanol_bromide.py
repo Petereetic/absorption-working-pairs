@@ -37,9 +37,9 @@
 #           破坏平滑趋势（邻值 1352、1288），疑印刷错误，未用作验算点。
 #
 # 参考态（本文档自行约定，论文未定义溶液焓绝对基准，只用焓差）：
-#   h_liq(0°C, 任意 w) = 100 kJ/kg，即 h_liq = 100 + ∫(0°C→t) Cp dt
+#   hsol(0°C, 任意 w) = 100 kJ/kg，即 hsol = 100 + ∫(0°C→t) Cp dt
 #   = 100 + A·t + B·t^2/2。焓的浓度依赖经 h_prime 进入气相焓：
-#   h_vap(T, w) = h_liq(T, w) + H'(T, w)（组装法与作者 COP 程序相同）。
+#   hgas(T, w) = hsol(T, w) + H'(T, w)（组装法与作者 COP 程序相同）。
 #
 # 适用范围：
 #   泡点：w = 0.243~0.509，实测约 15~193°C；Cp：w = 0.249~0.403（论文自称）；
@@ -119,7 +119,7 @@ def _c2(w):
     return _pchip_eval(_W_NODES, _C2_NODES, w)
 
 
-def p_bubble_TW(T_K, w):
+def psol_TW(T_K, w):
     """式(3.1)：泡点压力，bar。T_K 开尔文，w 甲醇质量分数（0.243~0.509）。"""
     log10p_mbar = _c1(w) + _c2(w) * (1000.0 / T_K - 2.3)
     return 10.0 ** log10p_mbar / 1000.0
@@ -152,25 +152,25 @@ def h_prime(T_K, w):
     return A + B * w + C * w * w
 
 
-def h_liq(T_K, w):
-    """溶液比焓，kJ/kg。本文档约定参考态：h_liq(0°C, 任意 w) = 100 kJ/kg，
-    h_liq = 100 + A·t + B·t^2/2，t 为 °C（式(3.4) 的解析积分）。"""
+def hsol(T_K, w):
+    """溶液比焓，kJ/kg。本文档约定参考态：hsol(0°C, 任意 w) = 100 kJ/kg，
+    hsol = 100 + A·t + B·t^2/2，t 为 °C（式(3.4) 的解析积分）。"""
     A, B = _cp_AB(w)
     t = T_K - 273.15
     return 100.0 + A * t + B * t * t / 2.0
 
 
-def h_vap(T_K, w):
-    """气相比焓，kJ/kg：h_vap = h_liq + H'（气相为纯甲醇蒸气，
+def hgas(T_K, w):
+    """气相比焓，kJ/kg：hgas = hsol + H'（气相为纯甲醇蒸气，
     H' 已含把甲醇从溶液中汽化所需的混合热修正）。"""
-    return h_liq(T_K, w) + h_prime(T_K, w)
+    return hsol(T_K, w) + h_prime(T_K, w)
 
 
 # ---- 纯甲醇饱和线：Antoine 拟合自论文附录 A 表（见文件头说明） ----
 _MEOH_ANT = (8.885298, 2070.3714, 6.3818)  # log10 P[mmHg], T[K]；300~1000 mmHg 内误差 <=0.11%
 
 
-def meoh_psat_bar(T_K):
+def meoh_pref_bar(T_K):
     """纯甲醇饱和压力，bar（Antoine，拟合自论文附录 A 数据点）。"""
     A, B, C = _MEOH_ANT
     return (10.0 ** (A - B / (T_K + C))) * 1.3332239e-3
@@ -182,24 +182,52 @@ def meoh_Tsat_bar(P_bar):
     return B / (A - math.log10(P_bar / 1.3332239e-3)) - C
 
 
-def w_from_dew(Tdew_K, Tsol_K):
+def w_by_tsol_tdew(Tsol_K, Tdew_K):
     """由露点温度与溶液温度反解甲醇质量分数 w。
 
-    露点定压：P = meoh_psat_bar(Tdew_K)（盐不挥发，气相为纯甲醇，
+    露点定压：P = meoh_pref_bar(Tdew_K)（盐不挥发，气相为纯甲醇，
     纯甲醇饱和压取本模块自有 Antoine 式，见上）；再二分 80 次反解
-    p_bubble_TW(Tsol_K, w) = P，括号取泡点函数有效浓度域
+    psol_TW(Tsol_K, w) = P，括号取泡点函数有效浓度域
     w = 0.243~0.509（泡点压力在该域内随 w 单调增）。
     无根时返回 None（P 落在 Tsol 下泡点压力跨度之外，
     如溶液温度明显低于露点温度）。"""
-    P = meoh_psat_bar(Tdew_K)
-    Plo = p_bubble_TW(Tsol_K, _W_NODES[0])
-    Phi = p_bubble_TW(Tsol_K, _W_NODES[-1])
+    P = meoh_pref_bar(Tdew_K)
+    Plo = psol_TW(Tsol_K, _W_NODES[0])
+    Phi = psol_TW(Tsol_K, _W_NODES[-1])
     if not (Plo <= P <= Phi):
         return None
     lo, hi = _W_NODES[0], _W_NODES[-1]
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if p_bubble_TW(Tsol_K, mid) < P:
+        if psol_TW(Tsol_K, mid) < P:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+
+def tdew_from_tsol_w(T_K, w):
+    """溶液在 (T_K, w) 的露点温度 [K]（全库 TdewByTsolXi 约定）：
+        Tdew = meoh_Tsat_bar(psol_TW(T_K, w))，
+    即以本模块自有纯甲醇 Antoine 线评价溶液表面压力 Psol 所对应的
+    饱和温度。盐不挥发，气相为纯甲醇，无端点约定问题。w 的有效域
+    随 psol_TW（0.243~0.509）。"""
+    return meoh_Tsat_bar(psol_TW(T_K, w))
+
+
+def tsol_by_hsol(h, w):
+    """由溶液比焓 h [kJ/kg] 与甲醇质量分数 w 反解溶液温度 [K]：
+    hsol 在固定 w 下随 T 单调增（cp = A + B·t 在全域为正），
+    二分 100 次反解，求解括号 T ∈ [233.15, 423.15] K。
+    h 超出该 w 下 hsol 值域时返回 None。"""
+    lo, hi = 233.15, 423.15
+    hlo, hhi = hsol(lo, w), hsol(hi, w)
+    if not (hlo <= h <= hhi):
+        return None
+    for _ in range(100):
+        mid = 0.5 * (lo + hi)
+        if hsol(mid, w) < h:
             lo = mid
         else:
             hi = mid
@@ -236,6 +264,6 @@ if __name__ == "__main__":
     # Cp 验算点（表 3.7）
     print("Cp(51.3C, 0.403) = %.3f (measured 1.27)" % cp(273.15 + 51.3, 0.403))
     print("Cp(69.9C, 0.403) = %.3f (measured 1.30)" % cp(273.15 + 69.9, 0.403))
-    print("P_bubble(80C, 0.35) = %.4f bar" % p_bubble_TW(353.15, 0.35))
-    print("h_liq(80C, 0.35) = %.1f kJ/kg, h_vap = %.1f kJ/kg"
-          % (h_liq(353.15, 0.35), h_vap(353.15, 0.35)))
+    print("P_bubble(80C, 0.35) = %.4f bar" % psol_TW(353.15, 0.35))
+    print("hsol(80C, 0.35) = %.1f kJ/kg, hgas = %.1f kJ/kg"
+          % (hsol(353.15, 0.35), hgas(353.15, 0.35)))

@@ -95,7 +95,7 @@ def _selfcheck():
     for t_C in (0.0, 25.0, 40.0, 64.7, 100.0, 120.0):
         T = t_C + 273.15
         p0 = math.exp(ln_p0_meoh(T))          # mbar
-        pref = mb.meoh_psat_bar(T) * 1000.0   # mbar
+        pref = mb.meoh_pref_bar(T) * 1000.0   # mbar
         print(f"  t={t_C:6.1f} C  exp(p0)={p0:9.1f} mbar  Antoine={pref:9.1f} mbar"
               f"  dev={100.0 * (p0 - pref) / pref:+.2f}%")
     print("== 自验 2：简化关联式 vs 表 2.4.2 实测 44 点 ==")

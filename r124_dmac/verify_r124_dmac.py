@@ -25,16 +25,16 @@ print("== 2. Eq.(16) endpoints vs Eq.(15) ==")
 # at xi=1 the polynomial runs +13..+23 % above Eq. (15); at xi=0 the
 # absolute deviation stays <= 0.03 bar.
 for T in range(0, 141, 20):
-    pp, ps = m.bubble_P(T, 1.0), m.psat("R124", T)
+    pp, ps = m.psol(T, 1.0), m.psat("R124", T)
     print(f"  xi=1, T={T:3d} C: poly={pp:8.3f}, psat={ps:8.3f}, dev={100*(pp/ps-1):+6.1f} %")
 for T in (0, 60, 120):
-    pp, ps = m.bubble_P(T, 0.0), m.psat("DMAC", T)
+    pp, ps = m.psol(T, 0.0), m.psat("DMAC", T)
     print(f"  xi=0, T={T:3d} C: poly={pp:.4f}, psat={ps:.4f}, abs err={pp-ps:+.4f} bar")
 
 print("== 3. Eq.(16) vs Figure 2 spot readings [fig] ==")
 for xi, T, p_fig in ((0.6, 100, 7.3), (0.4, 80, 3.3), (0.8, 120, 13.0),
                      (0.2, 60, 1.1), (1.0, 140, 23.5)):
-    p = m.bubble_P(T, xi)
+    p = m.psol(T, xi)
     print(f"  xi={xi}, T={T} C: model {p:6.2f} bar, figure ~{p_fig} bar")
 
 print("== 4. Eq.(19) excess enthalpy vs Figure 3 [fig] ==")
@@ -58,8 +58,8 @@ print("== 5. hE endpoints and Eq.(22) reference state ==")
 for T in (0, 60, 120):
     print(f"  T={T:3d} C: hE(xi=0)={m.h_excess(T, 0.0):+.3f}, "
           f"hE(xi=1)={m.h_excess(T, 1.0):+.3f} kJ/kg")
-print(f"  h_liq(0 C, xi=0) = {m.h_liq(0, 0.0):.2f}, "
-      f"h_liq(0 C, xi=1) = {m.h_liq(0, 1.0):.2f} kJ/kg (target 100)")
+print(f"  hsol(0 C, xi=0) = {m.hsol(0, 0.0):.2f}, "
+      f"hsol(0 C, xi=1) = {m.hsol(0, 1.0):.2f} kJ/kg (target 100)")
 
 print("== 6. Density: Eq.(25) endpoints vs Eq.(23), Figure 5 spot ==")
 print(f"  rho_mix(0 C, 0) = {m.rho_mix(0, 0.0):.1f} vs pure DMAC "
@@ -96,4 +96,4 @@ def _thP(xi, Tv):
 for xi, T in ((0.5, 80), (0.8, 100)):
     print(f"  xi={xi}, T={T} C: thesis table (T in C, as its text states) "
           f"P={_thP(xi, float(T)):.4g} bar; (T in K) P={_thP(xi, T + 273.15):.4g} bar; "
-          f"Borde original P={m.bubble_P(T, xi):.3f} bar")
+          f"Borde original P={m.psol(T, xi):.3f} bar")

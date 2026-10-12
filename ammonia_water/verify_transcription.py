@@ -31,9 +31,9 @@ check("Eq7 NH3 dew @2 MPa (C)", T_dew_PY(2.0, 1.0) - 273.15, 49.3, 2.0)
 check("Eq7 H2O dew @2 MPa (C)", T_dew_PY(2.0, 0.0) - 273.15, 212.4, 2.5)
 
 # --- 3. Enthalpy reference state: h_l(273.16 K, x=0) = 0 (paper definition) ---
-check("h_l(273.16K, x=0) (kJ/kg)", h_liq(273.16, 0.0), 0.0, 1e-9)
+check("h_l(273.16K, x=0) (kJ/kg)", hsol(273.16, 0.0), 0.0, 1e-9)
 # at x=1 the fit gives ~0 within its own RMS (0.9 kJ/kg)
-check("h_l(273.16K, x=1) (kJ/kg)", h_liq(273.16, 1.0), 0.0, 0.9)
+check("h_l(273.16K, x=1) (kJ/kg)", hsol(273.16, 1.0), 0.0, 0.9)
 
 # --- 4. y(p,x) physical bounds: vapour enriched in NH3 ---
 bad = 0

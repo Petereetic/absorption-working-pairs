@@ -43,7 +43,7 @@ def psat(comp, T_C):
     T = T_C + 273.15
     return math.exp(A + B / (T + C) + D * T + E * math.log(T) + F * T * T)
 
-def psat_R124(T_C):
+def pref_R124(T_C):
     return psat("R124", T_C)
 
 def psat_DMAC(T_C):
@@ -52,11 +52,11 @@ def psat_DMAC(T_C):
 def Tsat_R124(P_bar):
     """Saturation temperature (degC) of pure R124 at P_bar (inverts Eq. 15)."""
     lo, hi = -60.0, 120.0
-    if not (psat_R124(lo) <= P_bar <= psat_R124(hi)):
+    if not (pref_R124(lo) <= P_bar <= pref_R124(hi)):
         return None
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if psat_R124(mid) < P_bar:
+        if pref_R124(mid) < P_bar:
             lo = mid
         else:
             hi = mid
@@ -76,7 +76,7 @@ _P = [
     [-0.67036e-17, -0.53440e-16,  0.14140e-15, -0.94881e-16,  0.0,          0.56692e-15, -0.10014e-14,  0.53340e-15],
 ]
 
-def bubble_P(T_C, xi):
+def psol(T_C, xi):
     """Bubble-point pressure (bar). T_C in degC, xi = R124 mass fraction."""
     T = T_C + 273.15
     s = 0.0
@@ -89,32 +89,32 @@ def bubble_P(T_C, xi):
 
 def bubble_T(P_bar, xi, Tlo_C=0.0, Thi_C=150.0):
     """Bubble-point temperature (degC) by bisection. None if out of range."""
-    Plo, Phi = bubble_P(Tlo_C, xi), bubble_P(Thi_C, xi)
+    Plo, Phi = psol(Tlo_C, xi), psol(Thi_C, xi)
     if not (Plo <= P_bar <= Phi):
         return None
     lo, hi = Tlo_C, Thi_C
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if bubble_P(mid, xi) < P_bar:
+        if psol(mid, xi) < P_bar:
             lo = mid
         else:
             hi = mid
     return 0.5 * (lo + hi)
 
-def xi_from_dew(Tdew_C, Tsol_C):
+def xi_by_tsol_tdew(Tsol_C, Tdew_C):
     """Concentration from dew-point temperature and solution temperature.
 
-    The dew point fixes the pressure, P = psat_R124(Tdew) (DMAC treated
-    as non-volatile); then solve bubble_P(Tsol, xi) = P by bisection.
+    The dew point fixes the pressure, P = pref_R124(Tdew) (DMAC treated
+    as non-volatile); then solve psol(Tsol, xi) = P by bisection.
     None if no root (P outside the bubble-pressure span at Tsol)."""
-    P = psat_R124(Tdew_C)
-    Plo, Phi = bubble_P(Tsol_C, 0.0), bubble_P(Tsol_C, 1.0)
+    P = pref_R124(Tdew_C)
+    Plo, Phi = psol(Tsol_C, 0.0), psol(Tsol_C, 1.0)
     if not (Plo <= P <= Phi):
         return None
     lo, hi = 0.0, 1.0
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if bubble_P(Tsol_C, mid) < P:
+        if psol(Tsol_C, mid) < P:
             lo = mid
         else:
             hi = mid
@@ -123,10 +123,40 @@ def xi_from_dew(Tdew_C, Tsol_C):
 def dew_T(P_bar, xi=None):
     """Dew-point temperature (degC): pure-R124 saturation temperature.
 
-    DMAC is treated as non-volatile (psat_DMAC/psat_R124 < 0.6 % at 80 degC),
+    DMAC is treated as non-volatile (psat_DMAC/pref_R124 < 0.6 % at 80 degC),
     so the vapour is essentially pure R124.
     """
     return Tsat_R124(P_bar)
+
+
+def tdew_by_tsol_xi(T_C, xi):
+    """Dew-point temperature [degC] of the solution at (T_C, xi)
+    (library-wide TdewByTsolXi convention):
+        Tdew = dew_T(psol(T_C, xi)),
+    i.e. the pure-R124 saturation temperature on this module's own
+    Borde Eq (15) line at the solution surface pressure Psol.
+    DMAC is treated as non-volatile.  None if the pressure lies
+    outside the dew_T bisection span."""
+    return dew_T(psol(T_C, xi))
+
+
+def tsol_by_hsol(h, xi):
+    """Solution temperature [degC] from specific enthalpy h [kJ/kg]
+    and R124 mass fraction xi: bisection inverse of hsol over
+    T in [-40, 150] degC (hsol increases monotonically with T at
+    fixed xi).  None if h lies outside the hsol span at xi."""
+    lo, hi = -40.0, 150.0
+    hlo, hhi = hsol(lo, xi), hsol(hi, xi)
+    if not (hlo <= h <= hhi):
+        return None
+    for _ in range(100):
+        mid = 0.5 * (lo + hi)
+        if hsol(mid, xi) < h:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
 
 # ---- Enthalpy ---------------------------------------------------------------
 # Excess specific enthalpy, Eq. (19):
@@ -178,7 +208,7 @@ def h_refrigerant(T_C):
         s += hr * T_C ** i
     return 100.0 + 4.1868 * s
 
-def h_liq(T_C, xi):
+def hsol(T_C, xi):
     """Solution liquid enthalpy (kJ/kg), Eq. (22). xi = R124 mass fraction."""
     return h_refrigerant(T_C) * xi + h_absorbent(T_C) * (1.0 - xi) \
         + h_excess(T_C, xi)
@@ -247,3 +277,79 @@ def eta_mix(T_C, xi):
             row += _ETA_MIX[j][i] * xi ** i
         s += row * T ** (-j)
     return math.exp(s)
+
+
+# ---- Adiabatic absorber -----------------------------------------------------
+# Saturated vapour enthalpy of pure R124 (kJ/kg): NIST WebBook saturation
+# table fit, identical polynomial to pure_fluids.R124_hgas. Reference state
+# matches this module (liquid = 100 kJ/kg at 0 degC). Enthalpy fit band:
+# -40..110 degC.
+_HVAP_R124 = (-4.7606354686130485e-12, -9.020883920792309e-10,
+              2.036341936229362e-08, 4.234769176716097e-06,
+              -3.8033802108463233e-04, 5.621038923140594e-01,
+              2.5994742998138406e+02)
+
+
+def _hgas_R124(T_C):
+    s = 0.0
+    for c in _HVAP_R124:
+        s = s * T_C + c
+    return s
+
+
+def abs_vap_flow(Ts_C, xi_w, ms, Tv_C):
+    """Vapour flow absorbed in a single-pass adiabatic absorber.
+
+    Inlets: weak solution (flow ms, temperature Ts_C, R124 mass fraction
+    xi_w) and saturated R124 vapour at Tv_C. The absorber pressure is the
+    evaporator pressure P = pref_R124(Tv_C) (DMAC non-volatile). The
+    outlet solution is the adiabatic-equilibrium state at that pressure:
+    bubble_T(P, xi_r) with xi_r from the refrigerant balance, closed by
+    the adiabatic enthalpy balance
+
+        hs + r*hv = (1 + r) * hsol(T_out, xi_r),
+        r = m_vap/ms = (xi_r - xi_w) / (1 - xi_r).
+
+    Returns (m_vap, T_out, xi_r), or None if no solution exists inside
+    the model domain (Borde bubble equation xi <= 0.95; vapour enthalpy
+    fit -40..110 degC) -- e.g. solution too hot to absorb.
+    """
+    if not (-40.0 <= Tv_C <= 110.0) or xi_w >= 0.95:
+        return None
+    P = pref_R124(Tv_C)
+    hv = _hgas_R124(Tv_C)
+    hs = hsol(Ts_C, xi_w)
+
+    def resid(xr):
+        Tout = bubble_T(P, xr)
+        if Tout is None:
+            return None
+        r = (xr - xi_w) / (1.0 - xr)
+        return hs + r * hv - (1.0 + r) * hsol(Tout, xr)
+
+    bracket, prev = None, None
+    n = 400
+    for i in range(1, n + 1):
+        xr = xi_w + (0.95 - xi_w) * i / n
+        f = resid(xr)
+        if f is None:
+            continue
+        if prev is not None and ((prev[1] > 0 and f <= 0)
+                                 or (prev[1] < 0 and f >= 0)):
+            bracket = (prev[0], xr)
+            break
+        prev = (xr, f)
+    if bracket is None:
+        return None
+    lo, hi = bracket
+    flo = resid(lo)
+    for _ in range(100):
+        mid = 0.5 * (lo + hi)
+        fm = resid(mid)
+        if (flo > 0) == (fm > 0):
+            lo, flo = mid, fm
+        else:
+            hi = mid
+    xr = 0.5 * (lo + hi)
+    r = (xr - xi_w) / (1.0 - xr)
+    return ms * r, bubble_T(P, xr), xr

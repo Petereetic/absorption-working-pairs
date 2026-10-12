@@ -2,11 +2,11 @@
 """Han et al. 2011 (JCED 56, 1821-1826) 112 点 p-T-x 数据:
 1) 与同实验室 Cui et al. 2007 的数据一致性检查 (同温度线性插值对比);
 2) 用现有冻结模型 (NRTL+gamma-phi, Zehioua 2009 拟合参数) 做独立验证。"""
-import os, csv, sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from r134a_dmf import bubble_p
+import csv, sys
+sys.path.insert(0, "/home/hatch/workspace/your_files/r134a_dmf")
+from r134a_dmf import psol
 
-W = os.path.dirname(os.path.abspath(__file__))
+W = "/home/hatch/workspace/your_files/r134a_dmf"
 
 def load(name):
     pts = []
@@ -51,7 +51,7 @@ for T in sorted(diffs_by_T):
 # ---- 2) 冻结模型验证 Han 2011 ----
 pts = []
 for T, x1, pe in han:
-    p_MPa, _ = bubble_p(T, x1)
+    p_MPa, _ = psol(T, x1)
     pc = p_MPa * 1000.0
     dev = (pc - pe) / pe * 100.0
     pts.append((T, x1, pe, pc, dev))

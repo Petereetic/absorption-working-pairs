@@ -7,10 +7,10 @@ Attribute VB_Name = "R22DMF"
 '   适用: T -25~120 C, xi 0.10~1.00 (xi>0.80 且 T>65C 时为外推, 慎用)。
 ' 溶液焓: Fatouh 等 1993 关联式 (Ardita 论文 2.38~2.43), kJ/kg,
 '   参考态 273.15K 饱和液体=100 kJ/kg。适用约 T -20~95C。
-' 用法: =BubbleP_R22DMF(40, 0.5)   -> 泡点压力 bar
+' 用法: =Psol_R22DMF(40, 0.5)   -> 泡点压力 bar
 '       =BubbleT_R22DMF(3.8, 0.5)  -> 泡点温度 C
-'       =XibyTdewTsol_R22DMF(0, 60)  -> 由露点/溶液温度反解浓度 xi
-'       =Hsol_R22DMF(30, 0.5)      -> 溶液焓 kJ/kg
+'       =XiByTsolTdew_R22DMF(0, 60)  -> 由露点/溶液温度反解浓度 xi
+'       =hsol_R22DMF(30, 0.5)      -> 溶液焓 kJ/kg
 '==============================================================================
 Option Explicit
 
@@ -41,7 +41,7 @@ Private Function IsoC(i As Long) As Double
 End Function
 
 ' 内部: 给定 T(K), 对 xi 做 PCHIP 求泡点压力
-Private Function BubbleP_K(T As Double, xi As Double) As Double
+Private Function Psol_K(T As Double, xi As Double) As Double
     Dim x(9) As Double, y(9) As Double, h(8) As Double, d(8) As Double, dk(9) As Double
     Dim i As Long, k As Long, xc As Double, lnT As Double, t As Double, t2 As Double, t3 As Double
     xc = xi
@@ -71,62 +71,88 @@ Private Function BubbleP_K(T As Double, xi As Double) As Double
         k = k + 1
     Loop
     t = (xc - x(k)) / h(k): t2 = t * t: t3 = t2 * t
-    BubbleP_K = (2 * t3 - 3 * t2 + 1) * y(k) + (t3 - 2 * t2 + t) * h(k) * dk(k) _
+    Psol_K = (2 * t3 - 3 * t2 + 1) * y(k) + (t3 - 2 * t2 + t) * h(k) * dk(k) _
               + (-2 * t3 + 3 * t2) * y(k + 1) + (t3 - t2) * h(k) * dk(k + 1)
 End Function
 
-Public Function BubbleP_R22DMF(T_C As Double, xi As Double) As Double
+Public Function Psol_R22DMF(T_C As Double, xi As Double) As Double
     ' 泡点压力 bar; T_C 摄氏度, xi 为 R22 质量分数
-    BubbleP_R22DMF = BubbleP_K(T_C + 273.15, xi)
+    Psol_R22DMF = Psol_K(T_C + 273.15, xi)
 End Function
 
 Public Function BubbleT_R22DMF(P_bar As Double, xi As Double) As Variant
     ' 泡点温度 摄氏度 (二分法反算); 超出范围返回 #N/A
     Dim lo As Double, hi As Double, mid As Double, i As Long
     lo = -25#: hi = 120#
-    If P_bar < BubbleP_K(lo + 273.15, xi) Or P_bar > BubbleP_K(hi + 273.15, xi) Then
+    If P_bar < Psol_K(lo + 273.15, xi) Or P_bar > Psol_K(hi + 273.15, xi) Then
         BubbleT_R22DMF = CVErr(xlErrNA): Exit Function
     End If
     For i = 1 To 60
         mid = 0.5 * (lo + hi)
-        If BubbleP_K(mid + 273.15, xi) < P_bar Then lo = mid Else hi = mid
+        If Psol_K(mid + 273.15, xi) < P_bar Then lo = mid Else hi = mid
     Next i
     BubbleT_R22DMF = 0.5 * (lo + hi)
 End Function
 
-Public Function XibyTdewTsol_R22DMF(Tdew_C As Double, Tsol_C As Double) As Variant
+Public Function XiByTsolTdew_R22DMF(Tsol_C As Double, Tdew_C As Double) As Variant
     ' 由露点温度与溶液温度反解浓度 xi (R22 质量分数):
     ' 露点定压 P = 纯 R22 饱和压 (本模块 xi=1.0 等浓度线; DMF 视为不挥发),
-    ' 再二分 (80 次) 求 BubbleP(Tsol, xi) = P, 括号取泡点有效浓度域 0.10~1.00。
+    ' 再二分 (80 次) 求 Psol(Tsol, xi) = P, 括号取泡点有效浓度域 0.10~1.00。
     ' 无根 (P 超出 Tsol 处泡点压力跨度, 如溶液温度低于露点温度) 返回 Empty。
     ' 注: 与 C/Python 同算法; 本 VBA 未经真实 Excel 编译测试。
     Dim P As Double, lo As Double, hi As Double, mid As Double, i As Long
-    P = BubbleP_K(Tdew_C + 273.15, 1#)
-    If P < BubbleP_K(Tsol_C + 273.15, 0.1) Or P > BubbleP_K(Tsol_C + 273.15, 1#) Then
-        XibyTdewTsol_R22DMF = Empty: Exit Function
+    P = Psol_K(Tdew_C + 273.15, 1#)
+    If P < Psol_K(Tsol_C + 273.15, 0.1) Or P > Psol_K(Tsol_C + 273.15, 1#) Then
+        XiByTsolTdew_R22DMF = Empty: Exit Function
     End If
     lo = 0.1: hi = 1#
     For i = 1 To 80
         mid = 0.5 * (lo + hi)
-        If BubbleP_K(Tsol_C + 273.15, mid) < P Then lo = mid Else hi = mid
+        If Psol_K(Tsol_C + 273.15, mid) < P Then lo = mid Else hi = mid
     Next i
-    XibyTdewTsol_R22DMF = 0.5 * (lo + hi)
+    XiByTsolTdew_R22DMF = 0.5 * (lo + hi)
+End Function
+
+
+' ---------- 露点温度（溶液）[°C]：全库 TdewByTsolXi 约定 ----------
+' Tdew = BubbleT_R22DMF(Psol_R22DMF(T_C, xi), 1)：以本模块自有纯
+' R22 等浓度线（xi=1 端）评价溶液表面压力 Psol 所对应的饱和
+' 温度。DMF 视为不挥发。无根时随 BubbleT 返回 #N/A。
+Public Function TdewByTsolXi_R22DMF(T_C As Double, xi As Double) As Variant
+    TdewByTsolXi_R22DMF = BubbleT_R22DMF(Psol_R22DMF(T_C, xi), 1#)
+End Function
+
+' ---------- 由溶液比焓反解溶液温度 [°C] ----------
+' hsol_R22DMF 在固定 xi 下随 T 单调增，二分 100 次反解，
+' 求解括号 T ∈ [-20, 95] °C。h 超出值域返回 Empty。
+' 与 C/Python 同算法；本函数未在真实 Excel 中编译运行。
+Public Function TsolByHsol_R22DMF(h As Double, xi As Double) As Variant
+    Dim lo As Double, hi As Double, mid As Double, k As Long
+    lo = -20#: hi = 95#
+    If h < hsol_R22DMF(lo, xi) Or h > hsol_R22DMF(hi, xi) Then
+        TsolByHsol_R22DMF = Empty: Exit Function
+    End If
+    For k = 1 To 100
+        mid = 0.5 * (lo + hi)
+        If hsol_R22DMF(mid, xi) < h Then lo = mid Else hi = mid
+    Next k
+    TsolByHsol_R22DMF = 0.5 * (lo + hi)
 End Function
 
 Private Function FPoly(F0 As Double, F1 As Double, F2 As Double, T As Double) As Double
     FPoly = F0 + F1 * T + F2 * T * T   ' T 为 K
 End Function
 
-Public Function H_R22L_R22DMF(T_C As Double) As Double
+Public Function hliq_R22_R22DMF(T_C As Double) As Double
     Dim T As Double: T = T_C + 273.15
-    If T < 323.15 Then H_R22L_R22DMF = FPoly(-68.1484, 0.06313, 0.00202, T) _
-    Else H_R22L_R22DMF = FPoly(1966.645, -12.09784, 0.02018352, T)
+    If T < 323.15 Then hliq_R22_R22DMF = FPoly(-68.1484, 0.06313, 0.00202, T) _
+    Else hliq_R22_R22DMF = FPoly(1966.645, -12.09784, 0.02018352, T)
 End Function
 
-Public Function H_R22V_R22DMF(T_C As Double) As Double
+Public Function hgas_R22_R22DMF(T_C As Double) As Double
     Dim T As Double: T = T_C + 273.15
-    If T < 323.15 Then H_R22V_R22DMF = FPoly(37.22971, 1.59952, -0.002260308, T) _
-    Else H_R22V_R22DMF = FPoly(-2720.182, 18.11784, -0.02699451, T)
+    If T < 323.15 Then hgas_R22_R22DMF = FPoly(37.22971, 1.59952, -0.002260308, T) _
+    Else hgas_R22_R22DMF = FPoly(-2720.182, 18.11784, -0.02699451, T)
 End Function
 
 Public Function H_DMF_R22DMF(T_C As Double) As Double
@@ -155,15 +181,15 @@ Private Function H_Fatouh(T_C As Double, xi As Double) As Double
     K3 = 0
     Mmix = xi * MR22 + omx * MDMF
     hmix = (omx * RR * T2 / Mmix) * (K0 * Y0 + K1 * Y1 + K2 * Y2 + K3 * Y3)
-    H_Fatouh = xi * H_R22L_R22DMF(T_C) + omx * H_DMF_R22DMF(T_C) + hmix
+    H_Fatouh = xi * hliq_R22_R22DMF(T_C) + omx * H_DMF_R22DMF(T_C) + hmix
 End Function
 
-Public Function Hsol_R22DMF(T_C As Double, xi As Double) As Double
+Public Function hsol_R22DMF(T_C As Double, xi As Double) As Double
     ' R22-DMF 溶液焓 kJ/kg; 0.9<xi<1 时线性过渡到纯 R22 (保证 xi=1 连续)
     Dim h09 As Double
-    If xi <= 0 Then Hsol_R22DMF = H_DMF_R22DMF(T_C): Exit Function
-    If xi >= 1 Then Hsol_R22DMF = H_R22L_R22DMF(T_C): Exit Function
-    If xi <= 0.9 Then Hsol_R22DMF = H_Fatouh(T_C, xi): Exit Function
+    If xi <= 0 Then hsol_R22DMF = H_DMF_R22DMF(T_C): Exit Function
+    If xi >= 1 Then hsol_R22DMF = hliq_R22_R22DMF(T_C): Exit Function
+    If xi <= 0.9 Then hsol_R22DMF = H_Fatouh(T_C, xi): Exit Function
     h09 = H_Fatouh(T_C, 0.9)
-    Hsol_R22DMF = h09 + (xi - 0.9) / 0.1 * (H_R22L_R22DMF(T_C) - h09)
+    hsol_R22DMF = h09 + (xi - 0.9) / 0.1 * (hliq_R22_R22DMF(T_C) - h09)
 End Function

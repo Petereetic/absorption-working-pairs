@@ -15,7 +15,7 @@ static const double R124NMP_ALPHA = -0.0515;
 static const double R124NMP_M1 = 136.50, R124NMP_M2 = 99.13;
 static const double R124NMP_RGAS = 8.314;
 
-double R124NMP_PsatR124(double T_C)   /* Antoine fit to Table 5, bar */
+double R124NMP_PrefR124(double T_C)   /* Antoine fit to Table 5, bar */
 { double T = T_C + 273.15;
   return exp(14.750463 - 2527.6371 / (T - 10.9815)) / 100.0; }
 
@@ -47,10 +47,10 @@ double R124NMP_Gamma1(double T_C, double xi)
                    + t12 * G12 / pow(x2 + x1 * G12, 2));
   return exp(lng); }
 
-double R124NMP_BubbleP(double T_C, double xi)
+double R124NMP_Psol(double T_C, double xi)
 { double T, ps1, x1, g1, vl, p, pn; int i;
   if (T_C < 30.0 || T_C > 90.0 || xi <= 0.0 || xi >= 1.0) return NAN;
-  T = T_C + 273.15; ps1 = R124NMP_PsatR124(T_C);
+  T = T_C + 273.15; ps1 = R124NMP_PrefR124(T_C);
   x1 = R124NMP_XiToX(xi); g1 = R124NMP_Gamma1(T_C, xi); vl = R124NMP_VL(T_C);
   p = ps1 * x1 * g1;
   for (i = 0; i < 50; i++) {
@@ -62,27 +62,37 @@ double R124NMP_BubbleP(double T_C, double xi)
 
 double R124NMP_BubbleT(double P_bar, double xi)
 { double lo = 30.0, hi = 90.0, mid; int i;
-  if (!(R124NMP_BubbleP(lo, xi) <= P_bar && P_bar <= R124NMP_BubbleP(hi, xi)))
+  if (!(R124NMP_Psol(lo, xi) <= P_bar && P_bar <= R124NMP_Psol(hi, xi)))
       return NAN;
   for (i = 0; i < 60; i++) { mid = 0.5 * (lo + hi);
-      if (R124NMP_BubbleP(mid, xi) < P_bar) lo = mid; else hi = mid; }
+      if (R124NMP_Psol(mid, xi) < P_bar) lo = mid; else hi = mid; }
   return 0.5 * (lo + hi); }
 
+double R124NMP_DewT(double P_bar);  /* forward: defined below */
+/* Dew-point temperature [degC] of the solution at (T_C, xi)
+   (library-wide TdewByTsolXi convention):
+   R124NMP_DewT(R124NMP_Psol(T_C, xi)) on this module's own Antoine pure
+   line.  NAN where Psol or DewT is NAN. */
+double R124NMP_TdewByTsolXi(double T_C, double xi)
+{
+    return R124NMP_DewT(R124NMP_Psol(T_C, xi));
+}
+
 /* Concentration from dew-point temperature and solution temperature:
- * the dew point fixes the pressure, P = PsatR124(Tdew) (NMP treated as
- * non-volatile), then solve BubbleP(Tsol, xi) = P for xi by bisection.
- * BubbleP is only defined on the open interval 0 < xi < 1; its limits
- * there, 0 (xi -> 0) and PsatR124(Tsol) (xi -> 1), serve as the
+ * the dew point fixes the pressure, P = PrefR124(Tdew) (NMP treated as
+ * non-volatile), then solve Psol(Tsol, xi) = P for xi by bisection.
+ * Psol is only defined on the open interval 0 < xi < 1; its limits
+ * there, 0 (xi -> 0) and PrefR124(Tsol) (xi -> 1), serve as the
  * bracket - the bisection only ever evaluates interior points.
  * Returns NAN if no root (e.g. Tsol below Tdew, or Tsol outside the
  * validated 30-90 degC window). */
-double R124NMP_XiFromDewT(double Tdew_C, double Tsol_C)
+double R124NMP_XiByTsolTdew(double Tsol_C, double Tdew_C)
 { double P, lo = 0.0, hi = 1.0, mid; int i;
   if (Tsol_C < 30.0 || Tsol_C > 90.0) return NAN;
-  P = R124NMP_PsatR124(Tdew_C);
-  if (!(P <= R124NMP_PsatR124(Tsol_C))) return NAN;
+  P = R124NMP_PrefR124(Tdew_C);
+  if (!(P <= R124NMP_PrefR124(Tsol_C))) return NAN;
   for (i = 0; i < 80; i++) { mid = 0.5 * (lo + hi);
-      if (R124NMP_BubbleP(Tsol_C, mid) < P) lo = mid; else hi = mid; }
+      if (R124NMP_Psol(Tsol_C, mid) < P) lo = mid; else hi = mid; }
   return 0.5 * (lo + hi); }
 
 double R124NMP_DewT(double P_bar)  /* absorbent non-volatile */

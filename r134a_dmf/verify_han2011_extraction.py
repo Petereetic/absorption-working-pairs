@@ -5,9 +5,9 @@
 表4: a0=8073, a1=1367, b0=11638, b1=2106, alpha=0.14
 p = gamma1 * x1 * psat(T) * Poynting (Poynting~1, 忽略)
 psat 用本项目 Tillner-Roth&Baehr 拟合 (与 REFPROP 7 在此温区偏差 <0.3%)。"""
-import os, csv, math, sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from r134a_dmf import psat_r134a  # 返回 MPa
+import csv, math, sys
+sys.path.insert(0, "/home/hatch/workspace/your_files/r134a_dmf")
+from r134a_dmf import pref_r134a  # 返回 MPa
 
 R = 8.314462
 a0, a1, b0, b1, alpha = 8073.0, 1367.0, 11638.0, 2106.0, 0.14
@@ -49,7 +49,7 @@ pcal_paper = [
 ]
 
 pts = []
-with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "han2011.csv")) as f:
+with open("/home/hatch/workspace/your_files/r134a_dmf/han2011.csv") as f:
     for row in csv.DictReader(f):
         pts.append((float(row["T_K"]), float(row["x1"]), float(row["p_kPa"])))
 
@@ -58,7 +58,7 @@ assert len(pts) == len(pcal_paper) == 112, (len(pts), len(pcal_paper))
 worst = []
 for (T, x1, pe), pc_paper in zip(pts, pcal_paper):
     g1 = gamma1_han(T, x1)
-    pc_mine = g1 * x1 * psat_r134a(T) * 1000.0  # kPa
+    pc_mine = g1 * x1 * pref_r134a(T) * 1000.0  # kPa
     d = (pc_mine - pc_paper) / pc_paper * 100.0
     worst.append(abs(d))
 

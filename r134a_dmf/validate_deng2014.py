@@ -3,13 +3,13 @@
 1) 与 Han 2011 数据在 xexp 处插值比较 (复现论文 1.51%/2.89% 的说法)
 2) 冻结模型 (DG12=868.1, DG21=-929.1, alpha=0.3) 对这 8 点的验证
 """
-import os, csv, math, sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from r134a_dmf import bubble_p
+import csv, math, sys
+sys.path.insert(0, "/home/hatch/workspace/your_files/r134a_dmf")
+from r134a_dmf import psol
 
 # --- 读 Han 2011 数据, 按温度分组 ---
 han = {}
-with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "han2011.csv")) as f:
+with open("/home/hatch/workspace/your_files/r134a_dmf/han2011.csv") as f:
     for row in csv.DictReader(f):
         T = float(row["T_K"]); x = float(row["x1"]); p = float(row["p_kPa"])
         han.setdefault(T, []).append((x, p))
@@ -27,7 +27,7 @@ def interp_han(T, x):
     return pts[-1][1]
 
 def read_deng():
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "deng2014.csv")) as f:
+    with open("/home/hatch/workspace/your_files/r134a_dmf/deng2014.csv") as f:
         lines = [l for l in f if not l.startswith("#")]
     return csv.DictReader(lines)
 
@@ -36,7 +36,7 @@ devs_han, devs_mod = [], []
 for row in read_deng():
         T = float(row["T_K"]); xe = float(row["x1exp"]); pe = float(row["pexp_kPa"])
         ph = interp_han(T, xe)
-        pm = bubble_p(T, xe)[0] * 1000.0  # MPa -> kPa
+        pm = psol(T, xe)[0] * 1000.0  # MPa -> kPa
         dh = (pe-ph)/ph*100; dm = (pm-pe)/pe*100
         devs_han.append(abs(dh)); devs_mod.append(abs(dm))
         print(f"{T:8.2f} {xe:8.4f} {pe:8.1f} {ph:9.1f} {dh:7.2f} {pm:8.1f} {dm:7.2f}")

@@ -35,7 +35,7 @@ def _pchip(x, y, xq):
     return ((2*t**3-3*t**2+1)*y[k] + (t**3-2*t**2+t)*h[k]*dk[k]
             + (-2*t**3+3*t**2)*y[k+1] + (t**3-t**2)*h[k]*dk[k+1])
 
-def bubble_P(T_C, xi):
+def psol(T_C, xi):
     """Bubble-point pressure (bar). T_C in degC, xi = R22 mass fraction."""
     T = T_C + 273.15
     xc = min(max(xi, _XI_LO), _XI_HI)
@@ -46,35 +46,65 @@ def bubble_P(T_C, xi):
 def bubble_T(P_bar, xi, Tlo_C=-25.0, Thi_C=120.0):
     """Bubble-point temperature (degC) by bisection. Returns None if out of range."""
     xc = min(max(xi, _XI_LO), _XI_HI)
-    Plo, Phi = bubble_P(Tlo_C, xc), bubble_P(Thi_C, xc)
+    Plo, Phi = psol(Tlo_C, xc), psol(Thi_C, xc)
     if not (Plo <= P_bar <= Phi): return None
     lo, hi = Tlo_C, Thi_C
     for _ in range(60):
         mid = 0.5*(lo+hi)
-        if bubble_P(mid, xc) < P_bar: lo = mid
+        if psol(mid, xc) < P_bar: lo = mid
         else: hi = mid
     return 0.5*(lo+hi)
 
-def xi_from_dew(Tdew_C, Tsol_C):
+def xi_by_tsol_tdew(Tsol_C, Tdew_C):
     """Concentration from dew-point temperature and solution temperature.
 
-    The dew point fixes the pressure, P = bubble_P(Tdew, 1.0) (the pure-R22
+    The dew point fixes the pressure, P = psol(Tdew, 1.0) (the pure-R22
     isopleth of this module; DMF treated as non-volatile); then solve
-    bubble_P(Tsol, xi) = P by bisection over the valid xi range
+    psol(Tsol, xi) = P by bisection over the valid xi range
     0.10..1.00. None if no root (P outside the bubble-pressure span
     at Tsol)."""
-    P = bubble_P(Tdew_C, 1.0)
-    Plo, Phi = bubble_P(Tsol_C, _XI_LO), bubble_P(Tsol_C, _XI_HI)
+    P = psol(Tdew_C, 1.0)
+    Plo, Phi = psol(Tsol_C, _XI_LO), psol(Tsol_C, _XI_HI)
     if not (Plo <= P <= Phi):
         return None
     lo, hi = _XI_LO, _XI_HI
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if bubble_P(Tsol_C, mid) < P:
+        if psol(Tsol_C, mid) < P:
             lo = mid
         else:
             hi = mid
     return 0.5 * (lo + hi)
+
+def tdew_by_tsol_xi(T_C, xi):
+    """Dew-point temperature [degC] of the solution at (T_C, xi)
+    (library-wide TdewByTsolXi convention):
+        Tdew = bubble_T(psol(T_C, xi), 1.0),
+    i.e. the saturation temperature on this module's own pure-R22
+    isopleth (xi = 1 end of the fitted surface) at the solution
+    surface pressure Psol.  DMF treated as non-volatile.  None if
+    the pressure is outside the bubble_T span at xi = 1."""
+    return bubble_T(psol(T_C, xi), 1.0)
+
+
+def tsol_by_hsol(h, xi):
+    """Solution temperature [degC] from specific enthalpy h [kJ/kg]
+    and R22 mass fraction xi: bisection inverse of hsol over
+    T in [-20, 95] degC (the Fatouh correlation span
+    253.15-368.15 K; hsol increases monotonically with T at fixed
+    xi).  None if h lies outside the hsol span at xi."""
+    lo, hi = -20.0, 95.0
+    hlo, hhi = hsol(lo, xi), hsol(hi, xi)
+    if not (hlo <= h <= hhi):
+        return None
+    for _ in range(100):
+        mid = 0.5 * (lo + hi)
+        if hsol(mid, xi) < h:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
 
 # ---- Solution enthalpy: Fatouh et al. 1993 (thesis eq 2.38-2.43), T in K, h in kJ/kg ----
 _MR22, _MDMF, _R = 86.47, 73.09, 8.314  # g/mol, kJ/(kmol K)
@@ -91,12 +121,12 @@ def _poly(F, T):
     F0, F1, F2 = F[0], F[1], F[2]
     return F0 + F1*T + F2*T*T
 
-def h_R22_L(T_C):
+def hliq_R22(T_C):
     T = T_C + 273.15
     F = _F_R22_L[0] if T < 323.15 else _F_R22_L[1]
     return _poly(F, T)
 
-def h_R22_V(T_C):
+def hgas_R22(T_C):
     T = T_C + 273.15
     F = _F_R22_V[0] if T < 323.15 else _F_R22_V[1]
     return _poly(F, T)
@@ -119,17 +149,17 @@ def _h_fatouh(T_C, xi):
     K3 = _B[3]/T2 + 2*_C[3]/T3
     Mmix = xi*_MR22 + omx*_MDMF
     hmix = (omx*_R*T2/Mmix)*(K0*Y0 + K1*Y1 + K2*Y2 + K3*Y3)
-    return xi*h_R22_L(T_C) + omx*h_DMF(T_C) + hmix
+    return xi*hliq_R22(T_C) + omx*h_DMF(T_C) + hmix
 
-def h_solution(T_C, xi):
+def hsol(T_C, xi):
     """R22-DMF solution enthalpy (kJ/kg). T_C in degC, xi = R22 mass fraction.
     Fatouh correlation for xi<=0.9; linear blend to pure R22 for 0.9<xi<1
     (the raw hmix does not vanish at xi=1)."""
     if xi <= 0.0: return h_DMF(T_C)
-    if xi >= 1.0: return h_R22_L(T_C)
+    if xi >= 1.0: return hliq_R22(T_C)
     if xi <= 0.9: return _h_fatouh(T_C, xi)
     h09 = _h_fatouh(T_C, 0.9)
-    return h09 + (xi-0.9)/0.1*(h_R22_L(T_C)-h09)
+    return h09 + (xi-0.9)/0.1*(hliq_R22(T_C)-h09)
 
 if __name__ == "__main__":
     import csv
@@ -144,14 +174,14 @@ if __name__ == "__main__":
     errs=[]
     for T,x,P in pts:
         if x < 0.099: continue
-        errs.append(abs(bubble_P(T-273.15,x)-P)/P*100)
+        errs.append(abs(psol(T-273.15,x)-P)/P*100)
     errs=np.array(errs) if (np:=__import__('numpy')) else errs
-    print(f"bubbleP: n={len(errs)} AARD={sum(errs)/len(errs):.3f}% max={max(errs):.2f}%")
+    print(f"psol: n={len(errs)} AARD={sum(errs)/len(errs):.3f}% max={max(errs):.2f}%")
     # reference points
-    print("h_R22_L(0C) =", round(h_R22_L(0),2), "(ref 100)")
+    print("hliq_R22(0C) =", round(hliq_R22(0),2), "(ref 100)")
     print("h_DMF(0C)   =", round(h_DMF(0),2), "(ref 100)")
-    print("h_sol(30C,0.5) =", round(h_solution(30,0.5),2))
-    print("h_sol(98.7C,0.5)=", round(h_solution(98.7,0.5),2), "(thesis hand-calc 383.75; see note)")
-    print("bubbleP(40C,0.5)=", round(bubble_P(40,0.5),3), "bar (data 3.796 @31.8C? no: 313.15K/50%=3.796)")
-    print("bubbleP(30C,0.5)=", round(bubble_P(30,0.5),3))
-    print("bubbleT(3.796bar,0.5)=", round(bubble_T(3.796,0.5),2), "C (expect ~40C)")
+    print("h_sol(30C,0.5) =", round(hsol(30,0.5),2))
+    print("h_sol(98.7C,0.5)=", round(hsol(98.7,0.5),2), "(thesis hand-calc 383.75; see note)")
+    print("psol(40C,0.5)=", round(psol(40,0.5),3), "bar (data 3.796 @31.8C? no: 313.15K/50%=3.796)")
+    print("psol(30C,0.5)=", round(psol(30,0.5),3))
+    print("bubble_T(3.796bar,0.5)=", round(bubble_T(3.796,0.5),2), "C (expect ~40C)")

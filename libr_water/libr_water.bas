@@ -12,18 +12,18 @@ Attribute VB_Name = "LiBrWater"
 ' *** 逐行移植,使用前请在 Excel 中实测。                        ***
 '
 ' 工作表函数 (X = LiBr 重量百分数数字,如 50; T = °C):
-'   LW_H(X,T)        溶液比焓 [kJ/kg]
+'   LW_hsol(X,T)        溶液比焓 [kJ/kg]
 '   LW_Tdew(X,T)     露点温度 [°C]
-'   LW_Psat(X,T)     水蒸气分压 [Pa] (Patterson)
+'   LW_Psol(X,T)     水蒸气分压 [Pa] (Patterson)
 '   LW_Lambda(X,T)   导热系数 [W/(m K)]
 '   LW_Eta(X,T)      动力黏度 [Pa s]
 '   LW_Rho(X,T)      密度 [kg/m^3]
 '   LW_Sigma(X,T)    表面张力 [N/m]
 '   LW_Tcryst(X)     结晶温度 [°C]
-'   LW_PsatChua(X,T) 水蒸气分压 [Pa] (Chua Dühring, 0-190°C/0-60wt%;
+'   LW_PsolChua(X,T) 水蒸气分压 [Pa] (Chua Dühring, 0-190°C/0-60wt%;
 '                      x>60 的 <x-60> 项按原文印刷值无法复现, 不实现)
 '   LW_RhoChua(X,T)  密度 [kg/m^3] (Chua, 0-200°C/0-70%)
-'   LW_XFromDewTChua(Tdew,Tsol)  由露点温度与溶液温度反解浓度 X [wt%]
+'   LW_XByTsolTdewChua(Tdew,Tsol)  由露点温度与溶液温度反解浓度 X [wt%]
 '                      (Chua 路线, Wagner 纯水定压; 无根返回 Empty)
 '
 ' 范围外或结晶区内返回 #VALUE! 错误值。
@@ -143,10 +143,10 @@ Private Function TunknTcon() As Variant
 End Function
 
 ' ---------- 公开函数 ----------
-Public Function LW_H(ByVal X As Double, ByVal T As Double) As Variant
-    If Not InRange(X, T, 0, 70, 0, 180) Then LW_H = CVErr(xlErrValue): Exit Function
-    If CheckRegion(X, T, True, TunknStd()) <> "" Then LW_H = CVErr(xlErrValue): Exit Function
-    LW_H = PolyLW(X, T, CoefH(), 6)
+Public Function LW_hsol(ByVal X As Double, ByVal T As Double) As Variant
+    If Not InRange(X, T, 0, 70, 0, 180) Then LW_hsol = CVErr(xlErrValue): Exit Function
+    If CheckRegion(X, T, True, TunknStd()) <> "" Then LW_hsol = CVErr(xlErrValue): Exit Function
+    LW_hsol = PolyLW(X, T, CoefH(), 6)
 End Function
 
 Private Function TdewPolyF(ByVal X As Double, ByVal T As Double) As Double
@@ -161,13 +161,13 @@ Public Function LW_Tdew(ByVal X As Double, ByVal T As Double) As Variant
     LW_Tdew = 5# / 9# * (TdewPolyF(X, T) - 32#)
 End Function
 
-Public Function LW_Psat(ByVal X As Double, ByVal T As Double) As Variant
+Public Function LW_Psol(ByVal X As Double, ByVal T As Double) As Variant
     Dim tdewF As Double, TR As Double
-    If Not InRange(X, T, 0, 70, 4.4, 182.2) Then LW_Psat = CVErr(xlErrValue): Exit Function
-    If CheckRegion(X, T, False, TunknStd()) <> "" Then LW_Psat = CVErr(xlErrValue): Exit Function
+    If Not InRange(X, T, 0, 70, 4.4, 182.2) Then LW_Psol = CVErr(xlErrValue): Exit Function
+    If CheckRegion(X, T, False, TunknStd()) <> "" Then LW_Psol = CVErr(xlErrValue): Exit Function
     tdewF = TdewPolyF(X, T)
     TR = tdewF + 459.7
-    LW_Psat = 10# ^ (6.21147 - 2886.373 / TR - 337269.46 / TR ^ 2) * 6894.757
+    LW_Psol = 10# ^ (6.21147 - 2886.373 / TR - 337269.46 / TR ^ 2) * 6894.757
 End Function
 
 Public Function LW_Lambda(ByVal X As Double, ByVal T As Double) As Variant
@@ -222,7 +222,7 @@ End Function
 ' Dühring 系数 (Table 1, p.417)。注记:
 ' B_12 取 -3.12628E-16 (原文印刷漏负号, 经 Fig.2 验证);
 ' B_14 读 1.87723E-19; A_10 读 2.37604E-15;
-' <x-60> 项 (i=17..20) 按印刷值在 x>60 发散, LW_PsatChua 限 x≤60%。
+' <x-60> 项 (i=17..20) 按印刷值在 x>60 发散, LW_PsolChua 限 x≤60%。
 Private Function DuhrA() As Variant
     DuhrA = Array(1#, 2.92242E-04, 1.05207E-04, 8.86101E-07, _
         -2.71833E-06, 3.52718E-07, -2.03849E-08, 5.6881E-10, _
@@ -239,7 +239,7 @@ Private Function DuhrB() As Variant
         6.87629E-24)
 End Function
 
-Private Function WagnerPsat(ByVal Tc As Double) As Double
+Private Function WagnerPref(ByVal Tc As Double) As Double
     Dim T As Double, th As Double, s As Double, i As Integer
     Dim a As Variant, e As Variant
     a = Array(-7.85951783, 1.84408259, -11.7866497, _
@@ -251,14 +251,14 @@ Private Function WagnerPsat(ByVal Tc As Double) As Double
     For i = 0 To 5
         s = s + a(i) * th ^ e(i)
     Next i
-    WagnerPsat = 22.064E+06 * Exp((647.096 / T) * s)
+    WagnerPref = 22.064E+06 * Exp((647.096 / T) * s)
 End Function
 
-Public Function LW_PsatChua(ByVal X As Double, ByVal T As Double) As Variant
+Public Function LW_PsolChua(ByVal X As Double, ByVal T As Double) As Variant
     Dim AD As Double, BD As Double, xk As Double, i As Integer
     Dim A As Variant, B As Variant, TdpC As Double
     If X < 0 Or X > 60 Or T < 0 Or T > 190 Then
-        LW_PsatChua = CVErr(xlErrValue): Exit Function
+        LW_PsolChua = CVErr(xlErrValue): Exit Function
     End If
     A = DuhrA(): B = DuhrB()
     AD = 0#: BD = 0#: xk = 1#
@@ -268,31 +268,77 @@ Public Function LW_PsatChua(ByVal X As Double, ByVal T As Double) As Variant
         BD = BD + B(i) * xk
     Next i
     TdpC = (T - BD) / AD
-    LW_PsatChua = WagnerPsat(TdpC)
+    LW_PsolChua = WagnerPref(TdpC)
 End Function
 
 ' 由露点温度与溶液温度反解 LiBr 浓度 X [wt%] (Chua 路线):
-' P = 纯水在 Tdew 下的饱和压 (模块自有 WagnerPsat 纯水函数);
-' 二分 80 次反解 LW_PsatChua(X, Tsol) = P, 括号 X∈[0,60]
-' (LW_PsatChua 有效浓度域)。LW_PsatChua 随 X 单调递减,
+' P = 纯水在 Tdew 下的饱和压 (模块自有 WagnerPref 纯水函数);
+' 二分 80 次反解 LW_PsolChua(X, Tsol) = P, 括号 X∈[0,60]
+' (LW_PsolChua 有效浓度域)。LW_PsolChua 随 X 单调递减,
 ' 二分方向与递增型相反。与 Python/C 同算法。
 ' 无根返回 Empty (如 Tsol 明显低于 Tdew)。
-Public Function LW_XFromDewTChua(ByVal Tdew_C As Double, ByVal Tsol_C As Double) As Variant
+Public Function LW_XByTsolTdewChua(ByVal Tsol_C As Double, ByVal Tdew_C As Double) As Variant
     Dim P As Double, Pmin As Double, Pmax As Double
     Dim lo As Double, hi As Double, mid As Double, k As Long
-    P = WagnerPsat(Tdew_C)
-    Pmax = LW_PsatChua(0#, Tsol_C)
-    Pmin = LW_PsatChua(60#, Tsol_C)
+    P = WagnerPref(Tdew_C)
+    Pmax = LW_PsolChua(0#, Tsol_C)
+    Pmin = LW_PsolChua(60#, Tsol_C)
     If P < Pmin Or P > Pmax Then
-        LW_XFromDewTChua = Empty
+        LW_XByTsolTdewChua = Empty
         Exit Function
     End If
     lo = 0#: hi = 60#
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If LW_PsatChua(mid, Tsol_C) > P Then lo = mid Else hi = mid
+        If LW_PsolChua(mid, Tsol_C) > P Then lo = mid Else hi = mid
     Next k
-    LW_XFromDewTChua = 0.5 * (lo + hi)
+    LW_XByTsolTdewChua = 0.5 * (lo + hi)
+End Function
+
+
+' ---------- 露点温度（溶液）[°C]：全库 TdewByTsolXi 约定 ----------
+' Tdew = 纯水饱和温度(LW_Psol(X, T))：对 psol 内置的 Patterson 纯水
+' log10 关系式解析反解（对 1/TR 的二次方程）。构造上与 LW_Tdew
+' （Patterson TDEW 多项式）相等；LiBr 不挥发，无端点约定问题。
+' 超辖区时与 LW_Tdew 同样返回 #VALUE!。
+Public Function LW_TdewByTsolX(ByVal X As Double, ByVal T As Double) As Variant
+    Dim P As Variant, L As Double, disc As Double, u As Double
+    If Not InRange(X, T, 0, 70, 4.4, 182.2) Then LW_TdewByTsolX = CVErr(xlErrValue): Exit Function
+    If CheckRegion(X, T, False, TunknStd()) <> "" Then LW_TdewByTsolX = CVErr(xlErrValue): Exit Function
+    P = LW_Psol(X, T)
+    If IsError(P) Then LW_TdewByTsolX = CVErr(xlErrValue): Exit Function
+    L = Log(P / 6894.757) / Log(10#)
+    disc = 2886.373 ^ 2 - 4# * 337269.46 * (L - 6.21147)
+    If disc < 0# Then LW_TdewByTsolX = CVErr(xlErrValue): Exit Function
+    u = (-2886.373 + Sqr(disc)) / (2# * 337269.46)
+    LW_TdewByTsolX = (1# / u - 459.7 - 32#) * 5# / 9#
+End Function
+
+' ---------- 由溶液比焓反解溶液温度 [°C] ----------
+' hsol 只在 Patterson 标准区有定义（未知区返回 #VALUE!），故先以
+' 5 °C 步长扫描 T = 0..180 °C 找可评价的括号，再二分 80 次反解
+' LW_hsol(X, T) = h（hsol 在固定 X 下随 T 单调增）。无括号返回
+' Empty。与 C/Python 同算法；本函数未在真实 Excel 中编译运行。
+Public Function LW_TsolByHsol(ByVal h As Double, ByVal X As Double) As Variant
+    Dim prevT As Double, prevH As Double, havePrev As Boolean
+    Dim lo As Double, hi As Double, mid As Double, k As Long
+    Dim hv As Variant, haveBracket As Boolean
+    havePrev = False: haveBracket = False
+    For k = 0 To 36
+        hv = LW_hsol(X, 5# * k)
+        If Not IsError(hv) Then
+            If havePrev And prevH <= h And h <= hv Then
+                lo = prevT: hi = 5# * k: haveBracket = True: Exit For
+            End If
+            prevT = 5# * k: prevH = hv: havePrev = True
+        End If
+    Next k
+    If Not haveBracket Then LW_TsolByHsol = Empty: Exit Function
+    For k = 1 To 80
+        mid = 0.5 * (lo + hi)
+        If LW_hsol(X, mid) < h Then lo = mid Else hi = mid
+    Next k
+    LW_TsolByHsol = 0.5 * (lo + hi)
 End Function
 
 Public Function LW_RhoChua(ByVal X As Double, ByVal T As Double) As Variant

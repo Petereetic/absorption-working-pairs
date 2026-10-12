@@ -10,7 +10,7 @@
  * Borde1997与硕士论文_核验.md): Table 9 rho_00 exponent (E+01 -> E+00)
  * and Table 8 DMAC eta0/eta1 (x10 too large as printed).
  * NOTE: Eq. (16) runs +13..+23 % above Eq. (15) at xi = 1 (property of
- * the printed fit); use R124DMAC_PsatR124 near xi = 1.
+ * the printed fit); use R124DMAC_PrefR124 near xi = 1.
  */
 #include <math.h>
 
@@ -26,18 +26,18 @@ static double psat_eq15(const double c[6], double T_C)
     return exp(c[0] + c[1] / (T + c[2]) + c[3] * T + c[4] * log(T) + c[5] * T * T);
 }
 
-double R124DMAC_PsatR124(double T_C) { return psat_eq15(PS_R124, T_C); }
+double R124DMAC_PrefR124(double T_C) { return psat_eq15(PS_R124, T_C); }
 double R124DMAC_PsatDMAC(double T_C) { return psat_eq15(PS_DMAC, T_C); }
 
 double R124DMAC_DewT(double P_bar)
 {
     double lo = -60.0, hi = 120.0, mid;
     int k;
-    if (P_bar < R124DMAC_PsatR124(lo) || P_bar > R124DMAC_PsatR124(hi))
+    if (P_bar < R124DMAC_PrefR124(lo) || P_bar > R124DMAC_PrefR124(hi))
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (R124DMAC_PsatR124(mid) < P_bar) lo = mid; else hi = mid;
+        if (R124DMAC_PrefR124(mid) < P_bar) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }
@@ -54,7 +54,7 @@ static const double PTAB[8][8] = {
     {-0.67036e-17, -0.53440e-16,  0.14140e-15, -0.94881e-16,  0.0,          0.56692e-15, -0.10014e-14,  0.53340e-15}
 };
 
-double R124DMAC_BubbleP(double T_C, double xi)
+double R124DMAC_Psol(double T_C, double xi)
 {
     double T = T_C + 273.15, s = 0.0, xip, Tp;
     int i, j;
@@ -73,29 +73,55 @@ double R124DMAC_BubbleT(double P_bar, double xi)
 {
     double lo = 0.0, hi = 150.0, mid;
     int k;
-    if (P_bar < R124DMAC_BubbleP(lo, xi) || P_bar > R124DMAC_BubbleP(hi, xi))
+    if (P_bar < R124DMAC_Psol(lo, xi) || P_bar > R124DMAC_Psol(hi, xi))
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (R124DMAC_BubbleP(mid, xi) < P_bar) lo = mid; else hi = mid;
+        if (R124DMAC_Psol(mid, xi) < P_bar) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }
 
 /* Concentration from dew-point temperature and solution temperature:
- * the dew point fixes the pressure, P = PsatR124(Tdew) (DMAC treated as
- * non-volatile), then solve BubbleP(Tsol, xi) = P for xi by bisection.
+ * the dew point fixes the pressure, P = PrefR124(Tdew) (DMAC treated as
+ * non-volatile), then solve Psol(Tsol, xi) = P for xi by bisection.
  * Returns NAN if no root (P outside the bubble-pressure span at Tsol). */
-double R124DMAC_XiFromDewT(double Tdew_C, double Tsol_C)
+double R124DMAC_XiByTsolTdew(double Tsol_C, double Tdew_C)
 {
-    double P = R124DMAC_PsatR124(Tdew_C);
+    double P = R124DMAC_PrefR124(Tdew_C);
     double lo = 0.0, hi = 1.0, mid;
     int k;
-    if (P < R124DMAC_BubbleP(Tsol_C, 0.0) || P > R124DMAC_BubbleP(Tsol_C, 1.0))
+    if (P < R124DMAC_Psol(Tsol_C, 0.0) || P > R124DMAC_Psol(Tsol_C, 1.0))
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (R124DMAC_BubbleP(Tsol_C, mid) < P) lo = mid; else hi = mid;
+        if (R124DMAC_Psol(Tsol_C, mid) < P) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
+
+/* Dew-point temperature [degC] of the solution at (T_C, xi)
+   (library-wide TdewByTsolXi convention):
+   R124DMAC_DewT(R124DMAC_Psol(T_C, xi)) on this module's own Borde
+   Eq (15) pure line.  NAN if DewT has no root. */
+double R124DMAC_TdewByTsolXi(double T_C, double xi)
+{
+    return R124DMAC_DewT(R124DMAC_Psol(T_C, xi));
+}
+
+double R124DMAC_hsol(double T_C, double xi);  /* forward: defined below */
+/* Solution temperature [degC] from h [kJ/kg] and xi: bisection
+   inverse of R124DMAC_hsol over T in [-40, 150] degC.
+   NAN if h lies outside the hsol span at xi. */
+double R124DMAC_TsolByHsol(double h, double xi)
+{
+    double lo = -40.0, hi = 150.0, mid;
+    int k;
+    if (h < R124DMAC_hsol(lo, xi) || h > R124DMAC_hsol(hi, xi)) return NAN;
+    for (k = 0; k < 100; k++) {
+        mid = 0.5 * (lo + hi);
+        if (R124DMAC_hsol(mid, xi) < h) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }
@@ -143,7 +169,7 @@ double R124DMAC_Hr(double T_C)   /* Eq. (21), R124, Table 6 */
     return 100.0 + 4.1868 * s;
 }
 
-double R124DMAC_Hsol(double T_C, double xi)   /* Eq. (22) */
+double R124DMAC_hsol(double T_C, double xi)   /* Eq. (22) */
 {
     return R124DMAC_Hr(T_C) * xi + R124DMAC_Ha(T_C) * (1.0 - xi)
          + R124DMAC_HExcess(T_C, xi);
@@ -221,13 +247,87 @@ double R124DMAC_EtaMix(double T_C, double xi)
 #include <stdio.h>
 int main(void)
 {
-    printf("Psat R124 at -11 C   = %.3f bar (expect ~1.013)\n", R124DMAC_PsatR124(-11.0));
-    printf("BubbleP(80 C, 0.5)   = %.3f bar\n", R124DMAC_BubbleP(80.0, 0.5));
+    printf("Psat R124 at -11 C   = %.3f bar (expect ~1.013)\n", R124DMAC_PrefR124(-11.0));
+    printf("Psol(80 C, 0.5)   = %.3f bar\n", R124DMAC_Psol(80.0, 0.5));
     printf("BubbleT(2.977, 0.5)  = %.2f C (expect ~80)\n", R124DMAC_BubbleT(2.977, 0.5));
     printf("HExcess(20 C, 0.557) = %.2f kJ/kg\n", R124DMAC_HExcess(20.0, 0.557));
-    printf("Hsol(0 C, 0)         = %.2f kJ/kg (expect ~100)\n", R124DMAC_Hsol(0.0, 0.0));
+    printf("Hsol(0 C, 0)         = %.2f kJ/kg (expect ~100)\n", R124DMAC_hsol(0.0, 0.0));
     printf("RhoMix(0 C, 0.5)     = %.1f kg/m3\n", R124DMAC_RhoMix(0.0, 0.5));
     printf("EtaMix(20 C, 0)      = %.3f mPa s\n", R124DMAC_EtaMix(20.0, 0.0));
     return 0;
 }
 #endif
+
+/* ---- Adiabatic absorber ---------------------------------------------------
+ * Saturated vapour enthalpy of pure R124 (kJ/kg): NIST WebBook saturation
+ * table fit, identical polynomial to pure_fluids R124_hgas. Reference state
+ * matches this module (liquid = 100 kJ/kg at 0 degC). Fit band -40..110 C.
+ */
+static const double HVAP_R124[7] = {
+    -4.7606354686130485e-12, -9.020883920792309e-10, 2.036341936229362e-08,
+    4.234769176716097e-06, -3.8033802108463233e-04, 5.621038923140594e-01,
+    2.5994742998138406e+02
+};
+
+static double hgas_R124(double T_C)
+{
+    double s = 0.0;
+    int i;
+    for (i = 0; i < 7; i++) s = s * T_C + HVAP_R124[i];
+    return s;
+}
+
+static double abs_resid(double xr, double xi_w, double hs, double hv,
+                        double P_bar)
+{
+    double Tout = R124DMAC_BubbleT(P_bar, xr);
+    double r;
+    if (isnan(Tout)) return NAN;
+    r = (xr - xi_w) / (1.0 - xr);
+    return hs + r * hv - (1.0 + r) * R124DMAC_hsol(Tout, xr);
+}
+
+/* Vapour flow absorbed in a single-pass adiabatic absorber.
+ * Inlets: weak solution (flow ms, Ts_C, xi_w) and saturated vapour at
+ * Tv_C; absorber pressure = pref_R124(Tv_C). Outlet is the adiabatic-
+ * equilibrium state at that pressure. Returns the vapour flow (same
+ * units as ms); Tout_C / xi_r receive the outlet state when non-NULL.
+ * NAN if no solution inside the model domain (xi <= 0.95; Tv -40..110).
+ */
+double R124DMAC_AbsVapFlow(double Ts_C, double xi_w, double ms,
+                           double Tv_C, double *Tout_C, double *xi_r)
+{
+    double P, hv, hs, prev_x = 0.0, prev_f = 0.0, blo = 0.0, bhi = 0.0;
+    int i, have_prev = 0, have_bracket = 0;
+    const int n = 400;
+    if (Tv_C < -40.0 || Tv_C > 110.0 || xi_w >= 0.95) return NAN;
+    P = R124DMAC_PrefR124(Tv_C);
+    hv = hgas_R124(Tv_C);
+    hs = R124DMAC_hsol(Ts_C, xi_w);
+    for (i = 1; i <= n && !have_bracket; i++) {
+        double xr = xi_w + (0.95 - xi_w) * i / n;
+        double f = abs_resid(xr, xi_w, hs, hv, P);
+        if (isnan(f)) continue;
+        if (have_prev && ((prev_f > 0 && f <= 0) || (prev_f < 0 && f >= 0))) {
+            blo = prev_x; bhi = xr; have_bracket = 1;
+        }
+        prev_x = xr; prev_f = f; have_prev = 1;
+    }
+    if (!have_bracket) return NAN;
+    {
+        double flo = abs_resid(blo, xi_w, hs, hv, P);
+        double xr, r;
+        int k;
+        for (k = 0; k < 100; k++) {
+            double mid = 0.5 * (blo + bhi);
+            double fm = abs_resid(mid, xi_w, hs, hv, P);
+            if ((flo > 0) == (fm > 0)) { blo = mid; flo = fm; }
+            else bhi = mid;
+        }
+        xr = 0.5 * (blo + bhi);
+        r = (xr - xi_w) / (1.0 - xr);
+        if (Tout_C) *Tout_C = R124DMAC_BubbleT(P, xr);
+        if (xi_r) *xi_r = xr;
+        return ms * r;
+    }
+}

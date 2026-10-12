@@ -25,18 +25,18 @@ Attribute VB_Name = "MethanolBromide"
 '   注：El-Shamarka 自己的式(4.10) 密度、式(4.11) 黏度仍未核实，本模块
 '   未实现，勿与上述 Iedema 关联式混淆（详见 公式说明.md）。
 ' 参考态（本文档约定，论文未定义绝对基准）：
-'   h_liq(0°C, 任意 w) = 100 kJ/kg；h_vap = h_liq + H'。
+'   hsol(0°C, 任意 w) = 100 kJ/kg；hgas = hsol + H'。
 '
 ' 工作表函数：
-'   =MB_Pbub(T_K, w)    泡点压力，bar
+'   =MB_Psol(T_K, w)    泡点压力，bar
 '   =MB_Tbub(P_bar, w)  泡点温度，K
 '   =MB_Cp(T_K, w)      溶液比热，kJ/(kg·K)
 '   =MB_Hprime(T_K, w)  汽化焓 H'，kJ/kg（仅 w=0.25~0.356）
-'   =MB_Hliq(T_K, w)    溶液比焓，kJ/kg
-'   =MB_Hvap(T_K, w)    气相比焓，kJ/kg
+'   =MB_hsol(T_K, w)    溶液比焓，kJ/kg
+'   =MB_hgas(T_K, w)    气相比焓，kJ/kg
 '   =MB_RhoIedema(T_K, w, w_H)  密度（Iedema 1984），kg/m3
 '   =MB_EtaIedema(T_K, w)       动力黏度（Iedema 1984），Pa·s
-'   =MB_XiFromDewT(Tdew_K, Tsol_K)  由露点温度与溶液温度反解 w，无根返回 Empty
+'   =MB_XiByTsolTdew(Tdew_K, Tsol_K)  由露点温度与溶液温度反解 w，无根返回 Empty
 '
 ' 注意：本模块未在真实 Excel 中编译运行过，使用前请先编译验证。
 
@@ -146,10 +146,10 @@ Private Sub CpAB(ByVal w As Double, ByRef A As Double, ByRef B As Double)
 End Sub
 
 ' 式(3.1)：泡点压力，bar
-Public Function MB_Pbub(ByVal T_K As Double, ByVal w As Double) As Double
+Public Function MB_Psol(ByVal T_K As Double, ByVal w As Double) As Double
     Dim log10p As Double
     log10p = PchipEval(1, w) + PchipEval(2, w) * (1000# / T_K - 2.3)
-    MB_Pbub = 10# ^ log10p / 1000#
+    MB_Psol = 10# ^ log10p / 1000#
 End Function
 
 ' 式(3.1) 解析反解：泡点温度，K
@@ -159,31 +159,62 @@ Public Function MB_Tbub(ByVal P_bar As Double, ByVal w As Double) As Double
     MB_Tbub = 1000# / ((log10p - PchipEval(1, w)) / PchipEval(2, w) + 2.3)
 End Function
 
-' 纯甲醇饱和压（私有辅助，与 Python 版 meoh_psat_bar 同常数）：
+' 纯甲醇饱和压（私有辅助，与 Python 版 meoh_pref_bar 同常数）：
 ' Antoine 拟合自论文附录 A 表：log10 P[mmHg] = 8.885298 - 2070.3714/(T[K] + 6.3818)
-Private Function MeohPsatBar(ByVal T_K As Double) As Double
-    MeohPsatBar = 10# ^ (8.885298 - 2070.3714 / (T_K + 6.3818)) * 0.0013332239
+Private Function MeohPrefBar(ByVal T_K As Double) As Double
+    MeohPrefBar = 10# ^ (8.885298 - 2070.3714 / (T_K + 6.3818)) * 0.0013332239
 End Function
 
 ' 由露点温度与溶液温度反解甲醇质量分数 w：
-' 露点定压 P = MeohPsatBar(Tdew_K)（盐不挥发，气相为纯甲醇），
-' 再二分 80 次反解 MB_Pbub(Tsol_K, w) = P，
+' 露点定压 P = MeohPrefBar(Tdew_K)（盐不挥发，气相为纯甲醇），
+' 再二分 80 次反解 MB_Psol(Tsol_K, w) = P，
 ' 括号取泡点函数有效浓度域 w = 0.243~0.509。
 ' 无根时返回 Empty（如溶液温度明显低于露点温度）。
 ' 与 C/Python 同算法；本函数未在真实 Excel 中编译运行。
-Public Function MB_XiFromDewT(ByVal Tdew_K As Double, ByVal Tsol_K As Double) As Variant
+Public Function MB_XiByTsolTdew(ByVal Tsol_K As Double, ByVal Tdew_K As Double) As Variant
     Dim P As Double, lo As Double, hi As Double, mid As Double, k As Long
-    P = MeohPsatBar(Tdew_K)
-    If P < MB_Pbub(Tsol_K, 0.243) Or P > MB_Pbub(Tsol_K, 0.509) Then
-        MB_XiFromDewT = Empty
+    P = MeohPrefBar(Tdew_K)
+    If P < MB_Psol(Tsol_K, 0.243) Or P > MB_Psol(Tsol_K, 0.509) Then
+        MB_XiByTsolTdew = Empty
         Exit Function
     End If
     lo = 0.243: hi = 0.509
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If MB_Pbub(Tsol_K, mid) < P Then lo = mid Else hi = mid
+        If MB_Psol(Tsol_K, mid) < P Then lo = mid Else hi = mid
     Next k
-    MB_XiFromDewT = 0.5 * (lo + hi)
+    MB_XiByTsolTdew = 0.5 * (lo + hi)
+End Function
+
+
+' 纯甲醇饱和温度 [K]（私有辅助）：MeohPrefBar 的解析反解，
+' 与 Python 版 meoh_Tsat_bar 同式。
+Private Function MeohTsatBar(ByVal P_bar As Double) As Double
+    MeohTsatBar = 2070.3714 / (8.885298 - Log(P_bar / 0.0013332239) / Log(10#)) - 6.3818
+End Function
+
+' 溶液在 (T_K, w) 的露点温度 [K]（全库 TdewByTsolXi 约定）：
+' Tdew = MeohTsatBar(MB_Psol(T_K, w))，以本模块自有纯甲醇线评价
+' 溶液表面压力 Psol。盐不挥发，气相为纯甲醇。
+Public Function MB_TdewByTsolW(ByVal T_K As Double, ByVal w As Double) As Double
+    MB_TdewByTsolW = MeohTsatBar(MB_Psol(T_K, w))
+End Function
+
+' 由溶液比焓 h [kJ/kg] 与甲醇质量分数 w 反解溶液温度 [K]：
+' MB_hsol 在固定 w 下随 T 单调增，二分 100 次反解，
+' 求解括号 T ∈ [233.15, 423.15] K。h 超出值域返回 Empty。
+' 与 C/Python 同算法；本函数未在真实 Excel 中编译运行。
+Public Function MB_TsolByHsol(ByVal h As Double, ByVal w As Double) As Variant
+    Dim lo As Double, hi As Double, mid As Double, k As Long
+    lo = 233.15: hi = 423.15
+    If h < MB_hsol(lo, w) Or h > MB_hsol(hi, w) Then
+        MB_TsolByHsol = Empty: Exit Function
+    End If
+    For k = 1 To 100
+        mid = 0.5 * (lo + hi)
+        If MB_hsol(mid, w) < h Then lo = mid Else hi = mid
+    Next k
+    MB_TsolByHsol = 0.5 * (lo + hi)
 End Function
 
 ' 式(3.4)：溶液比热，kJ/(kg·K)
@@ -202,17 +233,17 @@ Public Function MB_Hprime(ByVal T_K As Double, ByVal w As Double) As Double
     MB_Hprime = A + B * w + C * w * w
 End Function
 
-' 溶液比焓，kJ/kg；参考态约定 h_liq(0°C) = 100 kJ/kg
-Public Function MB_Hliq(ByVal T_K As Double, ByVal w As Double) As Double
+' 溶液比焓，kJ/kg；参考态约定 hsol(0°C) = 100 kJ/kg
+Public Function MB_hsol(ByVal T_K As Double, ByVal w As Double) As Double
     Dim A As Double, B As Double, t As Double
     CpAB w, A, B
     t = T_K - 273.15
-    MB_Hliq = 100# + A * t + B * t * t / 2#
+    MB_hsol = 100# + A * t + B * t * t / 2#
 End Function
 
-' 气相比焓，kJ/kg：h_vap = h_liq + H'
-Public Function MB_Hvap(ByVal T_K As Double, ByVal w As Double) As Double
-    MB_Hvap = MB_Hliq(T_K, w) + MB_Hprime(T_K, w)
+' 气相比焓，kJ/kg：hgas = hsol + H'
+Public Function MB_hgas(ByVal T_K As Double, ByVal w As Double) As Double
+    MB_hgas = MB_hsol(T_K, w) + MB_Hprime(T_K, w)
 End Function
 
 ' Iedema 表 2.7.2.2.2：密度，kg/m3。T_K 为开尔文（内部换算 t[°C]）；

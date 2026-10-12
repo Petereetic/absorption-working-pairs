@@ -15,14 +15,14 @@ Attribute VB_Name = "NH3LiNO3"
 '
 ' 约定: x = 氨质量分数 (小数, 如 0.5); T 为 K (NL_Xcris 用 °C)。
 ' 工作表函数:
-'   NL_Pbub(T_K, x)     泡点压力 [kPa]      (T 293.15-353.15, x 0.35-0.65)
+'   NL_Psol(T_K, x)     泡点压力 [kPa]      (T 293.15-353.15, x 0.35-0.65)
 '   NL_Tbub(P_kPa, x)   泡点温度 [K]        (解析反解; 结果须在上述 T 域)
-'   NL_Hliq(T_K, x)     溶液比焓 [kJ/kg]    (T 273.15-353.15, x 0.35-0.65)
+'   NL_hsol(T_K, x)     溶液比焓 [kJ/kg]    (T 273.15-353.15, x 0.35-0.65)
 '   NL_Cp(T_K, x)       比热 [kJ/(kg K)]    (T 293.15-353.15, x 0.35-0.65)
 '   NL_Rho(T_K, x)      密度 [kg/m^3]       (T 293.15-353.15, x 0.35-0.65)
 '   NL_K(T_K, x)        导热系数 [W/(m K)]  (T 303.15-353.15, x 0.35-0.60)
 '   NL_Xcris(T_C, x)    结晶界限量 XCRIS    (x 0-1, 原文十分段伪代码)
-'   NL_XiFromDewT(Tdew_K, Tsol_K)  由露点温度与溶液温度反解 x;
+'   NL_XiByTsolTdew(Tdew_K, Tsol_K)  由露点温度与溶液温度反解 x;
 '                       无根返回 Empty (本函数按跨工质对统一约定,
 '                       不用本模块其余函数的 #VALUE! 约定)
 '
@@ -55,13 +55,13 @@ Private Function InRng(ByVal v As Double, ByVal lo As Double, _
 End Function
 
 ' ---------- 泡点压力 [kPa]: ln P = pa(x) + pb(x)/T ----------
-Public Function NL_Pbub(ByVal T_K As Double, ByVal x As Double) As Variant
+Public Function NL_Psol(ByVal T_K As Double, ByVal x As Double) As Variant
     Dim pa As Double, pb As Double
     If Not InRng(T_K, 293.15, 353.15) Or Not InRng(x, 0.35, 0.65) Then
-        NL_Pbub = CVErr(xlErrValue): Exit Function
+        NL_Psol = CVErr(xlErrValue): Exit Function
     End If
     PaPb x, pa, pb
-    NL_Pbub = Exp(pa + pb / T_K)
+    NL_Psol = Exp(pa + pb / T_K)
 End Function
 
 ' ---------- 泡点温度 [K]: T = pb / (ln P - pa) ----------
@@ -82,7 +82,7 @@ Public Function NL_Tbub(ByVal P_kPa As Double, ByVal x As Double) As Variant
     NL_Tbub = T_K
 End Function
 
-' ---------- 纯氨饱和线 (露点口径, 供 NL_XiFromDewT 用) ----------
+' ---------- 纯氨饱和线 (露点口径, 供 NL_XiByTsolTdew 用) ----------
 ' LiNO3 不挥发, 气相视为纯氨。纯氨饱和温度按本工质对说明的口径:
 ' 氨水模块 Patek-Klomfar 式 (6) 在氨摩尔分数 = 1 处。x = 1 时式 (6)
 ' 只剩 m = 0 项: Tsat[K] = 100*(3.22302 - 0.384206 L + 0.0460965 L^2
@@ -97,55 +97,88 @@ End Function
 
 ' 纯氨饱和压力 [kPa]: 二分 80 次反解 TsatNH3Pure(P) = T_K;
 ' T_K 落在式 (6) 压力跨度之外时返回 Empty。
-Private Function PsatNH3Pure(ByVal T_K As Double) As Variant
+Private Function PrefNH3Pure(ByVal T_K As Double) As Variant
     Dim lo As Double, hi As Double, mid As Double, k As Long
     lo = 2#: hi = 2000#
     If T_K < TsatNH3Pure(lo) Or T_K > TsatNH3Pure(hi) Then
-        PsatNH3Pure = Empty: Exit Function
+        PrefNH3Pure = Empty: Exit Function
     End If
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
         If TsatNH3Pure(mid) < T_K Then lo = mid Else hi = mid
     Next k
-    PsatNH3Pure = 0.5 * (lo + hi)
+    PrefNH3Pure = 0.5 * (lo + hi)
 End Function
 
 ' ---------- 由露点温度与溶液温度反解氨质量分数 x ----------
-' 露点定压 P = PsatNH3Pure(Tdew_K) (纯氨饱和压, 口径见上);
-' 再二分 80 次反解 NL_Pbub(Tsol_K, x) = P, 括号取泡点函数有效
+' 露点定压 P = PrefNH3Pure(Tdew_K) (纯氨饱和压, 口径见上);
+' 再二分 80 次反解 NL_Psol(Tsol_K, x) = P, 括号取泡点函数有效
 ' 浓度域 x = 0.35-0.65。无根时返回 Empty (P 落在 Tsol 下泡点压力
 ' 跨度之外, 如溶液温度明显低于露点温度; 或 Tdew 超出纯氨式 (6)
 ' 辖区; 或 Tsol 越界)。与 C/Python 同算法; 未在真实 Excel 编译。
-Public Function NL_XiFromDewT(ByVal Tdew_K As Double, ByVal Tsol_K As Double) As Variant
+Public Function NL_XiByTsolTdew(ByVal Tsol_K As Double, ByVal Tdew_K As Double) As Variant
     Dim P As Variant, lo As Double, hi As Double, mid As Double, k As Long
-    P = PsatNH3Pure(Tdew_K)
+    P = PrefNH3Pure(Tdew_K)
     If IsEmpty(P) Then
-        NL_XiFromDewT = Empty: Exit Function
+        NL_XiByTsolTdew = Empty: Exit Function
     End If
     If Not InRng(Tsol_K, 293.15, 353.15) Then
-        NL_XiFromDewT = Empty: Exit Function
+        NL_XiByTsolTdew = Empty: Exit Function
     End If
-    If P < NL_Pbub(Tsol_K, 0.35) Or P > NL_Pbub(Tsol_K, 0.65) Then
-        NL_XiFromDewT = Empty: Exit Function
+    If P < NL_Psol(Tsol_K, 0.35) Or P > NL_Psol(Tsol_K, 0.65) Then
+        NL_XiByTsolTdew = Empty: Exit Function
     End If
     lo = 0.35: hi = 0.65
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If NL_Pbub(Tsol_K, mid) < P Then lo = mid Else hi = mid
+        If NL_Psol(Tsol_K, mid) < P Then lo = mid Else hi = mid
     Next k
-    NL_XiFromDewT = 0.5 * (lo + hi)
+    NL_XiByTsolTdew = 0.5 * (lo + hi)
+End Function
+
+
+' ---------- 露点温度（溶液）[K]：全库 TdewByTsolXi 约定 ----------
+' Tdew = TsatNH3Pure(NL_Psol(T_K, x))：以本模块自有纯氨线
+' （Pátek–Klomfar 式(6) 纯氨端点）评价溶液表面压力 Psol 所对应的
+' 饱和温度。LiNO3 不挥发，气相视为纯氨。NL_Psol 无解（Empty）或
+' P 超出纯氨线辖区 2~2000 kPa 时返回 Empty。
+Public Function NL_TdewByTsolX(ByVal T_K As Double, ByVal x As Double) As Variant
+    Dim P As Variant
+    P = NL_Psol(T_K, x)
+    If IsEmpty(P) Then NL_TdewByTsolX = Empty: Exit Function
+    If P < 2# Or P > 2000# Then NL_TdewByTsolX = Empty: Exit Function
+    NL_TdewByTsolX = TsatNH3Pure(P)
+End Function
+
+' ---------- 由溶液比焓反解溶液温度 [K] ----------
+' NL_hsol 在固定 x 下随 T 单调增，在其辖区 T ∈ [273.15, 353.15] K
+' 内二分 100 次反解。h 超出该 x 下 hsol 值域、或 x 超辖区
+' （端点求值为 Empty）时返回 Empty。与 C/Python 同算法；
+' 本函数未在真实 Excel 中编译运行。
+Public Function NL_TsolByHsol(ByVal h As Double, ByVal x As Double) As Variant
+    Dim hlo As Variant, hhi As Variant
+    Dim lo As Double, hi As Double, mid As Double, k As Long
+    hlo = NL_hsol(273.15, x): hhi = NL_hsol(353.15, x)
+    If IsEmpty(hlo) Or IsEmpty(hhi) Then NL_TsolByHsol = Empty: Exit Function
+    If h < hlo Or h > hhi Then NL_TsolByHsol = Empty: Exit Function
+    lo = 273.15: hi = 353.15
+    For k = 1 To 100
+        mid = 0.5 * (lo + hi)
+        If NL_hsol(mid, x) < h Then lo = mid Else hi = mid
+    Next k
+    NL_TsolByHsol = 0.5 * (lo + hi)
 End Function
 
 ' ---------- 溶液比焓 [kJ/kg]: H = ha + hb T + hc T^2 ----------
-Public Function NL_Hliq(ByVal T_K As Double, ByVal x As Double) As Variant
+Public Function NL_hsol(ByVal T_K As Double, ByVal x As Double) As Variant
     Dim cha As Variant, chb As Variant, chc As Variant
     If Not InRng(T_K, 273.15, 353.15) Or Not InRng(x, 0.35, 0.65) Then
-        NL_Hliq = CVErr(xlErrValue): Exit Function
+        NL_hsol = CVErr(xlErrValue): Exit Function
     End If
     cha = Array(249.1567745, -1628.297463, -464.3464344, -105.6321057)
     chb = Array(2.481273559, -5.184392344, -0.775202139, 18.98142102)
     chc = Array(-0.004240786, 0.025111292, -0.013342843, -0.025956064)
-    NL_Hliq = Poly3(cha, x) + Poly3(chb, x) * T_K _
+    NL_hsol = Poly3(cha, x) + Poly3(chb, x) * T_K _
               + Poly3(chc, x) * T_K * T_K
 End Function
 

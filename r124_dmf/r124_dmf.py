@@ -60,7 +60,7 @@ _TMIN, _TMAX = 30.0, 90.0
 NAN = float("nan")
 
 
-def psat_R124(T_C):
+def pref_R124(T_C):
     """Pure R124 saturation pressure [bar], 30-90 degC."""
     T = T_C + 273.15
     return math.exp(_ANT_A - _ANT_B / (T + _ANT_C)) / 100.0
@@ -113,12 +113,12 @@ def gamma1(T_C, xi):
     return math.exp(lng)
 
 
-def bubble_P(T_C, xi):
+def psol(T_C, xi):
     """Bubble-point pressure [bar]; vapor = pure R124."""
     if not (_TMIN <= T_C <= _TMAX) or not (0.0 < xi < 1.0):
         return NAN
     T = T_C + 273.15
-    ps1 = psat_R124(T_C)                      # bar
+    ps1 = pref_R124(T_C)                      # bar
     x1 = xi_to_x(xi)
     p = ps1 * x1 * gamma1(T_C, xi)            # bar
     vl = _VL_R124(T_C)                        # m3/mol
@@ -136,37 +136,37 @@ def bubble_T(P_bar, xi, iters=60):
     """Bubble-point temperature [degC] at P [bar]; NaN if the root is
     outside the validated 30-90 degC window."""
     lo, hi = _TMIN, _TMAX
-    plo, phi = bubble_P(lo, xi), bubble_P(hi, xi)
+    plo, phi = psol(lo, xi), psol(hi, xi)
     if math.isnan(plo) or math.isnan(phi) or not (plo <= P_bar <= phi):
         return NAN
     for _ in range(iters):
         mid = 0.5 * (lo + hi)
-        if bubble_P(mid, xi) < P_bar:
+        if psol(mid, xi) < P_bar:
             lo = mid
         else:
             hi = mid
     return 0.5 * (lo + hi)
 
 
-def xi_from_dew(Tdew_C, Tsol_C):
+def xi_by_tsol_tdew(Tsol_C, Tdew_C):
     """Concentration from dew-point temperature and solution temperature.
 
-    The dew point fixes the pressure, P = psat_R124(Tdew) (DMF treated
-    as non-volatile); then solve bubble_P(Tsol, xi) = P by bisection.
-    bubble_P is defined on the open interval 0 < xi < 1; its limits
-    there, 0 at xi -> 0 and psat_R124(Tsol) at xi -> 1, serve as the
+    The dew point fixes the pressure, P = pref_R124(Tdew) (DMF treated
+    as non-volatile); then solve psol(Tsol, xi) = P by bisection.
+    psol is defined on the open interval 0 < xi < 1; its limits
+    there, 0 at xi -> 0 and pref_R124(Tsol) at xi -> 1, serve as the
     bracket, and the bisection only ever evaluates interior points.
     NaN if there is no root (e.g. Tsol below Tdew, or Tsol outside
     the validated 30-90 degC window)."""
     if not (_TMIN <= Tsol_C <= _TMAX):
         return NAN
-    P = psat_R124(Tdew_C)
-    if not (P <= psat_R124(Tsol_C)):
+    P = pref_R124(Tdew_C)
+    if not (P <= pref_R124(Tsol_C)):
         return NAN
     lo, hi = 0.0, 1.0
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if bubble_P(Tsol_C, mid) < P:
+        if psol(Tsol_C, mid) < P:
             lo = mid
         else:
             hi = mid
@@ -182,10 +182,22 @@ def dew_T(P_bar, xi=None):
     return T if -30.0 <= T <= _TMAX else NAN
 
 
+
+def tdew_by_tsol_xi(T_C, xi):
+    """Dew-point temperature [degC] of the solution at (T_C, xi)
+    (library-wide TdewByTsolXi convention):
+        Tdew = dew_T(psol(T_C, xi)),
+    the pure-R124 saturation temperature on this module's own
+    Antoine line at the solution surface pressure Psol.  Absorbent
+    treated as non-volatile.  NaN where psol or dew_T is NaN
+    (model window 30-90 degC; dew window -30..90 degC)."""
+    return dew_T(psol(T_C, xi))
+
+
 if __name__ == "__main__":
     print("R124-DMF: bubble pressure [bar]")
     print("  T_C    xi=0.3   xi=0.5   xi=0.7   xi=0.85")
     for T in (30.0, 50.0, 70.0, 90.0):
-        row = " ".join("%8.3f" % bubble_P(T, xi) for xi in (0.3, 0.5, 0.7, 0.85))
+        row = " ".join("%8.3f" % psol(T, xi) for xi in (0.3, 0.5, 0.7, 0.85))
         print("%6.0f  %s" % (T, row))
     print("gamma1 at 60 C, xi=0.5:", round(gamma1(60.0, 0.5), 4))

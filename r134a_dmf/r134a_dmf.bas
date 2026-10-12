@@ -14,10 +14,10 @@ Attribute VB_Name = "R134a_DMF"
 '   1. Excel 中按 Alt+F11 打开 VBA 编辑器
 '   2. 菜单: 文件 -> 导入文件 -> 选择本文件 (r134a_dmf.bas)
 '   3. 在工作表中直接调用, 例如:
-'        =Bubble_P(303.3, 0.4437)        求泡点压力 (MPa)
+'        =Psol(303.3, 0.4437)        求泡点压力 (MPa)
 '        =Bubble_T(0.337, 0.4437)        已知压力反算温度 (K)
-'        =H_Solution(330, 0.5)           求溶液焓 (kJ/kg)
-'        =Psat_R134a(303.15)             R134a 饱和压力 (MPa)
+'        =hsol(330, 0.5)           求溶液焓 (kJ/kg)
+'        =Pref_R134a(303.15)             R134a 饱和压力 (MPa)
 '======================================================================
 Option Explicit
 
@@ -30,8 +30,8 @@ Private Const ALPHA As Double = 0.3
 
 '---------- 纯组分饱和压力 (MPa), T in K ----------
 
-Public Function Psat_R134a(T As Double) As Double
-    Psat_R134a = Exp(7.89191 - 2310.84 / (T - 19.79))
+Public Function Pref_R134a(T As Double) As Double
+    Pref_R134a = Exp(7.89191 - 2310.84 / (T - 19.79))
 End Function
 
 Public Function Psat_DMF(T As Double) As Double
@@ -93,13 +93,13 @@ End Function
 ' 输入 T(K), x1 ; y1 为气相摩尔分数 (ByRef 输出, 可忽略)
 ' 气相几乎为纯 R134a (y1 > 0.99)
 
-Public Function Bubble_P(T As Double, x1 As Double, Optional ByRef y1 As Double = -1#) As Double
+Public Function Psol(T As Double, x1 As Double, Optional ByRef y1 As Double = -1#) As Double
     Dim x2 As Double, g1 As Double, g2 As Double
     Dim p1s As Double, p2s As Double, V1 As Double, V2 As Double
     Dim p As Double, Poy1 As Double, Poy2 As Double, i As Integer
     x2 = 1# - x1
     NRTL_Gamma T, x1, g1, g2
-    p1s = Psat_R134a(T)
+    p1s = Pref_R134a(T)
     p2s = Psat_DMF(T)
     V1 = VL_R134a(T)
     V2 = VL_DMF(T)
@@ -111,7 +111,7 @@ Public Function Bubble_P(T As Double, x1 As Double, Optional ByRef y1 As Double 
     Next i
     Poy1 = Exp(V1 * (p - p1s) * 1000000# / (R_GAS * T))
     y1 = x1 * g1 * p1s * Poy1 / p
-    Bubble_P = p
+    Psol = p
 End Function
 
 '---------- 已知泡点压力反算温度 (K), 牛顿迭代 ----------
@@ -122,8 +122,8 @@ Public Function Bubble_T(p_MPa As Double, x1 As Double, Optional Tguess As Doubl
     T = Tguess
     dT = 0.2
     For i = 1 To 50
-        pc = Bubble_P(T, x1, dummy)
-        p2 = Bubble_P(T + dT, x1, dummy)
+        pc = Psol(T, x1, dummy)
+        p2 = Psol(T + dT, x1, dummy)
         dpdT = (p2 - pc) / dT
         If Abs(dpdT) < 0.000000000001 Then Exit For
         T = T - (pc - p_MPa) / dpdT
@@ -135,35 +135,69 @@ End Function
 '---------- 已知露点温度与溶液温度反算浓度 (二分 80 次) ----------
 ' 输入: Tdew(K) 露点温度, Tsol(K) 溶液温度
 ' 返回: x1 (R134a 液相摩尔分数); 无根时返回 Empty
-' 原理: DMF 视为不挥发, 露点定压 P = Psat_R134a(Tdew);
-'       再二分求 Bubble_P(Tsol, x1) = P, 括号取 x1 in [0, 1]。
+' 原理: DMF 视为不挥发, 露点定压 P = Pref_R134a(Tdew);
+'       再二分求 Psol(Tsol, x1) = P, 括号取 x1 in [0, 1]。
 ' 无根情形: P 超出 Tsol 下泡点压力区间 (如 Tsol 明显低于 Tdew)。
 ' 注: 与 C/Python 同算法, 本 VBA 未在真实 Excel 中编译测试。
 
-Public Function Xi_From_Dew_T(Tdew As Double, Tsol As Double) As Variant
+Public Function Xi_By_Tsol_Tdew(Tsol As Double, Tdew As Double) As Variant
     Dim P As Double, Plo As Double, Phi As Double
     Dim lo As Double, hi As Double, mid As Double, dummy As Double, k As Long
-    P = Psat_R134a(Tdew)
-    Plo = Bubble_P(Tsol, 0#, dummy)
-    Phi = Bubble_P(Tsol, 1#, dummy)
+    P = Pref_R134a(Tdew)
+    Plo = Psol(Tsol, 0#, dummy)
+    Phi = Psol(Tsol, 1#, dummy)
     If P < Plo Or P > Phi Then
-        Xi_From_Dew_T = Empty
+        Xi_By_Tsol_Tdew = Empty
         Exit Function
     End If
     lo = 0#: hi = 1#
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If Bubble_P(Tsol, mid, dummy) < P Then lo = mid Else hi = mid
+        If Psol(Tsol, mid, dummy) < P Then lo = mid Else hi = mid
     Next k
-    Xi_From_Dew_T = 0.5 * (lo + hi)
+    Xi_By_Tsol_Tdew = 0.5 * (lo + hi)
+End Function
+
+
+'---------- R134a 饱和温度 (K): Pref_R134a 的解析反解 ----------
+
+Private Function Tsat_R134a(ByVal P_MPa As Double) As Double
+    Tsat_R134a = 2310.84 / (7.89191 - Log(P_MPa)) + 19.79
+End Function
+
+'---------- 露点温度 (溶液) (K): 全库 TdewByTsolXi 约定 ----------
+' Tdew = Tsat_R134a(Psol(T, x1) 的压力): 以本模块自有纯 R134a 线
+' 评价溶液表面压力 Psol 所对应的饱和温度。DMF 视为不挥发。
+
+Public Function Tdew_By_Tsol_Xi(T As Double, x1 As Double) As Double
+    Dim dummy As Double
+    Tdew_By_Tsol_Xi = Tsat_R134a(Psol(T, x1, dummy))
+End Function
+
+'---------- 由溶液比焓反解溶液温度 (K) ----------
+' hsol 在固定 x1 下随 T 单调增, 二分 100 次反解,
+' 求解括号 T in [280, 360] K。h 超出值域返回 Empty。
+' 注: 与 C/Python 同算法, 本 VBA 未在真实 Excel 中编译测试。
+
+Public Function Tsol_By_Hsol(h As Double, x1 As Double) As Variant
+    Dim lo As Double, hi As Double, mid As Double, k As Long
+    lo = 280#: hi = 360#
+    If h < hsol(lo, x1) Or h > hsol(hi, x1) Then
+        Tsol_By_Hsol = Empty: Exit Function
+    End If
+    For k = 1 To 100
+        mid = 0.5 * (lo + hi)
+        If hsol(mid, x1) < h Then lo = mid Else hi = mid
+    Next k
+    Tsol_By_Hsol = 0.5 * (lo + hi)
 End Function
 
 '---------- 纯组分液体焓 (kJ/kg) ----------
 
-Public Function H_R134a_L(T As Double) As Double
+Public Function hliq_R134a(T As Double) As Double
     Dim tt As Double
     tt = T - 273.15
-    H_R134a_L = 0.00001310235 * tt ^ 3 + 0.00134329 * tt ^ 2 + 1.334242 * tt + 100#
+    hliq_R134a = 0.00001310235 * tt ^ 3 + 0.00134329 * tt ^ 2 + 1.334242 * tt + 100#
 End Function
 
 Public Function H_DMF_L(T As Double) As Double
@@ -183,12 +217,12 @@ End Function
 '---------- 溶液焓 (kJ/kg) ----------
 ' h = w1*h1 + w2*h2 + hE/Mbar
 
-Public Function H_Solution(T As Double, x1 As Double) As Double
+Public Function hsol(T As Double, x1 As Double) As Double
     Dim x2 As Double, Mbar As Double, w1 As Double, w2 As Double, hE As Double
     x2 = 1# - x1
     Mbar = x1 * M1 + x2 * M2
     w1 = x1 * M1 / Mbar
     w2 = x2 * M2 / Mbar
     hE = NRTL_hE(T, x1)
-    H_Solution = w1 * H_R134a_L(T) + w2 * H_DMF_L(T) + hE / Mbar
+    hsol = w1 * hliq_R134a(T) + w2 * H_DMF_L(T) + hE / Mbar
 End Function

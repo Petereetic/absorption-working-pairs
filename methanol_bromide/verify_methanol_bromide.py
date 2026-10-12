@@ -16,8 +16,8 @@ for line in out.strip().splitlines():
     f = line.split(",")
     if f[0] == "grid":
         T, w = float(f[1]), float(f[2])
-        py = [mb.p_bubble_TW(T, w), mb.cp(T, w), mb.h_prime(T, w),
-              mb.h_liq(T, w), mb.h_vap(T, w)]
+        py = [mb.psol_TW(T, w), mb.cp(T, w), mb.h_prime(T, w),
+              mb.hsol(T, w), mb.hgas(T, w)]
         for cv, pv in zip(f[3:], py):
             maxdev = max(maxdev, abs(float(cv) - pv))
     elif f[0] == "inv":
@@ -63,7 +63,7 @@ for tc, w, cref in [(51.3, 0.403, 1.27), (69.9, 0.403, 1.30),
 print("\n纯甲醇 Antoine 拟合（附录 A 数据点）:")
 for mmhg, tk in [(300, 316.7), (500, 328.3), (600, 332.6), (700, 336.4),
                  (800, 339.7), (900, 342.7), (1000, 345.4)]:
-    pc = mb.meoh_psat_bar(tk) / 1.3332239e-3
+    pc = mb.meoh_pref_bar(tk) / 1.3332239e-3
     print("  T=%.1f K  计算 %7.2f mmHg  论文 %d mmHg  偏差 %+.2f%%"
           % (tk, pc, mmhg, 100.0 * (pc - mmhg) / mmhg))
 print("  400 mmHg 处拟合温度 %.2f K（论文印 373.1 K，Ratio 列反推 323.1 K，判误印）"

@@ -24,8 +24,8 @@
  *   注：El-Shamarka 自己的式(4.10) 密度、式(4.11) 黏度仍未核实，本文件
  *   未实现，勿与上述 Iedema 关联式混淆（详见 公式说明.md）。
  * 参考态（本文档约定，论文未定义绝对基准）：
- *   h_liq(0°C, 任意 w) = 100 kJ/kg；h_liq = 100 + A·t + B·t^2/2；
- *   h_vap = h_liq + H'。
+ *   hsol(0°C, 任意 w) = 100 kJ/kg；hsol = 100 + A·t + B·t^2/2；
+ *   hgas = hsol + H'。
  * 编译：gcc -O2 -Wall -Wextra -o methanol_bromide methanol_bromide.c -lm
  * main() 输出验证网格（CSV），供与 Python 版逐点比对。
  */
@@ -95,7 +95,7 @@ static void cp_AB(double w, double *A, double *B)
 }
 
 /* 式(3.1)：泡点压力，bar */
-double mb_p_bubble_TW(double T_K, double w)
+double mb_psol_TW(double T_K, double w)
 {
     double log10p_mbar = pchip_eval(W_NODES, C1_NODES, w)
                        + pchip_eval(W_NODES, C2_NODES, w) * (1000.0 / T_K - 2.3);
@@ -110,29 +110,61 @@ double mb_T_bubble_PW(double P_bar, double w)
                      / pchip_eval(W_NODES, C2_NODES, w) + 2.3);
 }
 
-/* 纯甲醇饱和压（私有辅助，与 Python 版 meoh_psat_bar 同常数）：
+/* 纯甲醇饱和压（私有辅助，与 Python 版 meoh_pref_bar 同常数）：
  * Antoine 拟合自 El-Shamarka 附录 A 表（见 methanol_bromide.py 文件头）：
  * log10 P[mmHg] = 8.885298 - 2070.3714/(T[K] + 6.3818)，返回 bar */
-static double meoh_psat_bar(double T_K)
+static double meoh_pref_bar(double T_K)
 {
     return pow(10.0, 8.885298 - 2070.3714 / (T_K + 6.3818)) * 1.3332239e-3;
 }
 
 /* 由露点温度与溶液温度反解甲醇质量分数 w：
- * 露点定压 P = meoh_psat_bar(Tdew_K)（盐不挥发，气相为纯甲醇），
- * 再二分 80 次反解 mb_p_bubble_TW(Tsol_K, w) = P，
+ * 露点定压 P = meoh_pref_bar(Tdew_K)（盐不挥发，气相为纯甲醇），
+ * 再二分 80 次反解 mb_psol_TW(Tsol_K, w) = P，
  * 括号取泡点函数有效浓度域 w = 0.243~0.509。
  * 无根时返回 NAN（如溶液温度明显低于露点温度）。 */
-double mb_XiFromDewT(double Tdew_K, double Tsol_K)
+double mb_XiByTsolTdew(double Tsol_K, double Tdew_K)
 {
-    double P = meoh_psat_bar(Tdew_K);
+    double P = meoh_pref_bar(Tdew_K);
     double lo = 0.243, hi = 0.509, mid;
     int k;
-    if (P < mb_p_bubble_TW(Tsol_K, lo) || P > mb_p_bubble_TW(Tsol_K, hi))
+    if (P < mb_psol_TW(Tsol_K, lo) || P > mb_psol_TW(Tsol_K, hi))
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (mb_p_bubble_TW(Tsol_K, mid) < P) lo = mid; else hi = mid;
+        if (mb_psol_TW(Tsol_K, mid) < P) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
+
+/* 纯甲醇饱和温度 [K]（私有辅助）：meoh_pref_bar 的解析反解，
+ * 与 Python 版 meoh_Tsat_bar 同式。 */
+static double meoh_tsat_bar(double P_bar)
+{
+    return 2070.3714 / (8.885298 - log10(P_bar / 1.3332239e-3)) - 6.3818;
+}
+
+/* 溶液在 (T_K, w) 的露点温度 [K]（全库 TdewByTsolXi 约定）：
+ * Tdew = meoh_tsat_bar(mb_psol_TW(T_K, w))，以本模块自有纯甲醇线
+ * 评价溶液表面压力 Psol。盐不挥发，气相为纯甲醇。 */
+double mb_TdewFromTsolW(double T_K, double w)
+{
+    return meoh_tsat_bar(mb_psol_TW(T_K, w));
+}
+
+double mb_hsol(double T_K, double w);  /* forward: defined below */
+/* 由溶液比焓 h [kJ/kg] 与甲醇质量分数 w 反解溶液温度 [K]：
+ * mb_hsol 在固定 w 下随 T 单调增，二分 100 次反解，
+ * 求解括号 T ∈ [233.15, 423.15] K。无根返回 NAN。 */
+double mb_TsolByHsol(double h, double w)
+{
+    double lo = 233.15, hi = 423.15, mid;
+    int k;
+    if (h < mb_hsol(lo, w) || h > mb_hsol(hi, w)) return NAN;
+    for (k = 0; k < 100; k++) {
+        mid = 0.5 * (lo + hi);
+        if (mb_hsol(mid, w) < h) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }
@@ -154,18 +186,18 @@ double mb_h_prime(double T_K, double w)
     return A + B * w + C * w * w;
 }
 
-/* 溶液比焓，kJ/kg；参考态约定 h_liq(0°C) = 100 kJ/kg */
-double mb_h_liq(double T_K, double w)
+/* 溶液比焓，kJ/kg；参考态约定 hsol(0°C) = 100 kJ/kg */
+double mb_hsol(double T_K, double w)
 {
     double A, B, t = T_K - 273.15;
     cp_AB(w, &A, &B);
     return 100.0 + A * t + B * t * t / 2.0;
 }
 
-/* 气相比焓，kJ/kg：h_vap = h_liq + H' */
-double mb_h_vap(double T_K, double w)
+/* 气相比焓，kJ/kg：hgas = hsol + H' */
+double mb_hgas(double T_K, double w)
 {
-    return mb_h_liq(T_K, w) + mb_h_prime(T_K, w);
+    return mb_hsol(T_K, w) + mb_h_prime(T_K, w);
 }
 
 /* Iedema 表 2.7.2.2.2：密度，kg/m3。T_K 为开尔文（内部换算 t[°C]）；
@@ -198,9 +230,9 @@ int main(void)
         for (j = 0; j < 9; j++)
             printf("grid,%.2f,%.3f,%.17g,%.17g,%.17g,%.17g,%.17g\n",
                    TS[i], WS[j],
-                   mb_p_bubble_TW(TS[i], WS[j]), mb_cp(TS[i], WS[j]),
-                   mb_h_prime(TS[i], WS[j]), mb_h_liq(TS[i], WS[j]),
-                   mb_h_vap(TS[i], WS[j]));
+                   mb_psol_TW(TS[i], WS[j]), mb_cp(TS[i], WS[j]),
+                   mb_h_prime(TS[i], WS[j]), mb_hsol(TS[i], WS[j]),
+                   mb_hgas(TS[i], WS[j]));
     for (i = 0; i < 5; i++)
         for (j = 0; j < 9; j++)
             printf("inv,%.5f,%.3f,%.17g\n", PS[i], WS[j], mb_T_bubble_PW(PS[i], WS[j]));

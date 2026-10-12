@@ -14,8 +14,8 @@
  *   T_bubble_PX  Eq (6): T(p,x),  T0=100 K, p0=2 MPa, 0.002<=p<=2 MPa
  *   T_dew_PY     Eq (7): T(p,y),  T0=100 K, p0=2 MPa, 0.02<=p<=2 MPa
  *   y_equil      Eq (8): y(p,x),  p0=2 MPa,  valid for x>0.05 (mole)
- *   h_liq        Eq (9): h_l(T,x), h0=100 kJ/kg, T0=273.16 K
- *   h_vap        Eq (10): h_g(T,y), h0=1000 kJ/kg, T0=324 K
+ *   hsol        Eq (9): h_l(T,x), h0=100 kJ/kg, T0=273.16 K
+ *   hgas        Eq (10): h_g(T,y), h0=1000 kJ/kg, T0=324 K
  *
  * Reference state: h = 0 for liquid water at the triple point
  * (for both components).
@@ -145,7 +145,7 @@ double y_equil(double p_MPa, double x)
 }
 
 /* Eq (9): saturated-liquid enthalpy [kJ/kg] */
-double h_liq(double T_K, double x)
+double hsol(double T_K, double x)
 {
     double u = T_K / T0_9 - 1.0;
     double s = 0.0;
@@ -156,7 +156,7 @@ double h_liq(double T_K, double x)
 }
 
 /* Eq (10): vapour enthalpy [kJ/kg] */
-double h_vap(double T_K, double y)
+double hgas(double T_K, double y)
 {
     double v = 1.0 - T0_10 / T_K;
     double omy = 1.0 - y;
@@ -177,7 +177,7 @@ double glide_pX(double p_MPa, double z)
 
 /* Bubble pressure [MPa] at (T, x): bisection inverse of Eq (6).
    T_bubble(p, x) decreases monotonically in p. */
-double p_bubble_TX(double T_K, double x)
+double psol_TX(double T_K, double x)
 {
     double p_lo = 0.002, p_hi = 2.0, flo, fm, pm;
     int k;
@@ -194,25 +194,56 @@ double p_bubble_TX(double T_K, double x)
 }
 
 /* NH3 mole fraction x from a dew-point temperature [K] and a solution
-   temperature [K]: bisection inverse of p_bubble_TX.
-   Construction (pure-NH3 endpoint): P = p_bubble_TX(Tdew_K, x=1), the
-   x=1 endpoint of Eq (6); then solve p_bubble_TX(Tsol_K, x) = P by
+   temperature [K]: bisection inverse of psol_TX.
+   Construction (pure-NH3 endpoint): P = psol_TX(Tdew_K, x=1), the
+   x=1 endpoint of Eq (6); then solve psol_TX(Tsol_K, x) = P by
    80 bisection steps over x in [0, 1] (full domain of Eq (6)).
    NOTE / approximation: the real vapour contains water (y < 1), so
    this is NOT the true mixture dew curve of Eq (7); the dew-point
    temperature is treated as a pure-NH3 saturation temperature, the
    same x=1 endpoint convention used in the dual-adiabatic-chamber
    scans.  NAN if there is no root (e.g. Tsol_K well below Tdew_K). */
-double x_from_dew_T(double Tdew_K, double Tsol_K)
+double x_by_tsol_tdew(double Tsol_K, double Tdew_K)
 {
-    double P = p_bubble_TX(Tdew_K, 1.0);
+    double P = psol_TX(Tdew_K, 1.0);
     double lo = 0.0, hi = 1.0, mid;
     int k;
-    if (P < p_bubble_TX(Tsol_K, 0.0) || P > p_bubble_TX(Tsol_K, 1.0))
+    if (P < psol_TX(Tsol_K, 0.0) || P > psol_TX(Tsol_K, 1.0))
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (p_bubble_TX(Tsol_K, mid) < P) lo = mid; else hi = mid;
+        if (psol_TX(Tsol_K, mid) < P) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
+
+/* Dew-point temperature [K] of the solution at (T_K, x), under the
+   library-wide TdewByTsolXi convention (pure-refrigerant endpoint):
+   Tdew = T_bubble_PX(psol_TX(T_K, x), x=1), the pure-ammonia
+   saturation temperature on this module's own pure line (x = 1
+   endpoint of Eq (6)) at the solution surface pressure Psol.
+   CAUTION: the absorbent (water) IS volatile for this pair, so this
+   is NOT the true mixture dew point T_dew_PY(p, z) of Eq (7) used
+   for the glide figures; do not interchange the two. */
+double tdew_from_tsol_x(double T_K, double x)
+{
+    return T_bubble_PX(psol_TX(T_K, x), 1.0);
+}
+
+
+/* Solution temperature [K] from specific enthalpy h [kJ/kg] and NH3
+   mole fraction x: bisection inverse of hsol (Eq 9), which increases
+   monotonically with T at fixed x.  Solver bracket T in [240, 480] K.
+   NAN if h lies outside the hsol span at x. */
+double tsol_by_hsol(double h, double x)
+{
+    double lo = 240.0, hi = 480.0, mid;
+    int k;
+    if (h < hsol(lo, x) || h > hsol(hi, x)) return NAN;
+    for (k = 0; k < 100; k++) {
+        mid = 0.5 * (lo + hi);
+        if (hsol(mid, x) < h) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }
@@ -242,9 +273,9 @@ int main(void)
     printf("T_bub(1.0,0.5)   = %.6f K\n", T_bubble_PX(1.0, 0.5));
     printf("T_dew(1.0,0.5)   = %.6f K\n", T_dew_PY(1.0, 0.5));
     printf("y_eq (1.0,0.5)   = %.8f\n",   y_equil(1.0, 0.5));
-    printf("h_liq(Tbub,0.5)  = %.6f kJ/kg\n", h_liq(T_bubble_PX(1.0,0.5), 0.5));
-    printf("h_vap(Tbub,y)    = %.6f kJ/kg\n",
-           h_vap(T_bubble_PX(1.0,0.5), y_equil(1.0,0.5)));
+    printf("hsol(Tbub,0.5)  = %.6f kJ/kg\n", hsol(T_bubble_PX(1.0,0.5), 0.5));
+    printf("hgas(Tbub,y)    = %.6f kJ/kg\n",
+           hgas(T_bubble_PX(1.0,0.5), y_equil(1.0,0.5)));
     printf("glide(1.0,0.5)   = %.6f K\n", glide_pX(1.0, 0.5));
     return 0;
 }

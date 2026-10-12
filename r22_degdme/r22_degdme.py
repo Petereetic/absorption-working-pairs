@@ -56,7 +56,7 @@ def _poly(coefs, X):
     return s
 
 
-def p_vap_kgcm2(X, T_K):
+def psol_kgcm2(X, T_K):
     """式(1)：泡点压力，kg/cm2。X=R22摩尔分数，T_K=开尔文。"""
     sA = _poly([r[0] for r in _T2], X)
     sB = _poly([r[1] for r in _T2], X)
@@ -64,28 +64,69 @@ def p_vap_kgcm2(X, T_K):
     return math.exp(sA + sB / T_K + sC * math.log(T_K))
 
 
-def p_vap_bar(X, t_C):
+def psol_bar(X, t_C):
     """式(1)：泡点压力，bar。t_C=摄氏度。"""
-    return p_vap_kgcm2(X, t_C + 273.15) * _KGCM2_TO_BAR
+    return psol_kgcm2(X, t_C + 273.15) * _KGCM2_TO_BAR
 
 
-def xi_from_dew_T(Tdew_C, Tsol_C):
+def xi_by_tsol_tdew(Tsol_C, Tdew_C):
     """由露点温度与溶液温度反解浓度 X（R22 摩尔分数），二分 80 次。
 
-    露点定压 P = p_vap_bar(1.0, Tdew_C)：式(1) 在 X=1 端即本模块的纯
+    露点定压 P = psol_bar(1.0, Tdew_C)：式(1) 在 X=1 端即本模块的纯
     R22 饱和压力（DEGDME 视为不挥发）；再二分求
-    p_vap_bar(X, Tsol_C) = P，括号取式(1) 有效浓度域 X ∈ [0.1, 1.0]。
+    psol_bar(X, Tsol_C) = P，括号取式(1) 有效浓度域 X ∈ [0.1, 1.0]。
     无根时返回 None（如 Tsol 明显低于 Tdew，P 超出 Tsol 下的泡点
     压力区间）。
     """
-    P = p_vap_bar(1.0, Tdew_C)
-    Plo, Phi = p_vap_bar(0.1, Tsol_C), p_vap_bar(1.0, Tsol_C)
+    P = psol_bar(1.0, Tdew_C)
+    Plo, Phi = psol_bar(0.1, Tsol_C), psol_bar(1.0, Tsol_C)
     if not (Plo <= P <= Phi):
         return None
     lo, hi = 0.1, 1.0
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if p_vap_bar(mid, Tsol_C) < P:
+        if psol_bar(mid, Tsol_C) < P:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+
+def tdew_by_tsol_xi(X, t_C):
+    """溶液在 (X, t_C) 的露点温度 [°C]（全库 TdewByTsolXi 约定）：
+    Tdew 为本模块自有纯 R22 线（式(1) 的 X=1 端）满足
+    psol_bar(1.0, Tdew) = psol_bar(X, t_C) 的温度，二分 80 次
+    反解，求解括号 t ∈ [-50, 190] °C。注意：式(1) 标称温度辖
+    区为 -20~190 °C，Tdew < -20 °C 的结果用到纯端在辖区外的
+    外推（Rankine 型方程形式外推），引用时须连同此标注。
+    DEGDME 视为不挥发。P 超出纯端在括号内的压力跨度时返回 None。
+    （本模块函数惯例为 (X, T) 参数序，本函数从之。）"""
+    P = psol_bar(X, t_C)
+    lo, hi = -50.0, 190.0
+    if not (psol_bar(1.0, lo) <= P <= psol_bar(1.0, hi)):
+        return None
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if psol_bar(1.0, mid) < P:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+def tsol_by_hsol(h, X):
+    """由溶液比焓 h [kJ/kg] 与 R22 摩尔分数 X 反解溶液温度 [°C]：
+    hsol 在固定 X 下随 t 单调增（式(6) 比热在辖区内为正），
+    二分 100 次反解，求解括号 t ∈ [-30, 110] °C（式(6) 辖区）。
+    h 超出该 X 下 hsol 值域时返回 None。"""
+    lo, hi = -30.0, 110.0
+    hlo, hhi = hsol(X, lo), hsol(X, hi)
+    if not (hlo <= h <= hhi):
+        return None
+    for _ in range(100):
+        mid = 0.5 * (lo + hi)
+        if hsol(X, mid) < h:
             lo = mid
         else:
             hi = mid
@@ -105,7 +146,7 @@ def heat_of_mixing(X):
     return X * (1.0 - X) * sum(g * (1.0 - 2.0 * X) ** i for i, g in enumerate(_G))
 
 
-def h_solution_kJkg(X, t_C):
+def hsol(X, t_C):
     """式(9)：溶液比焓，kJ/kg。
     参考态：纯组分液体在 10°C 时焓为 0（本文档约定）。"""
     sA = _poly([r[0] for r in _T3], X)
@@ -122,11 +163,11 @@ def h_solution_kJkg(X, t_C):
 
 if __name__ == "__main__":
     # 自检：与论文图6（ΔHm 最低点约 -5000 J/mol）及物理量级对照
-    print("Pvap(X=1.0, 10°C)  = %.3f kg/cm2" % p_vap_kgcm2(1.0, 283.15))
-    print("Pvap(X=0.5, 10°C)  = %.3f bar" % p_vap_bar(0.5, 10.0))
-    print("Pvap(X=0.5, 80°C)  = %.3f bar" % p_vap_bar(0.5, 80.0))
+    print("Psol(X=1.0, 10°C)  = %.3f kg/cm2" % psol_kgcm2(1.0, 283.15))
+    print("Psol(X=0.5, 10°C)  = %.3f bar" % psol_bar(0.5, 10.0))
+    print("Psol(X=0.5, 80°C)  = %.3f bar" % psol_bar(0.5, 80.0))
     print("Cp  (X=0.5, 10°C)  = %.1f J/mol/K" % cp_molar(0.5, 10.0))
     print("dHm (X=0.5)        = %.0f J/mol" % heat_of_mixing(0.5))
-    print("Hsol(X=0.5, 10°C)  = %.2f kJ/kg" % h_solution_kJkg(0.5, 10.0))
-    print("Hsol(X=0.5, 80°C)  = %.2f kJ/kg" % h_solution_kJkg(0.5, 80.0))
-    print("Hsol(X=0.5,-20°C)  = %.2f kJ/kg" % h_solution_kJkg(0.5, -20.0))
+    print("Hsol(X=0.5, 10°C)  = %.2f kJ/kg" % hsol(0.5, 10.0))
+    print("Hsol(X=0.5, 80°C)  = %.2f kJ/kg" % hsol(0.5, 80.0))
+    print("Hsol(X=0.5,-20°C)  = %.2f kJ/kg" % hsol(0.5, -20.0))

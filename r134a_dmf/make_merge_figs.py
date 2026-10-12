@@ -15,10 +15,10 @@ fp = FontProperties(fname="/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.tt
 matplotlib.rcParams["font.family"] = [fp.get_name()]
 matplotlib.rcParams["axes.unicode_minus"] = False
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from r134a_dmf import bubble_p, psat_r134a, psat_dmf
+sys.path.insert(0, "/home/hatch/workspace/your_files/r134a_dmf")
+from r134a_dmf import psol, pref_r134a, psat_dmf
 
-W = os.path.dirname(os.path.abspath(__file__))
+W = "/home/hatch/workspace/your_files/r134a_dmf"
 D = W + "/merge_figs/"
 os.makedirs(D, exist_ok=True)
 
@@ -27,7 +27,7 @@ def load(name):
     with open(f"{W}/{name}") as f:
         for r in csv.DictReader(f):
             T, x1, pe = float(r["T_K"]), float(r["x1"]), float(r["p_kPa"])
-            pc = bubble_p(T, x1)[0] * 1000.0
+            pc = psol(T, x1)[0] * 1000.0
             pts.append((T, x1, pe, pc, (pc - pe) / pe * 100.0))
     return pts
 
@@ -59,10 +59,10 @@ plt.close(fig)
 
 # ---------- 图2: 303.15K p-x 对比 ----------
 T0 = 303.15
-p1s = psat_r134a(T0) * 1000.0
+p1s = pref_r134a(T0) * 1000.0
 p2s = psat_dmf(T0) * 1000.0
 xg = np.linspace(0.001, 0.999, 200)
-pm = np.array([bubble_p(T0, x)[0] * 1000.0 for x in xg])
+pm = np.array([psol(T0, x)[0] * 1000.0 for x in xg])
 praoult = xg * p1s + (1 - xg) * p2s
 sub_c = sorted([p for p in cui if abs(p[0] - T0) < 0.01], key=lambda p: p[1])
 sub_h = sorted([p for p in han if abs(p[0] - T0) < 0.01], key=lambda p: p[1])

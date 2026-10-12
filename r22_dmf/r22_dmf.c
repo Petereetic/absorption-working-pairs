@@ -53,7 +53,7 @@ static double pchip(const double *x, const double *y, int n, double xq)
 }
 
 /* Bubble-point pressure, bar. T_C in degC, xi = R22 mass fraction. */
-double R22DMF_BubbleP(double T_C, double xi)
+double R22DMF_Psol(double T_C, double xi)
 {
     double T = T_C + 273.15, Pj[NISO], lnT = log(T);
     int j;
@@ -69,46 +69,72 @@ double R22DMF_BubbleT(double P_bar, double xi)
 {
     double lo = -25.0, hi = 120.0, mid;
     int i;
-    if (P_bar < R22DMF_BubbleP(lo, xi) || P_bar > R22DMF_BubbleP(hi, xi))
+    if (P_bar < R22DMF_Psol(lo, xi) || P_bar > R22DMF_Psol(hi, xi))
         return NAN;
     for (i = 0; i < 60; i++) {
         mid = 0.5*(lo+hi);
-        if (R22DMF_BubbleP(mid, xi) < P_bar) lo = mid; else hi = mid;
+        if (R22DMF_Psol(mid, xi) < P_bar) lo = mid; else hi = mid;
     }
     return 0.5*(lo+hi);
 }
 
 /* Concentration from dew-point temperature and solution temperature:
- * the dew point fixes the pressure, P = R22DMF_BubbleP(Tdew, 1.0)
+ * the dew point fixes the pressure, P = R22DMF_Psol(Tdew, 1.0)
  * (pure-R22 isopleth of this module; DMF treated as non-volatile),
- * then solve R22DMF_BubbleP(Tsol, xi) = P for xi by bisection over
+ * then solve R22DMF_Psol(Tsol, xi) = P for xi by bisection over
  * the valid xi range 0.10..1.00. Returns NAN if no root (P outside
  * the bubble-pressure span at Tsol). */
-double R22DMF_XiFromDewT(double Tdew_C, double Tsol_C)
+double R22DMF_XiByTsolTdew(double Tsol_C, double Tdew_C)
 {
-    double P = R22DMF_BubbleP(Tdew_C, 1.0);
+    double P = R22DMF_Psol(Tdew_C, 1.0);
     double lo = 0.10, hi = 1.0, mid;
     int i;
-    if (P < R22DMF_BubbleP(Tsol_C, 0.10) || P > R22DMF_BubbleP(Tsol_C, 1.0))
+    if (P < R22DMF_Psol(Tsol_C, 0.10) || P > R22DMF_Psol(Tsol_C, 1.0))
         return NAN;
     for (i = 0; i < 80; i++) {
         mid = 0.5*(lo+hi);
-        if (R22DMF_BubbleP(Tsol_C, mid) < P) lo = mid; else hi = mid;
+        if (R22DMF_Psol(Tsol_C, mid) < P) lo = mid; else hi = mid;
     }
     return 0.5*(lo+hi);
+}
+
+
+/* Dew-point temperature [degC] of the solution at (T_C, xi)
+   (library-wide TdewByTsolXi convention):
+   R22DMF_BubbleT(R22DMF_Psol(T_C, xi), 1.0) on this module's own
+   pure-R22 isopleth (xi = 1).  NAN if BubbleT has no root. */
+double R22DMF_TdewByTsolXi(double T_C, double xi)
+{
+    return R22DMF_BubbleT(R22DMF_Psol(T_C, xi), 1.0);
+}
+
+double R22DMF_hsol(double T_C, double xi);  /* forward: defined below */
+/* Solution temperature [degC] from h [kJ/kg] and xi: bisection
+   inverse of R22DMF_hsol over T in [-20, 95] degC.
+   NAN if h lies outside the hsol span at xi. */
+double R22DMF_TsolByHsol(double h, double xi)
+{
+    double lo = -20.0, hi = 95.0, mid;
+    int k;
+    if (h < R22DMF_hsol(lo, xi) || h > R22DMF_hsol(hi, xi)) return NAN;
+    for (k = 0; k < 100; k++) {
+        mid = 0.5 * (lo + hi);
+        if (R22DMF_hsol(mid, xi) < h) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
 }
 
 /* ---- Fatouh solution enthalpy (kJ/kg), T_C in degC ---- */
 static double fpoly(double F0, double F1, double F2, double T) /* T in K */
 { return F0 + F1*T + F2*T*T; }
 
-double R22DMF_H_R22L(double T_C)   /* R22 saturated liquid */
+double R22DMF_hliq_R22(double T_C)   /* R22 saturated liquid */
 {
     double T = T_C + 273.15;
     if (T < 323.15) return fpoly(-68.14840, 0.0631300, 0.0020200, T);
     return fpoly(1966.645, -12.09784, 0.02018352, T);
 }
-double R22DMF_H_R22V(double T_C)   /* R22 saturated vapour */
+double R22DMF_hgas_R22(double T_C)   /* R22 saturated vapour */
 {
     double T = T_C + 273.15;
     if (T < 323.15) return fpoly(37.22971, 1.599520, -0.002260308, T);
@@ -135,30 +161,30 @@ static double h_fatouh(double T_C, double xi)
     double K3 = B[3]/T2 + 2*C[3]/T3;
     double Mmix = xi*MR22 + omx*MDMF;
     double hmix = (omx*RR*T2/Mmix)*(K0*Y0 + K1*Y1 + K2*Y2 + K3*Y3);
-    return xi*R22DMF_H_R22L(T_C) + omx*R22DMF_H_DMF(T_C) + hmix;
+    return xi*R22DMF_hliq_R22(T_C) + omx*R22DMF_H_DMF(T_C) + hmix;
 }
 
 /* R22-DMF solution enthalpy (kJ/kg). Linear blend to pure R22 for 0.9<xi<1. */
-double R22DMF_Hsol(double T_C, double xi)
+double R22DMF_hsol(double T_C, double xi)
 {
     double h09;
     if (xi <= 0.0) return R22DMF_H_DMF(T_C);
-    if (xi >= 1.0) return R22DMF_H_R22L(T_C);
+    if (xi >= 1.0) return R22DMF_hliq_R22(T_C);
     if (xi <= 0.9) return h_fatouh(T_C, xi);
     h09 = h_fatouh(T_C, 0.9);
-    return h09 + (xi-0.9)/0.1*(R22DMF_H_R22L(T_C)-h09);
+    return h09 + (xi-0.9)/0.1*(R22DMF_hliq_R22(T_C)-h09);
 }
 
 int main(void)
 {
     printf("R22-DMF property check\n");
-    printf("BubbleP(40C, 0.50)  = %.3f bar  (data 3.796 @40C)\n", R22DMF_BubbleP(40, .5));
-    printf("BubbleP(0C, 0.50)   = %.3f bar  (data 1.317 @0C)\n", R22DMF_BubbleP(0, .5));
-    printf("BubbleP(0C, 1.00)   = %.3f bar  (data 5.098, pure R22)\n", R22DMF_BubbleP(0, 1.0));
+    printf("Psol(40C, 0.50)  = %.3f bar  (data 3.796 @40C)\n", R22DMF_Psol(40, .5));
+    printf("Psol(0C, 0.50)   = %.3f bar  (data 1.317 @0C)\n", R22DMF_Psol(0, .5));
+    printf("Psol(0C, 1.00)   = %.3f bar  (data 5.098, pure R22)\n", R22DMF_Psol(0, 1.0));
     printf("BubbleT(3.796bar,.5)= %.2f C\n", R22DMF_BubbleT(3.796, .5));
-    printf("H_R22L(0C)  = %.2f kJ/kg (ref 100)\n", R22DMF_H_R22L(0));
+    printf("H_R22L(0C)  = %.2f kJ/kg (ref 100)\n", R22DMF_hliq_R22(0));
     printf("H_DMF(0C)   = %.2f kJ/kg (ref 100)\n", R22DMF_H_DMF(0));
-    printf("Hsol(30C,.5)= %.2f kJ/kg\n", R22DMF_Hsol(30, .5));
-    printf("Hsol(80C,.4)= %.2f kJ/kg\n", R22DMF_Hsol(80, .4));
+    printf("Hsol(30C,.5)= %.2f kJ/kg\n", R22DMF_hsol(30, .5));
+    printf("Hsol(80C,.4)= %.2f kJ/kg\n", R22DMF_hsol(80, .4));
     return 0;
 }
