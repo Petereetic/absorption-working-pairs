@@ -10,6 +10,8 @@ Universitat Rovira i Virgili, 附录 B (pp. A-6 ~ A-8) 转录的关联式:
 
   泡点压力   Libotean et al. (2007), J. Chem. Eng. Data 52, 1050-1055
              ln P[kPa] = pa(x) + pb(x)/T[K], pa/pb 为 x 的三次多项式
+             (上行 ln P[kPa] 为论文源式口径; 本模块内部算术沿用 kPa,
+             公开函数边界压力一律 MPa, 见下"约定")
   液体焓     Valles & Salavera (2011, 内部报告), Haltenberger (1939) 法
              H[kJ/kg] = ha(x) + hb(x) T + hc(x) T^2
   比热       Libotean et al. (2008): Cp = cpa(x) + cpb(x) T
@@ -23,7 +25,9 @@ Universitat Rovira i Virgili, 附录 B (pp. A-6 ~ A-8) 转录的关联式:
 ----
 * x : 氨质量分数 (小数, 如 0.5), 不是百分数
 * T : K (结晶函数 x_cris 的 T 用 °C, 与原文一致)
-* p : kPa, h : kJ/kg, cp : kJ/(kg K), rho : kg/m^3, k : W/(m K)
+* p : MPa (公开函数边界; 内部算术与源式仍为 kPa, 公开函数只在
+  边界作 MPa <-> kPa 换算), h : kJ/kg, cp : kJ/(kg K),
+  rho : kg/m^3, k : W/(m K)
 
 参考态 (焓, 按来源原文)
 ------------------------
@@ -111,18 +115,27 @@ def _pa_pb(x):
     return _poly(_PA, x), _poly(_PB, x)
 
 
-def psol_TX(T_K, x):
-    """泡点压力 [kPa]: 温度 T_K [K], 氨质量分数 x 的溶液。
+def _psol_TX_kPa(T_K, x):
+    """(私有, 内部原生值) 泡点压力 [kPa]: 温度 T_K [K], 氨质量分数 x。
 
-    ln P = pa(x) + pb(x)/T  (Libotean et al. 2007)
+    ln P = pa(x) + pb(x)/T  (Libotean et al. 2007, 源式以 kPa 计)
     """
     _check(T_K, x, _T_VLE, _X_VLE, "psol_TX")
     pa, pb = _pa_pb(x)
     return math.exp(pa + pb / T_K)
 
 
-def T_bubble_PX(P_kPa, x):
-    """泡点温度 [K]: 压力 P_kPa [kPa], 氨质量分数 x 的溶液。
+def psol_TX(T_K, x):
+    """泡点压力 [MPa]: 温度 T_K [K], 氨质量分数 x 的溶液。
+
+    公开边界只作单位换算: 返回 _psol_TX_kPa(T_K, x) * 1e-3
+    (内部源式 ln P[kPa] = pa(x) + pb(x)/T, Libotean et al. 2007)。
+    """
+    return _psol_TX_kPa(T_K, x) * 1e-3
+
+
+def _T_bubble_PX_kPa(P_kPa, x):
+    """(私有, 内部原生值) 泡点温度 [K]: 压力 P_kPa [kPa], 氨质量分数 x。
 
     解析反解: T = pb / (ln P - pa)。结果须落在 293.15-353.15 K。
     """
@@ -139,6 +152,15 @@ def T_bubble_PX(P_kPa, x):
         raise ValueError(
             f"T_bubble_PX: result T={T_K} K outside {_T_VLE} K")
     return T_K
+
+
+def T_bubble_PX(P_MPa, x):
+    """泡点温度 [K]: 压力 P_MPa [MPa], 氨质量分数 x 的溶液。
+
+    公开边界只作单位换算: 入参 MPa 换回 kPa 后交内部原生函数
+    _T_bubble_PX_kPa 解析反解。结果须落在 293.15-353.15 K。
+    """
+    return _T_bubble_PX_kPa(P_MPa * 1e3, x)
 
 
 # ---------------------------------------------------------------------------
@@ -196,8 +218,9 @@ def x_by_tsol_tdew(Tsol_K, Tdew_K):
     """由露点温度与溶液温度反解氨质量分数 x。
 
     露点定压: P = _pref_NH3_pure(Tdew_K) (纯氨饱和压, 口径见上);
-    再二分 80 次反解 psol_TX(Tsol_K, x) = P, 括号取泡点函数
-    有效浓度域 x = 0.35-0.65 (泡点压力在该域内随 x 单调增)。
+    再二分 80 次反解 _psol_TX_kPa(Tsol_K, x) = P (全程内部 kPa,
+    不经公开 MPa 边界), 括号取泡点函数有效浓度域 x = 0.35-0.65
+    (泡点压力在该域内随 x 单调增)。
     无根时返回 None (P 落在 Tsol 下泡点压力跨度之外, 如溶液温度
     明显低于露点温度; 或 Tdew_K 超出纯氨 NIST 拟合辖区)。注意本函数
     按跨工质对统一约定返回 None, 不沿用本模块其余函数的
@@ -208,14 +231,14 @@ def x_by_tsol_tdew(Tsol_K, Tdew_K):
         return None
     if not (_T_VLE[0] <= Tsol_K <= _T_VLE[1]):
         return None
-    Plo = psol_TX(Tsol_K, _X_VLE[0])
-    Phi = psol_TX(Tsol_K, _X_VLE[1])
+    Plo = _psol_TX_kPa(Tsol_K, _X_VLE[0])
+    Phi = _psol_TX_kPa(Tsol_K, _X_VLE[1])
     if not (Plo <= P <= Phi):
         return None
     lo, hi = _X_VLE
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if psol_TX(Tsol_K, mid) < P:
+        if _psol_TX_kPa(Tsol_K, mid) < P:
             lo = mid
         else:
             hi = mid
@@ -242,12 +265,13 @@ def hsol(T_K, x):
 
 def tdew_from_tsol_x(T_K, x):
     """溶液在 (T_K, x) 的露点温度 [K]（全库 TdewByTsolXi 约定）：
-        Tdew = _Tsat_NH3_pure(psol_TX(T_K, x))，
+        Tdew = _Tsat_NH3_pure(_psol_TX_kPa(T_K, x))，
     即以纯氨 NIST 拟合线（2026-10-12 换源，见 _pref_NH3_pure 上方
-    注释）评价溶液表面压力 Psol 所对应的饱和温度。LiNO₃ 不挥发，
+    注释）评价溶液表面压力 Psol 所对应的饱和温度（全程内部 kPa，
+    不经公开 MPa 边界）。LiNO₃ 不挥发，
     气相视为纯氨，无端点约定问题。辖区随 psol_TX（T 293.15–353.15 K，
-    x 0.35–0.65），越界时 psol_TX 的 ValueError 照常抛出。"""
-    return _Tsat_NH3_pure(psol_TX(T_K, x))
+    x 0.35–0.65），越界时 _psol_TX_kPa 的 ValueError 照常抛出。"""
+    return _Tsat_NH3_pure(_psol_TX_kPa(T_K, x))
 
 
 def tsol_by_hsol(h, x):

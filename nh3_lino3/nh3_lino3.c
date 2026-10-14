@@ -15,7 +15,10 @@
  * unverified (Python module only, marked EXPERIMENTAL).
  *
  * Conventions: x = NH3 MASS fraction; T in K (x_cris takes degC);
- * p in kPa; h in kJ/kg; cp in kJ/(kg K); rho in kg/m^3; k in W/(m K).
+ * p in MPa at the public-function boundary (internal arithmetic and
+ * the source correlations remain in kPa; public functions only scale
+ * at the boundary); h in kJ/kg; cp in kJ/(kg K); rho in kg/m^3;
+ * k in W/(m K).
  * Enthalpy reference state (source): H = 0 at 0 degC and x = 0.5.
  * Out-of-range inputs return NAN (no silent extrapolation):
  *   psol/T_bubble : T 293.15-353.15 K, x 0.35-0.65
@@ -47,8 +50,9 @@ static int nl_in(double v, double lo, double hi)
     return v >= lo && v <= hi;
 }
 
-/* Bubble pressure [kPa]: ln P = pa(x) + pb(x)/T */
-double nl_psol_TX(double T_K, double x)
+/* (private, internal native value) Bubble pressure [kPa]:
+ * ln P = pa(x) + pb(x)/T (source correlation, P in kPa) */
+static double nl_psol_TX_kPa(double T_K, double x)
 {
     double pa, pb;
     if (!nl_in(T_K, 293.15, 353.15) || !nl_in(x, 0.35, 0.65))
@@ -58,8 +62,16 @@ double nl_psol_TX(double T_K, double x)
     return exp(pa + pb / T_K);
 }
 
-/* Bubble temperature [K]: analytic inverse T = pb / (ln P - pa) */
-double nl_T_bubble_PX(double P_kPa, double x)
+/* Bubble pressure [MPa]: public boundary scaling only,
+ * nl_psol_TX_kPa(T_K, x) * 1e-3 */
+double nl_psol_TX(double T_K, double x)
+{
+    return nl_psol_TX_kPa(T_K, x) * 1e-3;
+}
+
+/* (private, internal native value) Bubble temperature [K] for
+ * P_kPa [kPa]: analytic inverse T = pb / (ln P - pa) */
+static double nl_T_bubble_PX_kPa(double P_kPa, double x)
 {
     double pa, pb, denom, T_K;
     if (!nl_in(x, 0.35, 0.65) || P_kPa <= 0.0)
@@ -73,6 +85,13 @@ double nl_T_bubble_PX(double P_kPa, double x)
     if (!nl_in(T_K, 293.15, 353.15))
         return NAN;
     return T_K;
+}
+
+/* Bubble temperature [K]: public boundary takes P_MPa [MPa] and
+ * converts it back to kPa for the internal native function */
+double nl_T_bubble_PX(double P_MPa, double x)
+{
+    return nl_T_bubble_PX_kPa(P_MPa * 1e3, x);
 }
 
 /* Pure-NH3 saturation (dew-point convention for nl_XiByTsolTdew):
@@ -122,9 +141,10 @@ static double nl_Tsat_NH3_pure(double P_kPa)
 
 /* NH3 mass fraction from dew-point temperature and solution
  * temperature: the dew point fixes P = psat_NH3_pure(Tdew) (see
- * above), then solve nl_psol_TX(Tsol, x) = P for x by 80-step
+ * above), then solve nl_psol_TX_kPa(Tsol, x) = P for x by 80-step
  * bisection over the bubble function's valid concentration range
- * x = 0.35-0.65.  Returns NAN if no root (P outside the bubble-
+ * x = 0.35-0.65 (all internal, in kPa; the public MPa boundary is
+ * not used).  Returns NAN if no root (P outside the bubble-
  * pressure span at Tsol, e.g. Tsol well below Tdew, Tdew outside
  * the pure-NH3 fit band, or Tsol out of range). */
 double nl_XiByTsolTdew(double Tsol_K, double Tdew_K)
@@ -136,11 +156,11 @@ double nl_XiByTsolTdew(double Tsol_K, double Tdew_K)
         return NAN;
     if (!nl_in(Tsol_K, 293.15, 353.15))
         return NAN;
-    if (P < nl_psol_TX(Tsol_K, 0.35) || P > nl_psol_TX(Tsol_K, 0.65))
+    if (P < nl_psol_TX_kPa(Tsol_K, 0.35) || P > nl_psol_TX_kPa(Tsol_K, 0.65))
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (nl_psol_TX(Tsol_K, mid) < P) lo = mid; else hi = mid;
+        if (nl_psol_TX_kPa(Tsol_K, mid) < P) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }
@@ -162,11 +182,12 @@ double nl_hsol(double T_K, double x)
 
 /* Dew-point temperature [K] of the solution at (T_K, x)
    (library-wide TdewByTsolXi convention):
-   nl_Tsat_NH3_pure(nl_psol_TX(T_K, x)) on the pure-NH3 NIST fit
-   line (see nl_pref_NH3_pure).  NAN if nl_psol_TX is NAN. */
+   nl_Tsat_NH3_pure(nl_psol_TX_kPa(T_K, x)) on the pure-NH3 NIST fit
+   line (see nl_pref_NH3_pure; all internal, in kPa).  NAN if
+   nl_psol_TX_kPa is NAN. */
 double nl_TdewFromTsolX(double T_K, double x)
 {
-    double P = nl_psol_TX(T_K, x);
+    double P = nl_psol_TX_kPa(T_K, x);
     if (isnan(P)) return NAN;
     return nl_Tsat_NH3_pure(P);
 }
@@ -255,8 +276,8 @@ double nl_x_cris(double T_C, double x)
 #include <stdio.h>
 int main(void)
 {
-    printf("psol(313.15,0.5) = %.4f kPa\n", nl_psol_TX(313.15, 0.5));
-    printf("T_bubble(502.3,0.5)  = %.4f K\n", nl_T_bubble_PX(502.3, 0.5));
+    printf("psol(313.15,0.5) = %.6f MPa\n", nl_psol_TX(313.15, 0.5));
+    printf("T_bubble(0.5023,0.5)  = %.4f K\n", nl_T_bubble_PX(0.5023, 0.5));
     printf("hsol(273.15,0.5)    = %.4f kJ/kg\n", nl_hsol(273.15, 0.5));
     printf("rho(313.15,0.45)     = %.2f kg/m3\n", nl_rho(313.15, 0.45));
     printf("cp(313.15,0.45)      = %.4f kJ/kgK\n", nl_cp(313.15, 0.45));
