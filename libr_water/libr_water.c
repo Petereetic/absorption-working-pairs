@@ -13,8 +13,11 @@
  * 与同目录 libr_water.py 逐行对应。gcc -O2 -Wall -Wextra 零警告。
  *
  * 约定: X = LiBr 重量百分数(数字,如 50); T = °C。
- * 返回 SI: h kJ/kg, p Pa, lambda W/(m K), eta Pa s,
+ * 返回 SI: h kJ/kg, p MPa, lambda W/(m K), eta Pa s,
  *           rho kg/m^3, sigma N/m; t_dew/crystallization_T 为 °C。
+ * (压力单位 2026-10-14 规矩: 公开函数返回 MPa; 拟合原生值与
+ *  内部算术仍为 Pa, 公开函数 = 私有原生值函数 psol_Pa /
+ *  psol_chua_Pa ×1e-6, NAN 经乘法照常传播。)
  *
  * 范围/结晶检查: Python 版 raise ValueError; C 版返回 NAN
  * (范围外或结晶区内), 调用方需用 isnan() 检查。
@@ -157,7 +160,8 @@ double t_dew(double X, double T)
     return 5.0 / 9.0 * (tdew_poly(X, T) - 32.0);
 }
 
-double psol(double X, double T)
+/* 水蒸气分压原生值 [Pa] (Patterson PRESS, 私有); 内部算术走此值 */
+static double psol_Pa(double X, double T)
 {
     double tdew_f, TR;
     if (range_check(X, T, 0, 70, 4.4, 182.2))
@@ -168,6 +172,12 @@ double psol(double X, double T)
     TR = tdew_f + 459.7;
     return pow(10.0, 6.21147 - 2886.373 / TR - 337269.46 / (TR * TR))
            * 6894.757;
+}
+
+/* 水蒸气分压 [MPa] (Patterson PRESS): 公开边界 = psol_Pa ×1e-6 */
+double psol(double X, double T)
+{
+    return psol_Pa(X, T) * 1e-6;
 }
 
 double lambda_libr(double X, double T)
@@ -273,7 +283,8 @@ static double wagner_pref_water(double T_C)
     return 22.064e6 * exp((647.096 / T) * s);
 }
 
-double psol_chua(double X, double T)
+/* 水蒸气分压原生值 [Pa] (Chua Dühring, 私有); 内部算术走此值 */
+static double psol_chua_Pa(double X, double T)
 {
     double AD = 0.0, BD = 0.0, xk = 1.0, Tdp_C;
     int i;
@@ -289,10 +300,17 @@ double psol_chua(double X, double T)
     return wagner_pref_water(Tdp_C);
 }
 
+/* 水蒸气分压 [MPa] (Chua Dühring): 公开边界 = psol_chua_Pa ×1e-6 */
+double psol_chua(double X, double T)
+{
+    return psol_chua_Pa(X, T) * 1e-6;
+}
+
 /* 由露点温度与溶液温度反解 LiBr 浓度 X [wt%] (Chua 路线):
    P = 纯水在 Tdew 下的饱和压 (模块自有 Wagner 纯水函数
-   wagner_pref_water); 二分 80 次反解 psol_chua(X, Tsol) = P,
-   括号 X∈[0,60] (psol_chua 有效浓度域)。psol_chua 随 X 单调
+   wagner_pref_water); 二分 80 次反解 psol_chua_Pa(X, Tsol) = P
+   (内部一律 Pa, 与公开 psol_chua 的 MPa 边界分账),
+   括号 X∈[0,60] (psol_chua 有效浓度域)。psol_chua_Pa 随 X 单调
    递减, 二分方向与递增型相反。选 Chua 路线因 psol_chua 本身即
    由 Dühring 露点经同一 Wagner 函数构造, 定义自洽; 与 Patterson
    PRESS 差约 0.5-1.4%, 不可混用。无根返回 NAN (如 Tsol 明显
@@ -300,15 +318,15 @@ double psol_chua(double X, double T)
 double x_by_tsol_tdew_chua(double Tsol_C, double Tdew_C)
 {
     double P = wagner_pref_water(Tdew_C);
-    double Pmax = psol_chua(0.0, Tsol_C);
-    double Pmin = psol_chua(60.0, Tsol_C);
+    double Pmax = psol_chua_Pa(0.0, Tsol_C);
+    double Pmin = psol_chua_Pa(60.0, Tsol_C);
     double lo = 0.0, hi = 60.0, mid;
     int k;
     if (isnan(P) || isnan(Pmin) || isnan(Pmax) || P < Pmin || P > Pmax)
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (psol_chua(mid, Tsol_C) > P) lo = mid; else hi = mid;
+        if (psol_chua_Pa(mid, Tsol_C) > P) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }
@@ -329,10 +347,11 @@ static double tsat_water_patterson(double P_Pa)
 /* Dew-point temperature [degC] of the solution at (X, T)
    (library-wide TdewByTsolXi convention): Tsat_water(psol(X, T)) on
    the Patterson route.  Equals t_dew(X, T) by construction.  NAN if
-   psol is NAN. */
+   psol is NAN.  Internally the Pa native value psol_Pa is used
+   (public psol returns MPa). */
 double tdew_by_tsol_x(double X, double T)
 {
-    double P = psol(X, T);
+    double P = psol_Pa(X, T);
     if (isnan(P)) return NAN;
     return tsat_water_patterson(P);
 }

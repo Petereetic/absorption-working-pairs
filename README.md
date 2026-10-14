@@ -26,12 +26,20 @@ bands instead of being averaged away.
 > verified Python/C code, but they have **not** been compiled or run in a
 > real Excel session. Test them before relying on them.
 
+> **Units (2026-10-14).** Every function in every language set now takes and
+> returns **pressure in MPa** (previously Pa, kPa or bar depending on the
+> pair; fits internally keep their native units, with exact scaling at the
+> public boundary, and all verification anchors were re-checked — see each
+> pair's formula notes). One legacy exception, retained pending a decision:
+> the kg/cm² variant functions in `r22_degdme/` (`psol_kgcm2`), as printed
+> in the source.
+
 ## Working pairs
 
 | Directory | Pair | Model source | Status |
 |---|---|---|---|
 | `ammonia_water/` | NH₃–H₂O | Pátek & Klomfar 1995 explicit correlations (bubble/dew temperature, vapour composition, enthalpies); transport properties after Conde Engineering (2004) | Transcription verified against the paper; C and Python agree to six decimals |
-| `libr_water/` | LiBr–H₂O | Patterson & Perez-Blanco 1988 (ASHRAE Trans. 94(2)) full property set, with Chua et al. 2000 vapour-pressure and density correlations | C and Python cross-checked point-by-point (Patterson 36 pts × 8 functions; Chua 25 pts × 2); JavaScript set (`libr_water.js`, the library's first JS implementation; returns pressure in MPa) cross-checked against the Python reference on 3,285 cases (2,382 value points), max relative difference 1.21×10⁻¹² |
+| `libr_water/` | LiBr–H₂O | Patterson & Perez-Blanco 1988 (ASHRAE Trans. 94(2)) full property set, with Chua et al. 2000 vapour-pressure and density correlations | C and Python cross-checked point-by-point (Patterson 36 pts × 8 functions; Chua 25 pts × 2); JavaScript set (`libr_water.js`, the library's first JS implementation) cross-checked against the Python reference on 3,285 cases (2,382 value points), max relative difference 1.21×10⁻¹²; all four sets return pressure in MPa |
 | `methanol_bromide/` | CH₃OH–(2LiBr–ZnBr₂), salt ratio 2:1 | El-Shamarka 1981 (PhD thesis, Cranfield) bubble point / Cp / enthalpies; density, viscosity and vapour pressure from Iedema 1984 (PhD thesis, TU Delft) | Verified against both theses' tables; the two sources agree on density within 0.5 % but differ on vapour pressure by up to ~20 % at w ≈ 0.35–0.40 — see the comparison note in the directory |
 | `nh3_lino3/` | NH₃–LiNO₃ | Correlations compiled in Amaris (2014, PhD thesis, URV) App. B: Libotean et al. bubble pressure / Cp / density, Cuenca et al. thermal conductivity, Infante Ferreira et al. crystallisation limit | C and Python cross-checked on 1715 points; viscosity correlation not included (source not yet verified — see notes) |
 | `pure_fluids/` | R134a, R22, R124, H2O, NH3, CH3OH, R32, R218, CO2 (pure) | Saturation-pressure and enthalpy fits: Wagner equations fitted to the CoolProp reference EOS (R134a, R22) and compact lnP–t / polynomial fits to NIST WebBook saturation tables (the other seven; fit notes in `pure_fluids/fit-notes/`, per-fluid standalone files in `pure_fluids/standalone/`) | Saturation-pressure max. deviation vs. source tables 0.0065 %–0.15 % depending on fluid — see `pure_fluids/公式说明.md` |

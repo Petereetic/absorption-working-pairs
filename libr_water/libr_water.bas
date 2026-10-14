@@ -14,19 +14,22 @@ Attribute VB_Name = "LiBrWater"
 ' 工作表函数 (X = LiBr 重量百分数数字,如 50; T = °C):
 '   LW_hsol(X,T)        溶液比焓 [kJ/kg]
 '   LW_Tdew(X,T)     露点温度 [°C]
-'   LW_Psol(X,T)     水蒸气分压 [Pa] (Patterson)
+'   LW_Psol(X,T)     水蒸气分压 [MPa] (Patterson)
 '   LW_Lambda(X,T)   导热系数 [W/(m K)]
 '   LW_Eta(X,T)      动力黏度 [Pa s]
 '   LW_Rho(X,T)      密度 [kg/m^3]
 '   LW_Sigma(X,T)    表面张力 [N/m]
 '   LW_Tcryst(X)     结晶温度 [°C]
-'   LW_PsolChua(X,T) 水蒸气分压 [Pa] (Chua Dühring, 0-190°C/0-60wt%;
+'   LW_PsolChua(X,T) 水蒸气分压 [MPa] (Chua Dühring, 0-190°C/0-60wt%;
 '                      x>60 的 <x-60> 项按原文印刷值无法复现, 不实现)
 '   LW_RhoChua(X,T)  密度 [kg/m^3] (Chua, 0-200°C/0-70%)
 '   LW_XByTsolTdewChua(Tdew,Tsol)  由露点温度与溶液温度反解浓度 X [wt%]
 '                      (Chua 路线, Wagner 纯水定压; 无根返回 Empty)
 '
 ' 范围外或结晶区内返回 #VALUE! 错误值。
+' 压力单位 (2026-10-14 规矩): 公开函数返回 MPa; 拟合原生值与内部
+' 算术仍为 Pa —— 私有 PsolPa / PsolChuaPa 返回 Pa 原生值, 公开
+' LW_Psol / LW_PsolChua = 原生值 ×0.000001, 内部反解一律走私有函数。
 ' ==========================================================================
 Option Explicit
 
@@ -161,13 +164,22 @@ Public Function LW_Tdew(ByVal X As Double, ByVal T As Double) As Variant
     LW_Tdew = 5# / 9# * (TdewPolyF(X, T) - 32#)
 End Function
 
-Public Function LW_Psol(ByVal X As Double, ByVal T As Double) As Variant
+' 水蒸气分压原生值 [Pa] (Patterson PRESS, 私有); 内部算术走此值
+Private Function PsolPa(ByVal X As Double, ByVal T As Double) As Variant
     Dim tdewF As Double, TR As Double
-    If Not InRange(X, T, 0, 70, 4.4, 182.2) Then LW_Psol = CVErr(xlErrValue): Exit Function
-    If CheckRegion(X, T, False, TunknStd()) <> "" Then LW_Psol = CVErr(xlErrValue): Exit Function
+    If Not InRange(X, T, 0, 70, 4.4, 182.2) Then PsolPa = CVErr(xlErrValue): Exit Function
+    If CheckRegion(X, T, False, TunknStd()) <> "" Then PsolPa = CVErr(xlErrValue): Exit Function
     tdewF = TdewPolyF(X, T)
     TR = tdewF + 459.7
-    LW_Psol = 10# ^ (6.21147 - 2886.373 / TR - 337269.46 / TR ^ 2) * 6894.757
+    PsolPa = 10# ^ (6.21147 - 2886.373 / TR - 337269.46 / TR ^ 2) * 6894.757
+End Function
+
+' 水蒸气分压 [MPa] (Patterson PRESS): 公开边界 = PsolPa ×0.000001
+Public Function LW_Psol(ByVal X As Double, ByVal T As Double) As Variant
+    Dim v As Variant
+    v = PsolPa(X, T)
+    If IsError(v) Then LW_Psol = CVErr(xlErrValue): Exit Function
+    LW_Psol = v * 0.000001
 End Function
 
 Public Function LW_Lambda(ByVal X As Double, ByVal T As Double) As Variant
@@ -254,11 +266,12 @@ Private Function WagnerPref(ByVal Tc As Double) As Double
     WagnerPref = 22.064E+06 * Exp((647.096 / T) * s)
 End Function
 
-Public Function LW_PsolChua(ByVal X As Double, ByVal T As Double) As Variant
+' 水蒸气分压原生值 [Pa] (Chua Dühring, 私有); 内部算术走此值
+Private Function PsolChuaPa(ByVal X As Double, ByVal T As Double) As Variant
     Dim AD As Double, BD As Double, xk As Double, i As Integer
     Dim A As Variant, B As Variant, TdpC As Double
     If X < 0 Or X > 60 Or T < 0 Or T > 190 Then
-        LW_PsolChua = CVErr(xlErrValue): Exit Function
+        PsolChuaPa = CVErr(xlErrValue): Exit Function
     End If
     A = DuhrA(): B = DuhrB()
     AD = 0#: BD = 0#: xk = 1#
@@ -268,21 +281,30 @@ Public Function LW_PsolChua(ByVal X As Double, ByVal T As Double) As Variant
         BD = BD + B(i) * xk
     Next i
     TdpC = (T - BD) / AD
-    LW_PsolChua = WagnerPref(TdpC)
+    PsolChuaPa = WagnerPref(TdpC)
+End Function
+
+' 水蒸气分压 [MPa] (Chua Dühring): 公开边界 = PsolChuaPa ×0.000001
+Public Function LW_PsolChua(ByVal X As Double, ByVal T As Double) As Variant
+    Dim v As Variant
+    v = PsolChuaPa(X, T)
+    If IsError(v) Then LW_PsolChua = CVErr(xlErrValue): Exit Function
+    LW_PsolChua = v * 0.000001
 End Function
 
 ' 由露点温度与溶液温度反解 LiBr 浓度 X [wt%] (Chua 路线):
 ' P = 纯水在 Tdew 下的饱和压 (模块自有 WagnerPref 纯水函数);
-' 二分 80 次反解 LW_PsolChua(X, Tsol) = P, 括号 X∈[0,60]
-' (LW_PsolChua 有效浓度域)。LW_PsolChua 随 X 单调递减,
+' 二分 80 次反解 PsolChuaPa(X, Tsol) = P (内部一律 Pa, 与公开
+' LW_PsolChua 的 MPa 边界分账), 括号 X∈[0,60]
+' (LW_PsolChua 有效浓度域)。PsolChuaPa 随 X 单调递减,
 ' 二分方向与递增型相反。与 Python/C 同算法。
 ' 无根返回 Empty (如 Tsol 明显低于 Tdew)。
 Public Function LW_XByTsolTdewChua(ByVal Tsol_C As Double, ByVal Tdew_C As Double) As Variant
     Dim P As Double, Pmin As Double, Pmax As Double
     Dim lo As Double, hi As Double, mid As Double, k As Long
     P = WagnerPref(Tdew_C)
-    Pmax = LW_PsolChua(0#, Tsol_C)
-    Pmin = LW_PsolChua(60#, Tsol_C)
+    Pmax = PsolChuaPa(0#, Tsol_C)
+    Pmin = PsolChuaPa(60#, Tsol_C)
     If P < Pmin Or P > Pmax Then
         LW_XByTsolTdewChua = Empty
         Exit Function
@@ -290,22 +312,23 @@ Public Function LW_XByTsolTdewChua(ByVal Tsol_C As Double, ByVal Tdew_C As Doubl
     lo = 0#: hi = 60#
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If LW_PsolChua(mid, Tsol_C) > P Then lo = mid Else hi = mid
+        If PsolChuaPa(mid, Tsol_C) > P Then lo = mid Else hi = mid
     Next k
     LW_XByTsolTdewChua = 0.5 * (lo + hi)
 End Function
 
 
 ' ---------- 露点温度（溶液）[°C]：全库 TdewByTsolXi 约定 ----------
-' Tdew = 纯水饱和温度(LW_Psol(X, T))：对 psol 内置的 Patterson 纯水
-' log10 关系式解析反解（对 1/TR 的二次方程）。构造上与 LW_Tdew
+' Tdew = 纯水饱和温度(PsolPa(X, T))：对 psol 内置的 Patterson 纯水
+' log10 关系式解析反解（对 1/TR 的二次方程）。内部用 Pa 原生值
+' PsolPa（公开 LW_Psol 返回 MPa）。构造上与 LW_Tdew
 ' （Patterson TDEW 多项式）相等；LiBr 不挥发，无端点约定问题。
 ' 超辖区时与 LW_Tdew 同样返回 #VALUE!。
 Public Function LW_TdewByTsolX(ByVal X As Double, ByVal T As Double) As Variant
     Dim P As Variant, L As Double, disc As Double, u As Double
     If Not InRange(X, T, 0, 70, 4.4, 182.2) Then LW_TdewByTsolX = CVErr(xlErrValue): Exit Function
     If CheckRegion(X, T, False, TunknStd()) <> "" Then LW_TdewByTsolX = CVErr(xlErrValue): Exit Function
-    P = LW_Psol(X, T)
+    P = PsolPa(X, T)
     If IsError(P) Then LW_TdewByTsolX = CVErr(xlErrValue): Exit Function
     L = Log(P / 6894.757) / Log(10#)
     disc = 2886.373 ^ 2 - 4# * 337269.46 * (L - 6.21147)

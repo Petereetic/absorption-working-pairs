@@ -21,8 +21,10 @@ Int. J. Refrigeration 23, 412-429.
 ----
 * X : LiBr 重量百分数(数字, 0-100,如 50), 不是小数
 * T : °C (与 Patterson 原文一致)
-* 返回 SI: h kJ/kg, p Pa, lambda W/(m K), eta Pa s,
+* 返回 SI: h kJ/kg, p MPa, lambda W/(m K), eta Pa s,
   rho kg/m^3, sigma N/m ; t_dew / crystallization_T 为 °C
+  (压力单位 2026-10-14 规矩: 公开函数返回 MPa; 拟合原生值与
+  内部算术仍为 Pa, 公开函数 = 私有原生值函数 ×1e-6。)
 
 范围与结晶检查
 --------------
@@ -35,6 +37,7 @@ Int. J. Refrigeration 23, 412-429.
 注意:
 * PRESS 正文说输入 °F/输出 psia,代码实际取 °C 输入、返回 Pa
   (×6894.757),以代码为准;注释 "Horacio says is DEG F" 亦存疑。
+  本模块按该 Pa 原生值计算,公开 psol 再 ×1e-6 以 MPa 返回。
 * TCON 的 TUNKN 印为华氏度数值 (260/280/320/360) 却与 °C 的 T 比较,
   使其未知区检查恒不触发 —— 按原文照录。
 * STEN 并非特殊 K=4 多项式,仍是标准双循环 (KUP=5, 15 系数)。
@@ -200,15 +203,21 @@ def t_dew(X, T):
     return 5.0 / 9.0 * (_tdew_poly(X, T) - 32.0)
 
 
-def psol(X, T):
-    """水蒸气分压 [Pa] (Patterson PRESS); X wt%, T °C。
+def _psol_Pa(X, T):
+    """水蒸气分压原生值 [Pa] (Patterson PRESS, 私有); X wt%, T °C。
     先由 TDEW 多项式求露点(°F), 再 log10 P[psia]=6.21147-2886.373/TR-337269.46/TR²
-    (TR 为 °R), ×6894.757 → Pa。"""
+    (TR 为 °R), ×6894.757 → Pa。内部算术一律走此 Pa 值。"""
     _range_check(X, T, 'psol', 0, 70, 4.4, 182.2)
     _check_region(X, T, 'psol', check_unknown=False)
     tdew_f = _tdew_poly(X, T)
     TR = tdew_f + 459.7
     return 10.0 ** (6.21147 - 2886.373 / TR - 337269.46 / TR ** 2) * 6894.757
+
+
+def psol(X, T):
+    """水蒸气分压 [MPa] (Patterson PRESS); X wt%, T °C。
+    公开边界 = 私有原生值 _psol_Pa ×1e-6 (Pa → MPa)。"""
+    return _psol_Pa(X, T) * 1e-6
 
 
 def lambda_libr(X, T):
@@ -321,12 +330,13 @@ def _wagner_pref_water(T_C):
     return Pc * math.exp((Tc / T) * s)
 
 
-def psol_chua(X, T):
-    """水蒸气分压 [Pa] (Chua Dühring); X wt%, T °C。范围: 0-190°C, 0-60%。
+def _psol_chua_Pa(X, T):
+    """水蒸气分压原生值 [Pa] (Chua Dühring, 私有); X wt%, T °C。范围: 0-190°C, 0-60%。
 
     (T-273.15) = A_D(x)·(T_dp-273.15) + B_D(x), T/T_dp 为 K;
     由 T_dp 经 Wagner 方程求纯水 Psat 即得溶液蒸气压 (LiBr 不挥发)。
-    x>60% 的 ⟨x-60⟩ 修正项按原文印刷值无法复现 Fig.1/2, 故不实现。"""
+    x>60% 的 ⟨x-60⟩ 修正项按原文印刷值无法复现 Fig.1/2, 故不实现。
+    内部算术一律走此 Pa 值。"""
     if not (0 <= X <= 60 and 0 <= T <= 190):
         raise ValueError("psol_chua: (X=%.2f%%, T=%.2f°C) 超出范围 [0-60%%, 0-190°C]"
                          % (X, T))
@@ -338,13 +348,20 @@ def psol_chua(X, T):
     return _wagner_pref_water(Tdp_C)
 
 
+def psol_chua(X, T):
+    """水蒸气分压 [MPa] (Chua Dühring); X wt%, T °C。范围: 0-190°C, 0-60%。
+    公开边界 = 私有原生值 _psol_chua_Pa ×1e-6 (Pa → MPa)。"""
+    return _psol_chua_Pa(X, T) * 1e-6
+
+
 def x_by_tsol_tdew_chua(Tsol_C, Tdew_C):
     """由露点温度与溶液温度反解 LiBr 浓度 X [wt%] (Chua 路线)。
 
     构造: 露点定压 P = 纯水在 Tdew 下的饱和压, 用模块自有纯水饱和压
     函数 _wagner_pref_water (Wagner 方程); 再二分 80 次反解溶液蒸气压
-    函数 psol_chua(X, Tsol_C) = P, 括号取 X∈[0,60] (psol_chua 的有
-    效浓度域)。psol_chua 随 X 单调递减, 二分方向与递增型相反。
+    函数 _psol_chua_Pa(X, Tsol_C) = P (内部一律 Pa, 与公开 psol_chua
+    的 MPa 边界分账), 括号取 X∈[0,60] (psol_chua 的有
+    效浓度域)。_psol_chua_Pa 随 X 单调递减, 二分方向与递增型相反。
     选 Chua 路线的原因: psol_chua 本身即由 Dühring 露点经同一 Wagner
     纯水函数构造, 露点定义自洽; Patterson PRESS 与之差约 0.5–1.4%
     (见公式说明第四节), 两路线不可混用。
@@ -352,14 +369,14 @@ def x_by_tsol_tdew_chua(Tsol_C, Tdew_C):
     或 P 低于 X=60 端的蒸气压)。Tsol 超出 psol_chua 范围时其
     ValueError 照常抛出 (模块既有约定)。"""
     P = _wagner_pref_water(Tdew_C)
-    Pmax = psol_chua(0.0, Tsol_C)    # X=0 端: 蒸气压最高
-    Pmin = psol_chua(60.0, Tsol_C)   # X=60 端: 蒸气压最低
+    Pmax = _psol_chua_Pa(0.0, Tsol_C)    # X=0 端: 蒸气压最高
+    Pmin = _psol_chua_Pa(60.0, Tsol_C)   # X=60 端: 蒸气压最低
     if not (Pmin <= P <= Pmax):
         return None
     lo, hi = 0.0, 60.0
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if psol_chua(mid, Tsol_C) > P:
+        if _psol_chua_Pa(mid, Tsol_C) > P:
             lo = mid   # 蒸气压偏高 → 需更高浓度压低它
         else:
             hi = mid
@@ -391,8 +408,9 @@ def tdew_by_tsol_x(X, T):
     construction this equals t_dew(X, T) (the Patterson TDEW
     polynomial is that same dew temperature); LiBr is non-volatile,
     so no endpoint convention is involved.  Domain/range errors of
-    psol propagate as ValueError, as for t_dew."""
-    P = psol(X, T)
+    psol propagate as ValueError, as for t_dew.  Internally the Pa
+    native value _psol_Pa is used (public psol returns MPa)."""
+    P = _psol_Pa(X, T)
     return _tsat_water_patterson(P)
 
 
@@ -450,7 +468,7 @@ if __name__ == '__main__':
     print('h(0%%,25°C) = %.3f kJ/kg (期望 ~104.6)' % hsol(0.0, 25.0))
     print('rho(60%%,25°C) = %.1f kg/m³ (期望 ~1700)' % rho_libr(60.0, 25.0))
     print('eta(60%%,25°C) = %.2f mPa·s (期望 ~10 量级)' % (eta_libr(60.0, 25.0) * 1e3))
-    print('psol(50%%,80°C) = %.0f Pa' % psol(50.0, 80.0))
+    print('psol(50%%,80°C) = %.6f MPa' % psol(50.0, 80.0))
     print('t_dew(50%%,80°C) = %.2f °C' % t_dew(50.0, 80.0))
     print('lambda(50%%,80°C) = %.4f W/(m K)' % lambda_libr(50.0, 80.0))
     print('sigma(50%%,25°C) = %.1f mN/m' % (sigma_libr(50.0, 25.0) * 1e3))
