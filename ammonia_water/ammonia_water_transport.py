@@ -12,9 +12,10 @@ Design of Absorption Refrigeration Equipment", 第 5~15 章 + 附录 A/B/C。
 约定
 ----
 * x : 液相氨摩尔分数 ; y : 气相氨摩尔分数
-* T : K ; p : MPa(本模块内部按需换算) ; pc_sol 返回 bar(书中单位)
+* T : K ; p : MPa(本模块内部按需换算) ; pc_sol 返回 MPa
 * 返回值均为 SI: cp kJ/(kg K), lambda W/(m K), eta Pa s,
-  sigma N/m, rho kg/m^3, D m^2/s ; pc_sol 为 bar(书中原单位)
+  sigma N/m, rho kg/m^3, D m^2/s ; pc_sol 为 MPa
+  (§5 多项式系数 b_i 原生以 bar 计(书中源口径),公开函数出口 ×0.1 换算)
 
 气相函数取 (T, y), T 为气相温度。饱和态下 T 取对应露点温度
 (用 ammonia_water.py 的 T_dew_P_y 求), 文档中给出调用示例。
@@ -41,8 +42,8 @@ import math
 # --------------------------------------------------------------------------
 T_C_NH3 = 405.4          # K
 T_C_H2O = 647.14         # K
-P_C_NH3 = 113.336        # bar
-P_C_H2O = 220.64         # bar
+P_C_NH3 = 113.336        # bar(书中源数据,非模块返回值)
+P_C_H2O = 220.64         # bar(书中源数据,非模块返回值)
 RHO_C_NH3 = 225.0        # kg/m^3
 RHO_C_H2O = 322.0        # kg/m^3
 M_NH3 = 17.03026         # kg/kmol
@@ -60,9 +61,14 @@ def tc_sol(x):
     return sum(a * x ** i for i, a in enumerate(_A_TC))
 
 
-def pc_sol(x):
-    """溶液临界压力 [bar], x = 氨摩尔分数。"""
+def _pc_sol_bar(x):
+    """溶液临界压力原生值 [bar](系数 b_i 的书中源口径),仅供内部/核对。"""
     return sum(b * x ** i for i, b in enumerate(_B_PC))
+
+
+def pc_sol(x):
+    """溶液临界压力 [MPa], x = 氨摩尔分数。(原生 bar 值 ×0.1)"""
+    return _pc_sol_bar(x) * 0.1
 
 
 def _tstar(T, x):
@@ -456,4 +462,4 @@ if __name__ == '__main__':
     print('rho_liq water=%.1f (exp 998.2)' % rho_liq(T, 0.0))
     print('rho_liq NH3  =%.1f (exp ~610)' % rho_liq(T, 1.0))
     print('sigma water=%.4f N/m (exp 0.0728)' % sigma(T, 0.0))
-    print('Tc/Pc x=0.5: %.1f K, %.1f bar' % (tc_sol(0.5), pc_sol(0.5)))
+    print('Tc/Pc x=0.5: %.1f K, %.2f MPa' % (tc_sol(0.5), pc_sol(0.5)))

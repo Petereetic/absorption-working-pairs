@@ -10,7 +10,8 @@ Attribute VB_Name = "AmmoniaWaterTransport"
 '
 ' 工作表函数 (T 单位 K; x 液相氨摩尔分数; y 气相氨摩尔分数):
 '   AW_TcSol(x)      溶液临界温度 [K]               (§5)
-'   AW_PcSol(x)      溶液临界压力 [bar]             (§5)
+'   AW_PcSol(x)      溶液临界压力 [MPa]             (§5)
+'                    (§5 系数原生以 bar 计(书中源口径),公开函数出口 ×0.1)
 '   AW_CpLiq(T,x)    饱和液相比热 [kJ/(kg K)]       (§6)
 '   AW_LamLiq(T,x)   饱和液相导热 [W/(m K)]         (§7)
 '   AW_EtaLiq(T,x)   饱和液相动力黏度 [Pa s]        (§8)
@@ -40,9 +41,15 @@ Public Function AW_TcSol(ByVal x As Double) As Double
              - 239.626217 * x ^ 3 + 88.689691 * x ^ 4
 End Function
 
-Public Function AW_PcSol(ByVal x As Double) As Double
-    AW_PcSol = 220.64 - 37.923795 * x + 36.424739 * x ^ 2 _
+' 溶液临界压力原生值 [bar](系数书中源口径),仅供内部/核对
+Private Function PcSolBar(ByVal x As Double) As Double
+    PcSolBar = 220.64 - 37.923795 * x + 36.424739 * x ^ 2 _
              - 41.851597 * x ^ 3 - 63.805617 * x ^ 4
+End Function
+
+' 溶液临界压力 [MPa] = 原生 bar 值 × 0.1
+Public Function AW_PcSol(ByVal x As Double) As Double
+    AW_PcSol = PcSolBar(x) * 0.1
 End Function
 
 Private Sub TStar(ByVal T As Double, ByVal x As Double, _

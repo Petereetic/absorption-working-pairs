@@ -11,7 +11,8 @@
  * 约定:
  *   x : 液相氨摩尔分数 ; y : 气相氨摩尔分数 ; T : K
  *   返回 SI: cp kJ/(kg K), lambda W/(m K), eta Pa s,
- *           sigma N/m, rho kg/m^3, D m^2/s ; pc_sol 为 bar(书中原单位)
+ *           sigma N/m, rho kg/m^3, D m^2/s ; pc_sol 为 MPa
+ *           (§5 系数 B_PC 原生以 bar 计(书中源口径),公开函数出口 x0.1)
  *
  * 注意:
  *   附录 A 总式书中印刷为 λ̄0×λ̄1×λ̄2,系排印错误,实为加法
@@ -44,12 +45,19 @@ double tc_sol(double x)
     return s;
 }
 
-double pc_sol(double x)
+/* 溶液临界压力原生值 [bar](系数书中源口径),仅供内部/核对 */
+static double pc_sol_bar(double x)
 {
     double s = 0.0, xp = 1.0;
     int i;
     for (i = 0; i < 5; i++) { s += B_PC[i] * xp; xp *= x; }
     return s;
+}
+
+/* 溶液临界压力 [MPa] = 原生 bar 值 x 0.1 */
+double pc_sol(double x)
+{
+    return pc_sol_bar(x) * 0.1;
 }
 
 /* 对应状态温度 */
