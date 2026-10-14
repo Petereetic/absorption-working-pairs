@@ -38,10 +38,11 @@ try:
 except ImportError:
     print("scipy 不可用，跳过 PCHIP 对照")
 
-# 论文附录 A 等压温度表：P = 300 mmHg = 0.39997 bar 时的泡点温度
+# 论文附录 A 等压温度表：P = 300 mmHg 时的泡点温度
+# （2026-10-14 单位改定：模块入参已改 MPa，300 mmHg = 0.039997 MPa，原 bar 口径为 0.39997）
 print("\n泡点温度抽查（附录 A，300 mmHg）:")
 for w, tref in [(0.250, 419.0), (0.262, 411.7), (0.301, 391.4), (0.356, 380.3)]:
-    t = mb.T_bubble_PW(0.39997, w)
+    t = mb.T_bubble_PW(0.039997, w)
     print("  w=%.3f  计算 %7.2f K  论文 %6.1f K  偏差 %+.2f K" % (w, t, tref, t - tref))
 
 # 论文附录 A 汽化焓表
@@ -63,8 +64,8 @@ for tc, w, cref in [(51.3, 0.403, 1.27), (69.9, 0.403, 1.30),
 print("\n纯甲醇 Antoine 拟合（附录 A 数据点）:")
 for mmhg, tk in [(300, 316.7), (500, 328.3), (600, 332.6), (700, 336.4),
                  (800, 339.7), (900, 342.7), (1000, 345.4)]:
-    pc = mb.meoh_pref_bar(tk) / 1.3332239e-3
+    pc = mb.meoh_pref_bar(tk) / 1.3332239e-4
     print("  T=%.1f K  计算 %7.2f mmHg  论文 %d mmHg  偏差 %+.2f%%"
           % (tk, pc, mmhg, 100.0 * (pc - mmhg) / mmhg))
 print("  400 mmHg 处拟合温度 %.2f K（论文印 373.1 K，Ratio 列反推 323.1 K，判误印）"
-      % mb.meoh_Tsat_bar(400 * 1.3332239e-3))
+      % mb.meoh_Tsat_bar(400 * 1.3332239e-4))

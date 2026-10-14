@@ -23,6 +23,10 @@
  *           w^3 读法（平均偏差 2.8%，与作者自称吻合；w^4 读法偏 36%）。
  *   注：El-Shamarka 自己的式(4.10) 密度、式(4.11) 黏度仍未核实，本文件
  *   未实现，勿与上述 Iedema 关联式混淆（详见 公式说明.md）。
+ * 压力单位（2026-10-14 全库统一）：公开函数返回/接受 MPa；内部原生
+ * 计算以 bar 进行（私有函数名后缀 _bar），公开函数只做边界缩放
+ * （MPa = bar×0.1；入参 MPa×10 回 bar）。私有 meoh_pref_bar /
+ * meoh_tsat_bar 本就以 bar 为原生单位，名实相符。
  * 参考态（本文档约定，论文未定义绝对基准）：
  *   hsol(0°C, 任意 w) = 100 kJ/kg；hsol = 100 + A·t + B·t^2/2；
  *   hgas = hsol + H'。
@@ -94,23 +98,35 @@ static void cp_AB(double w, double *A, double *B)
     *B = -0.000205 + 0.00928 * w - 0.0101 * w * w;
 }
 
-/* 式(3.1)：泡点压力，bar */
-double mb_psol_TW(double T_K, double w)
+/* 式(3.1) 原生值（私有）：泡点压力，bar */
+static double psol_TW_bar(double T_K, double w)
 {
     double log10p_mbar = pchip_eval(W_NODES, C1_NODES, w)
                        + pchip_eval(W_NODES, C2_NODES, w) * (1000.0 / T_K - 2.3);
     return pow(10.0, log10p_mbar) / 1000.0;
 }
 
-/* 式(3.1) 解析反解：泡点温度，K */
-double mb_T_bubble_PW(double P_bar, double w)
+/* 式(3.1)：泡点压力，MPa */
+double mb_psol_TW(double T_K, double w)
+{
+    return psol_TW_bar(T_K, w) * 0.1;
+}
+
+/* 式(3.1) 解析反解原生值（私有）：泡点温度，K；P_bar 巴 */
+static double T_bubble_PW_bar(double P_bar, double w)
 {
     double log10p_mbar = log10(P_bar * 1000.0);
     return 1000.0 / ((log10p_mbar - pchip_eval(W_NODES, C1_NODES, w))
                      / pchip_eval(W_NODES, C2_NODES, w) + 2.3);
 }
 
-/* 纯甲醇饱和压（私有辅助，与 Python 版 meoh_pref_bar 同常数）：
+/* 式(3.1) 解析反解：泡点温度，K；P_MPa 兆帕 */
+double mb_T_bubble_PW(double P_MPa, double w)
+{
+    return T_bubble_PW_bar(P_MPa * 10.0, w);
+}
+
+/* 纯甲醇饱和压（私有辅助，原生 bar，与 Python 版 _meoh_pref_bar 同常数）：
  * Antoine 拟合自 El-Shamarka 附录 A 表（见 methanol_bromide.py 文件头）：
  * log10 P[mmHg] = 8.885298 - 2070.3714/(T[K] + 6.3818)，返回 bar */
 static double meoh_pref_bar(double T_K)
@@ -119,8 +135,8 @@ static double meoh_pref_bar(double T_K)
 }
 
 /* 由露点温度与溶液温度反解甲醇质量分数 w：
- * 露点定压 P = meoh_pref_bar(Tdew_K)（盐不挥发，气相为纯甲醇），
- * 再二分 80 次反解 mb_psol_TW(Tsol_K, w) = P，
+ * 露点定压 P = meoh_pref_bar(Tdew_K)（内部原生 bar 值；盐不挥发，
+ * 气相为纯甲醇），再二分 80 次反解 psol_TW_bar(Tsol_K, w) = P，
  * 括号取泡点函数有效浓度域 w = 0.243~0.509。
  * 无根时返回 NAN（如溶液温度明显低于露点温度）。 */
 double mb_XiByTsolTdew(double Tsol_K, double Tdew_K)
@@ -128,29 +144,30 @@ double mb_XiByTsolTdew(double Tsol_K, double Tdew_K)
     double P = meoh_pref_bar(Tdew_K);
     double lo = 0.243, hi = 0.509, mid;
     int k;
-    if (P < mb_psol_TW(Tsol_K, lo) || P > mb_psol_TW(Tsol_K, hi))
+    if (P < psol_TW_bar(Tsol_K, lo) || P > psol_TW_bar(Tsol_K, hi))
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (mb_psol_TW(Tsol_K, mid) < P) lo = mid; else hi = mid;
+        if (psol_TW_bar(Tsol_K, mid) < P) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }
 
 
-/* 纯甲醇饱和温度 [K]（私有辅助）：meoh_pref_bar 的解析反解，
- * 与 Python 版 meoh_Tsat_bar 同式。 */
+/* 纯甲醇饱和温度 [K]（私有辅助，原生 bar）：meoh_pref_bar 的解析反解，
+ * 与 Python 版 _meoh_Tsat_bar 同式。 */
 static double meoh_tsat_bar(double P_bar)
 {
     return 2070.3714 / (8.885298 - log10(P_bar / 1.3332239e-3)) - 6.3818;
 }
 
 /* 溶液在 (T_K, w) 的露点温度 [K]（全库 TdewByTsolXi 约定）：
- * Tdew = meoh_tsat_bar(mb_psol_TW(T_K, w))，以本模块自有纯甲醇线
- * 评价溶液表面压力 Psol。盐不挥发，气相为纯甲醇。 */
+ * Tdew = meoh_tsat_bar(psol_TW_bar(T_K, w))（实现内部走原生 bar
+ * 私有函数；公开口径为 meoh_Tsat_bar(psol_TW(...))，MPa），以本模块
+ * 自有纯甲醇线评价溶液表面压力 Psol。盐不挥发，气相为纯甲醇。 */
 double mb_TdewFromTsolW(double T_K, double w)
 {
-    return meoh_tsat_bar(mb_psol_TW(T_K, w));
+    return meoh_tsat_bar(psol_TW_bar(T_K, w));
 }
 
 double mb_hsol(double T_K, double w);  /* forward: defined below */
@@ -224,7 +241,7 @@ int main(void)
 {
     static const double TS[7] = {283.15, 303.15, 323.15, 353.15, 393.15, 433.15, 466.15};
     static const double WS[9] = {0.243, 0.250, 0.262, 0.280, 0.301, 0.330, 0.356, 0.403, 0.509};
-    static const double PS[5] = {0.10, 0.39997, 0.60, 1.00, 1.30};
+    static const double PS[5] = {0.010, 0.039997, 0.060, 0.100, 0.130};  /* MPa */
     int i, j;
     for (i = 0; i < 7; i++)
         for (j = 0; j < 9; j++)
@@ -235,6 +252,6 @@ int main(void)
                    mb_hgas(TS[i], WS[j]));
     for (i = 0; i < 5; i++)
         for (j = 0; j < 9; j++)
-            printf("inv,%.5f,%.3f,%.17g\n", PS[i], WS[j], mb_T_bubble_PW(PS[i], WS[j]));
+            printf("inv,%.6f,%.3f,%.17g\n", PS[i], WS[j], mb_T_bubble_PW(PS[i], WS[j]));
     return 0;
 }

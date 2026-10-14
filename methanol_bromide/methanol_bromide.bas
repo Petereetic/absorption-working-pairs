@@ -27,9 +27,14 @@ Attribute VB_Name = "MethanolBromide"
 ' 参考态（本文档约定，论文未定义绝对基准）：
 '   hsol(0°C, 任意 w) = 100 kJ/kg；hgas = hsol + H'。
 '
+' 压力单位（2026-10-14 全库统一）：公开函数返回/接受 MPa；内部原生
+' 计算以 bar 进行（私有函数 PsolBar / TbubBar 及 MeohPrefBar /
+' MeohTsatBar），公开函数只做边界缩放（MPa = bar×0.1；入参 MPa×10
+' 回 bar）。
+'
 ' 工作表函数：
-'   =MB_Psol(T_K, w)    泡点压力，bar
-'   =MB_Tbub(P_bar, w)  泡点温度，K
+'   =MB_Psol(T_K, w)    泡点压力，MPa
+'   =MB_Tbub(P_MPa, w)  泡点温度，K
 '   =MB_Cp(T_K, w)      溶液比热，kJ/(kg·K)
 '   =MB_Hprime(T_K, w)  汽化焓 H'，kJ/kg（仅 w=0.25~0.356）
 '   =MB_hsol(T_K, w)    溶液比焓，kJ/kg
@@ -145,59 +150,70 @@ Private Sub CpAB(ByVal w As Double, ByRef A As Double, ByRef B As Double)
     B = -0.000205 + 0.00928 * w - 0.0101 * w * w
 End Sub
 
-' 式(3.1)：泡点压力，bar
-Public Function MB_Psol(ByVal T_K As Double, ByVal w As Double) As Double
+' 式(3.1) 原生值（私有）：泡点压力，bar
+Private Function PsolBar(ByVal T_K As Double, ByVal w As Double) As Double
     Dim log10p As Double
     log10p = PchipEval(1, w) + PchipEval(2, w) * (1000# / T_K - 2.3)
-    MB_Psol = 10# ^ log10p / 1000#
+    PsolBar = 10# ^ log10p / 1000#
 End Function
 
-' 式(3.1) 解析反解：泡点温度，K
-Public Function MB_Tbub(ByVal P_bar As Double, ByVal w As Double) As Double
+' 式(3.1)：泡点压力，MPa
+Public Function MB_Psol(ByVal T_K As Double, ByVal w As Double) As Double
+    MB_Psol = PsolBar(T_K, w) * 0.1
+End Function
+
+' 式(3.1) 解析反解原生值（私有）：泡点温度，K；P_bar 巴
+Private Function TbubBar(ByVal P_bar As Double, ByVal w As Double) As Double
     Dim log10p As Double
     log10p = Log(P_bar * 1000#) / Log(10#)
-    MB_Tbub = 1000# / ((log10p - PchipEval(1, w)) / PchipEval(2, w) + 2.3)
+    TbubBar = 1000# / ((log10p - PchipEval(1, w)) / PchipEval(2, w) + 2.3)
 End Function
 
-' 纯甲醇饱和压（私有辅助，与 Python 版 meoh_pref_bar 同常数）：
+' 式(3.1) 解析反解：泡点温度，K；P_MPa 兆帕
+Public Function MB_Tbub(ByVal P_MPa As Double, ByVal w As Double) As Double
+    MB_Tbub = TbubBar(P_MPa * 10#, w)
+End Function
+
+' 纯甲醇饱和压（私有辅助，原生 bar，与 Python 版 _meoh_pref_bar 同常数）：
 ' Antoine 拟合自论文附录 A 表：log10 P[mmHg] = 8.885298 - 2070.3714/(T[K] + 6.3818)
 Private Function MeohPrefBar(ByVal T_K As Double) As Double
     MeohPrefBar = 10# ^ (8.885298 - 2070.3714 / (T_K + 6.3818)) * 0.0013332239
 End Function
 
 ' 由露点温度与溶液温度反解甲醇质量分数 w：
-' 露点定压 P = MeohPrefBar(Tdew_K)（盐不挥发，气相为纯甲醇），
-' 再二分 80 次反解 MB_Psol(Tsol_K, w) = P，
+' 露点定压 P = MeohPrefBar(Tdew_K)（内部原生 bar 值；盐不挥发，
+' 气相为纯甲醇），再二分 80 次反解 PsolBar(Tsol_K, w) = P，
 ' 括号取泡点函数有效浓度域 w = 0.243~0.509。
 ' 无根时返回 Empty（如溶液温度明显低于露点温度）。
 ' 与 C/Python 同算法；本函数未在真实 Excel 中编译运行。
 Public Function MB_XiByTsolTdew(ByVal Tsol_K As Double, ByVal Tdew_K As Double) As Variant
     Dim P As Double, lo As Double, hi As Double, mid As Double, k As Long
     P = MeohPrefBar(Tdew_K)
-    If P < MB_Psol(Tsol_K, 0.243) Or P > MB_Psol(Tsol_K, 0.509) Then
+    If P < PsolBar(Tsol_K, 0.243) Or P > PsolBar(Tsol_K, 0.509) Then
         MB_XiByTsolTdew = Empty
         Exit Function
     End If
     lo = 0.243: hi = 0.509
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If MB_Psol(Tsol_K, mid) < P Then lo = mid Else hi = mid
+        If PsolBar(Tsol_K, mid) < P Then lo = mid Else hi = mid
     Next k
     MB_XiByTsolTdew = 0.5 * (lo + hi)
 End Function
 
 
-' 纯甲醇饱和温度 [K]（私有辅助）：MeohPrefBar 的解析反解，
-' 与 Python 版 meoh_Tsat_bar 同式。
+' 纯甲醇饱和温度 [K]（私有辅助，原生 bar）：MeohPrefBar 的解析反解，
+' 与 Python 版 _meoh_Tsat_bar 同式。
 Private Function MeohTsatBar(ByVal P_bar As Double) As Double
     MeohTsatBar = 2070.3714 / (8.885298 - Log(P_bar / 0.0013332239) / Log(10#)) - 6.3818
 End Function
 
 ' 溶液在 (T_K, w) 的露点温度 [K]（全库 TdewByTsolXi 约定）：
-' Tdew = MeohTsatBar(MB_Psol(T_K, w))，以本模块自有纯甲醇线评价
+' Tdew = MeohTsatBar(PsolBar(T_K, w))（实现内部走原生 bar 私有函数；
+' 公开口径为 MPa），以本模块自有纯甲醇线评价
 ' 溶液表面压力 Psol。盐不挥发，气相为纯甲醇。
 Public Function MB_TdewByTsolW(ByVal T_K As Double, ByVal w As Double) As Double
-    MB_TdewByTsolW = MeohTsatBar(MB_Psol(T_K, w))
+    MB_TdewByTsolW = MeohTsatBar(PsolBar(T_K, w))
 End Function
 
 ' 由溶液比焓 h [kJ/kg] 与甲醇质量分数 w 反解溶液温度 [K]：

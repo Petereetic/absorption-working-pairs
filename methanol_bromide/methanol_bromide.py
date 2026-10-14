@@ -58,6 +58,11 @@
 #   式(4.11) 黏度（Guzman-Andrade 型）：mu = A·exp(B/T)，OCR 数字残损严重
 #   （含 A 的 10^-3 量级乘子与 B 的小数点），不可用，待按表 4.3 重拟合。
 
+# 压力单位（2026-10-14 全库统一）：本模块公开函数返回/接受 MPa。
+# 内部原生计算以 bar 进行（私有函数名后缀 _bar），公开函数只做边界
+# 缩放（MPa = bar×0.1；入参 MPa×10 回 bar）。meoh_pref_bar /
+# meoh_Tsat_bar 函数名中的 _bar 为历史名暂留，其公开口径实为 MPa。
+
 import math
 
 # ---- 表 3.3（p.74）：节点组成（甲醇质量分数）与 C1、C2（C2 为负值） ----
@@ -119,16 +124,26 @@ def _c2(w):
     return _pchip_eval(_W_NODES, _C2_NODES, w)
 
 
-def psol_TW(T_K, w):
-    """式(3.1)：泡点压力，bar。T_K 开尔文，w 甲醇质量分数（0.243~0.509）。"""
+def _psol_TW_bar(T_K, w):
+    """式(3.1) 原生值（私有）：泡点压力，bar。"""
     log10p_mbar = _c1(w) + _c2(w) * (1000.0 / T_K - 2.3)
     return 10.0 ** log10p_mbar / 1000.0
 
 
-def T_bubble_PW(P_bar, w):
-    """式(3.1) 解析反解：泡点温度，K。P_bar 巴，w 甲醇质量分数。"""
+def psol_TW(T_K, w):
+    """式(3.1)：泡点压力，MPa。T_K 开尔文，w 甲醇质量分数（0.243~0.509）。"""
+    return _psol_TW_bar(T_K, w) * 0.1
+
+
+def _T_bubble_PW_bar(P_bar, w):
+    """式(3.1) 解析反解原生值（私有）：泡点温度，K。P_bar 巴。"""
     log10p_mbar = math.log10(P_bar * 1000.0)
     return 1000.0 / ((log10p_mbar - _c1(w)) / _c2(w) + 2.3)
+
+
+def T_bubble_PW(P_MPa, w):
+    """式(3.1) 解析反解：泡点温度，K。P_MPa 兆帕，w 甲醇质量分数。"""
+    return _T_bubble_PW_bar(P_MPa * 10.0, w)
 
 
 def _cp_AB(w):
@@ -170,36 +185,48 @@ def hgas(T_K, w):
 _MEOH_ANT = (8.885298, 2070.3714, 6.3818)  # log10 P[mmHg], T[K]；300~1000 mmHg 内误差 <=0.11%
 
 
-def meoh_pref_bar(T_K):
-    """纯甲醇饱和压力，bar（Antoine，拟合自论文附录 A 数据点）。"""
+def _meoh_pref_bar(T_K):
+    """纯甲醇饱和压力原生值（私有）：bar（Antoine，拟合自论文附录 A 数据点）。"""
     A, B, C = _MEOH_ANT
     return (10.0 ** (A - B / (T_K + C))) * 1.3332239e-3
 
 
-def meoh_Tsat_bar(P_bar):
-    """纯甲醇饱和温度，K（上式解析反解）。"""
+def meoh_pref_bar(T_K):
+    """纯甲醇饱和压力，MPa（Antoine，拟合自论文附录 A 数据点）。
+    函数名中 _bar 为历史名暂留，返回值实为 MPa。"""
+    return _meoh_pref_bar(T_K) * 0.1
+
+
+def _meoh_Tsat_bar(P_bar):
+    """纯甲醇饱和温度原生值（私有）：K，P_bar 巴（Antoine 解析反解）。"""
     A, B, C = _MEOH_ANT
     return B / (A - math.log10(P_bar / 1.3332239e-3)) - C
+
+
+def meoh_Tsat_bar(P_MPa):
+    """纯甲醇饱和温度，K（上式解析反解）。P_MPa 兆帕；
+    函数名中 _bar 为历史名暂留，入参实为 MPa。"""
+    return _meoh_Tsat_bar(P_MPa * 10.0)
 
 
 def w_by_tsol_tdew(Tsol_K, Tdew_K):
     """由露点温度与溶液温度反解甲醇质量分数 w。
 
-    露点定压：P = meoh_pref_bar(Tdew_K)（盐不挥发，气相为纯甲醇，
-    纯甲醇饱和压取本模块自有 Antoine 式，见上）；再二分 80 次反解
-    psol_TW(Tsol_K, w) = P，括号取泡点函数有效浓度域
+    露点定压：P = _meoh_pref_bar(Tdew_K)（内部原生 bar 值；盐不挥发，
+    气相为纯甲醇，纯甲醇饱和压取本模块自有 Antoine 式，见上）；再二分
+    80 次反解 _psol_TW_bar(Tsol_K, w) = P，括号取泡点函数有效浓度域
     w = 0.243~0.509（泡点压力在该域内随 w 单调增）。
     无根时返回 None（P 落在 Tsol 下泡点压力跨度之外，
     如溶液温度明显低于露点温度）。"""
-    P = meoh_pref_bar(Tdew_K)
-    Plo = psol_TW(Tsol_K, _W_NODES[0])
-    Phi = psol_TW(Tsol_K, _W_NODES[-1])
+    P = _meoh_pref_bar(Tdew_K)
+    Plo = _psol_TW_bar(Tsol_K, _W_NODES[0])
+    Phi = _psol_TW_bar(Tsol_K, _W_NODES[-1])
     if not (Plo <= P <= Phi):
         return None
     lo, hi = _W_NODES[0], _W_NODES[-1]
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if psol_TW(Tsol_K, mid) < P:
+        if _psol_TW_bar(Tsol_K, mid) < P:
             lo = mid
         else:
             hi = mid
@@ -209,11 +236,12 @@ def w_by_tsol_tdew(Tsol_K, Tdew_K):
 
 def tdew_from_tsol_w(T_K, w):
     """溶液在 (T_K, w) 的露点温度 [K]（全库 TdewByTsolXi 约定）：
-        Tdew = meoh_Tsat_bar(psol_TW(T_K, w))，
+        Tdew = meoh_Tsat_bar(psol_TW(T_K, w))（公开口径 MPa；
+        实现内部走原生 bar 私有函数 _meoh_Tsat_bar(_psol_TW_bar(...))），
     即以本模块自有纯甲醇 Antoine 线评价溶液表面压力 Psol 所对应的
     饱和温度。盐不挥发，气相为纯甲醇，无端点约定问题。w 的有效域
     随 psol_TW（0.243~0.509）。"""
-    return meoh_Tsat_bar(psol_TW(T_K, w))
+    return _meoh_Tsat_bar(_psol_TW_bar(T_K, w))
 
 
 def tsol_by_hsol(h, w):
@@ -253,10 +281,10 @@ def viscosity_eq411_UNVERIFIED(T_K, w):
 
 
 if __name__ == "__main__":
-    # 自检：附录 A 等压温度表（300 mmHg = 0.39997 bar）泡点温度
-    print("T_bubble @300mmHg: w=0.250 -> %.2f K (thesis 419.0)" % T_bubble_PW(0.39997, 0.250))
-    print("T_bubble @300mmHg: w=0.301 -> %.2f K (thesis 391.4)" % T_bubble_PW(0.39997, 0.301))
-    print("T_bubble @300mmHg: w=0.356 -> %.2f K (thesis 380.3)" % T_bubble_PW(0.39997, 0.356))
+    # 自检：附录 A 等压温度表（300 mmHg = 0.039997 MPa）泡点温度
+    print("T_bubble @300mmHg: w=0.250 -> %.2f K (thesis 419.0)" % T_bubble_PW(0.039997, 0.250))
+    print("T_bubble @300mmHg: w=0.301 -> %.2f K (thesis 391.4)" % T_bubble_PW(0.039997, 0.301))
+    print("T_bubble @300mmHg: w=0.356 -> %.2f K (thesis 380.3)" % T_bubble_PW(0.039997, 0.356))
     # H' 验算点
     print("H'(10C, 0.25)  = %.0f kJ/kg (thesis table 1940)" % h_prime(283.15, 0.25))
     print("H'(10C, 0.356) = %.0f kJ/kg (thesis table 1601)" % h_prime(283.15, 0.356))
@@ -264,6 +292,6 @@ if __name__ == "__main__":
     # Cp 验算点（表 3.7）
     print("Cp(51.3C, 0.403) = %.3f (measured 1.27)" % cp(273.15 + 51.3, 0.403))
     print("Cp(69.9C, 0.403) = %.3f (measured 1.30)" % cp(273.15 + 69.9, 0.403))
-    print("P_bubble(80C, 0.35) = %.4f bar" % psol_TW(353.15, 0.35))
+    print("P_bubble(80C, 0.35) = %.4f MPa" % psol_TW(353.15, 0.35))
     print("hsol(80C, 0.35) = %.1f kJ/kg, hgas = %.1f kJ/kg"
           % (hsol(353.15, 0.35), hgas(353.15, 0.35)))
