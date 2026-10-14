@@ -21,7 +21,7 @@
  * Conventions (library-wide unified naming, 2026-10-12 renaming)
  * --------------------------------------------------------------
  * X : LiBr mass percent as a number (e.g. 50 means 50 wt%), NOT a fraction.
- * T : degC.  SI outputs: h kJ/kg, p Pa, lambda W/(m K), eta Pa s,
+ * T : degC.  SI outputs: h kJ/kg, p MPa, lambda W/(m K), eta Pa s,
  *     rho kg/m^3, sigma N/m; dew point / crystallisation temperature degC.
  * Function names follow the unified system (Psol, TdewByTsolXi,
  * XiByTsolTdew, hsol, TsolByHsol, ...); no aliases are kept.
@@ -46,7 +46,10 @@
  * Transcription notes (from the Python set's collation of the papers)
  * -------------------------------------------------------------------
  * - PRESS: the paper text says degF in / psia out, but the Fortran code
- *   takes degC in and returns Pa (x 6894.757); the code is followed.
+ *   takes degC in and returns Pa (x 6894.757); the code is followed for
+ *   the value, then converted to MPa (delivery rule, 2026-10-14: the
+ *   JavaScript set returns pressure in MPa; the C/Python/VBA sets still
+ *   return Pa, and the internal inverses here convert back to Pa).
  * - TCON's TUNKN is printed in degF numbers (260/280/320/360) yet is
  *   compared against degC T, so its unknown-region check never fires;
  *   reproduced as printed.
@@ -61,6 +64,12 @@
  * (X, T) grid per function (fitted domains incl. boundary-interior
  * points; error classification included) -- max relative difference
  * at the 1e-12 level or below.  See the module's delivery record.
+ * Re-checked 2026-10-14 after the Pa -> MPa change, on a 3,285-case
+ * grid (10 direct functions on the 324-point grid plus inverse and
+ * Tcryst anchor sets): Psol/PsolChua compared against the Python
+ * values x 1e-6, all other functions unchanged -- 2,382 value points,
+ * 894 error points with matching classification, 0 mismatches, max
+ * relative difference 1.21e-12.
  */
 
 // ---------------------------------------------------------------------------
@@ -212,14 +221,20 @@ function Tdew(X, T) {
   return 5.0 / 9.0 * (tdewPolyF(X, T) - 32.0);
 }
 
-/** Solution surface (equilibrium) vapour pressure [Pa] (Patterson PRESS).
- *  Range: X in [0,70] wt%, T in [4.4,182.2] degC. */
-function Psol(X, T) {
+function psolPa(X, T) {
+  // Patterson PRESS, fit value in Pa (internal; the public Psol scales
+  // to MPa, and the inverses below work in Pa as in the other sets).
   rangeCheck(X, T, 'Psol', 0, 70, 4.4, 182.2);
   checkRegion(X, T, 'Psol', false);
   const tdewF = tdewPolyF(X, T);
   const TR = tdewF + 459.7;
   return Math.pow(10.0, 6.21147 - 2886.373 / TR - 337269.46 / (TR * TR)) * 6894.757;
+}
+
+/** Solution surface (equilibrium) vapour pressure [MPa] (Patterson PRESS).
+ *  Range: X in [0,70] wt%, T in [4.4,182.2] degC. */
+function Psol(X, T) {
+  return psolPa(X, T) * 1e-6;  // Pa -> MPa (2026-10-14 unit rule)
 }
 
 /** Thermal conductivity [W/(m K)]. Range: X in [0,70] wt%, T in [4.4,182.2] degC. */
@@ -318,9 +333,9 @@ function wagnerPrefWater(T_C) {
   return Pc * Math.exp((Tc / T) * s);
 }
 
-/** Solution vapour pressure [Pa] by the Chua Duehring equation.
- *  Range: X in [0,60] wt%, T in [0,190] degC (see header note on x > 60). */
-function PsolChua(X, T) {
+function psolChuaPa(X, T) {
+  // Chua Duehring vapour pressure, fit value in Pa (internal; the
+  // public PsolChua below scales to MPa, XiByTsolTdew works in Pa).
   if (!(0 <= X && X <= 60 && 0 <= T && T <= 190)) {
     throw domainError('RANGE',
       `PsolChua: (X=${X.toFixed(2)} wt%, T=${T.toFixed(2)} degC) is outside the ` +
@@ -335,6 +350,12 @@ function PsolChua(X, T) {
   // T_C = AD * Tdp_C + BD  ->  Tdp_C = (T_C - BD) / AD
   const Tdp_C = (T - BD) / AD;
   return wagnerPrefWater(Tdp_C);
+}
+
+/** Solution vapour pressure [MPa] by the Chua Duehring equation.
+ *  Range: X in [0,60] wt%, T in [0,190] degC (see header note on x > 60). */
+function PsolChua(X, T) {
+  return psolChuaPa(X, T) * 1e-6;  // Pa -> MPa (2026-10-14 unit rule)
 }
 
 /** Density [kg/m^3] by Chua Table 2. Range: X in [0,70] wt%, T in [0,200] degC. */
@@ -373,7 +394,7 @@ function tsatWaterPatterson(P_Pa) {
  *  TdewByTsolXi = Tsat_water(Psol(X, T)) on the Patterson route.  By
  *  construction equal to Tdew(X, T).  Domain errors of Psol propagate. */
 function TdewByTsolXi(X, T) {
-  const P = Psol(X, T);
+  const P = psolPa(X, T);  // internal Pa value (public Psol returns MPa)
   return tsatWaterPatterson(P);
 }
 
@@ -383,14 +404,14 @@ function TdewByTsolXi(X, T) {
  *  X in [0, 60].  Returns null when no root exists in the bracket.
  *  Domain errors of PsolChua propagate. */
 function XiByTsolTdew(Tsol_C, Tdew_C) {
-  const P = wagnerPrefWater(Tdew_C);
-  const Pmax = PsolChua(0.0, Tsol_C);
-  const Pmin = PsolChua(60.0, Tsol_C);
+  const P = wagnerPrefWater(Tdew_C);  // Pa throughout (internal psolChuaPa)
+  const Pmax = psolChuaPa(0.0, Tsol_C);
+  const Pmin = psolChuaPa(60.0, Tsol_C);
   if (!(Pmin <= P && P <= Pmax)) return null;
   let lo = 0.0, hi = 60.0;
   for (let i = 0; i < 80; i++) {
     const mid = 0.5 * (lo + hi);
-    if (PsolChua(mid, Tsol_C) > P) lo = mid; else hi = mid;
+    if (psolChuaPa(mid, Tsol_C) > P) lo = mid; else hi = mid;
   }
   return 0.5 * (lo + hi);
 }
