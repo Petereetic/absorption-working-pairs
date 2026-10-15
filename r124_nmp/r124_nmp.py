@@ -35,7 +35,12 @@ NOT covered (no published data): mixture enthalpy, density,
 viscosity.  The absorbent is treated as non-volatile, so the dew
 point is the pure-R124 saturation temperature.
 
-Units: T in degC, P in bar.
+Units: T in degC, P in MPa (public boundary, 2026-10-14).
+Internal native unit is bar: private _*_bar functions hold the
+original bodies verbatim; public functions only scale at the
+boundary (returned pressure MPa = bar x 0.1; input pressure
+MPa x 10 back to bar), so temperature/concentration outputs are
+unchanged bit for bit.
 """
 import math
 
@@ -59,18 +64,30 @@ _TMIN, _TMAX = 30.0, 90.0
 
 
 
-def pref_R124(T_C):
-    """Pure R124 saturation pressure [bar], 30-90 degC."""
+def _pref_R124_bar(T_C):
+    """Private native: pure R124 saturation pressure [bar], 30-90 degC."""
     T = T_C + 273.15
     return math.exp(_ANT_A - _ANT_B / (T + _ANT_C)) / 100.0
 
 
-def Tsat_R124(P_bar):
-    """Pure R124 saturation temperature [degC] (= dew point here)."""
+def pref_R124(T_C):
+    """Pure R124 saturation pressure [MPa], 30-90 degC."""
+    return _pref_R124_bar(T_C) * 0.1
+
+
+def _Tsat_R124_bar(P_bar):
+    """Private native: pure R124 saturation temperature [degC] at P [bar]."""
     if P_bar is None or P_bar <= 0:
         return None
     T = _ANT_B / (_ANT_A - math.log(P_bar * 100.0)) - _ANT_C
     return T - 273.15
+
+
+def Tsat_R124(P_MPa):
+    """Pure R124 saturation temperature [degC] (= dew point here); P [MPa]."""
+    if P_MPa is None or P_MPa <= 0:
+        return None
+    return _Tsat_R124_bar(P_MPa * 10.0)
 
 
 def _VL_R124(T_C):
@@ -112,12 +129,12 @@ def gamma1(T_C, xi):
     return math.exp(lng)
 
 
-def psol(T_C, xi):
-    """Bubble-point pressure [bar]; vapor = pure R124."""
+def _psol_bar(T_C, xi):
+    """Private native: bubble-point pressure [bar]; vapor = pure R124."""
     if not (_TMIN <= T_C <= _TMAX) or not (0.0 < xi < 1.0):
         return None
     T = T_C + 273.15
-    ps1 = pref_R124(T_C)                      # bar
+    ps1 = _pref_R124_bar(T_C)                 # bar
     x1 = xi_to_x(xi)
     p = ps1 * x1 * gamma1(T_C, xi)            # bar
     vl = _VL_R124(T_C)                        # m3/mol
@@ -131,20 +148,33 @@ def psol(T_C, xi):
     return p
 
 
-def bubble_T(P_bar, xi, iters=60):
-    """Bubble-point temperature [degC] at P [bar]; None if the root is
-    outside the validated 30-90 degC window."""
+def psol(T_C, xi):
+    """Bubble-point pressure [MPa]; vapor = pure R124."""
+    p = _psol_bar(T_C, xi)
+    return None if p is None else p * 0.1
+
+
+def _bubble_T_bar(P_bar, xi, iters=60):
+    """Private native: bubble-point temperature [degC] at P [bar]."""
     lo, hi = _TMIN, _TMAX
-    plo, phi = psol(lo, xi), psol(hi, xi)
+    plo, phi = _psol_bar(lo, xi), _psol_bar(hi, xi)
     if plo is None or phi is None or not (plo <= P_bar <= phi):
         return None
     for _ in range(iters):
         mid = 0.5 * (lo + hi)
-        if psol(mid, xi) < P_bar:
+        if _psol_bar(mid, xi) < P_bar:
             lo = mid
         else:
             hi = mid
     return 0.5 * (lo + hi)
+
+
+def bubble_T(P_MPa, xi, iters=60):
+    """Bubble-point temperature [degC] at P [MPa]; None if the root is
+    outside the validated 30-90 degC window."""
+    if P_MPa is None:
+        return None
+    return _bubble_T_bar(P_MPa * 10.0, xi, iters)
 
 
 def xi_by_tsol_tdew(Tsol_C, Tdew_C):
@@ -156,31 +186,40 @@ def xi_by_tsol_tdew(Tsol_C, Tdew_C):
     there, 0 at xi -> 0 and pref_R124(Tsol) at xi -> 1, serve as the
     bracket, and the bisection only ever evaluates interior points.
     None if there is no root (e.g. Tsol below Tdew, or Tsol outside
-    the validated 30-90 degC window)."""
+    the validated 30-90 degC window).
+    (Internal calls use the private native bar functions, so the
+    result is unchanged bit for bit.)"""
     if not (_TMIN <= Tsol_C <= _TMAX):
         return None
-    P = pref_R124(Tdew_C)
-    if not (P <= pref_R124(Tsol_C)):
+    P = _pref_R124_bar(Tdew_C)
+    if not (P <= _pref_R124_bar(Tsol_C)):
         return None
     lo, hi = 0.0, 1.0
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if psol(Tsol_C, mid) < P:
+        if _psol_bar(Tsol_C, mid) < P:
             lo = mid
         else:
             hi = mid
     return 0.5 * (lo + hi)
 
 
-def dew_T(P_bar, xi=None):
-    """Dew point [degC]: absorbent non-volatile -> pure R124 Tsat.
+def _dew_T_bar(P_bar, xi=None):
+    """Private native: dew point [degC] at P [bar]."""
+    if P_bar is None:
+        return None
+    T = _Tsat_R124_bar(P_bar)
+    return T if T is not None and -30.0 <= T <= _TMAX else None
+
+
+def dew_T(P_MPa, xi=None):
+    """Dew point [degC] at P [MPa]: absorbent non-volatile -> pure R124 Tsat.
     The mixture model is windowed to 30-90 degC, but the dew point is
     a pure-fluid reference: below 30 degC the Antoine (anchored on
     REFPROP at 303-363 K) is extrapolated a short way, to -30 degC."""
-    if P_bar is None:
+    if P_MPa is None:
         return None
-    T = Tsat_R124(P_bar)
-    return T if T is not None and -30.0 <= T <= _TMAX else None
+    return _dew_T_bar(P_MPa * 10.0, xi)
 
 
 
@@ -191,12 +230,14 @@ def tdew_by_tsol_xi(T_C, xi):
     the pure-R124 saturation temperature on this module's own
     Antoine line at the solution surface pressure Psol.  Absorbent
     treated as non-volatile.  None where psol or dew_T is None
-    (model window 30-90 degC; dew window -30..90 degC)."""
-    return dew_T(psol(T_C, xi))
+    (model window 30-90 degC; dew window -30..90 degC).
+    (Evaluated on the private native bar functions, so the result
+    is unchanged bit for bit.)"""
+    return _dew_T_bar(_psol_bar(T_C, xi))
 
 
 if __name__ == "__main__":
-    print("R124-NMP: bubble pressure [bar]")
+    print("R124-NMP: bubble pressure [MPa]")
     print("  T_C    xi=0.3   xi=0.5   xi=0.7   xi=0.85")
     for T in (30.0, 50.0, 70.0, 90.0):
         row = " ".join("%8.3f" % psol(T, xi) for xi in (0.3, 0.5, 0.7, 0.85))

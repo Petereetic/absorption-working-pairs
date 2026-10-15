@@ -16,6 +16,6 @@ DATA = [(303.15, 0.5492, 104.4), (303.15, 0.6466, 159.5), (303.15, 0.7154, 211.9
 devs = []
 for T_K, x1, pexp_kPa in DATA:
     xi = x_to_xi(x1)
-    pm = psol(T_K - 273.15, xi) * 100.0   # bar -> kPa
+    pm = psol(T_K - 273.15, xi) * 1000.0   # MPa -> kPa
     devs.append(abs(pm - pexp_kPa) / pexp_kPa * 100.0)
 print("r124_nmp: n=%d  AARD=%.2f%%  MAX=%.2f%%" % (len(DATA), sum(devs)/len(devs), max(devs)))

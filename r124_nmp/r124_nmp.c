@@ -4,7 +4,12 @@
  * 3414-3422 (five-parameter NRTL, Eqs. 4-11; parameters Table 8;
  * measured data Tables 6/7).  Antoine psat and VL fits to the paper's
  * Table 5 (REFPROP).  Validated range: 30-90 degC; NaN outside.
- * Conventions: T_C in degC, xi = R124 mass fraction, P in bar.
+ * Conventions: T_C in degC, xi = R124 mass fraction, P in MPa
+ * (public boundary, 2026-10-14).  Internal native unit is bar:
+ * the static *_Bar functions hold the original bodies verbatim;
+ * public functions only scale at the boundary (returned pressure
+ * MPa = bar x 0.1; input pressure MPa x 10 back to bar), so
+ * temperature/concentration outputs are unchanged bit for bit.
  * Verified: reproduces the paper's 53 measured points with
  * AARD 1.25 % (paper reports 1.25 %). */
 #include <math.h>
@@ -15,13 +20,20 @@ static const double R124NMP_ALPHA = -0.0515;
 static const double R124NMP_M1 = 136.50, R124NMP_M2 = 99.13;
 static const double R124NMP_RGAS = 8.314;
 
-double R124NMP_PrefR124(double T_C)   /* Antoine fit to Table 5, bar */
+static double R124NMP_PrefR124Bar(double T_C)  /* Antoine fit to Table 5, bar */
 { double T = T_C + 273.15;
   return exp(14.750463 - 2527.6371 / (T - 10.9815)) / 100.0; }
 
-double R124NMP_TsatR124(double P_bar)
+double R124NMP_PrefR124(double T_C)   /* MPa */
+{ return R124NMP_PrefR124Bar(T_C) * 0.1; }
+
+static double R124NMP_TsatR124Bar(double P_bar)
 { if (P_bar <= 0) return NAN;
   return 2527.6371 / (14.750463 - log(P_bar * 100.0)) + 10.9815 - 273.15; }
+
+double R124NMP_TsatR124(double P_MPa)
+{ if (P_MPa <= 0) return NAN;
+  return R124NMP_TsatR124Bar(P_MPa * 10.0); }
 
 static double R124NMP_VL(double T_C)  /* m3/mol, quadratic fit to Table 5 */
 { return (3.43888821e-06 * T_C * T_C + 5.21631071e-06 * T_C
@@ -47,10 +59,10 @@ double R124NMP_Gamma1(double T_C, double xi)
                    + t12 * G12 / pow(x2 + x1 * G12, 2));
   return exp(lng); }
 
-double R124NMP_Psol(double T_C, double xi)
+static double R124NMP_PsolBar(double T_C, double xi)  /* bar */
 { double T, ps1, x1, g1, vl, p, pn; int i;
   if (T_C < 30.0 || T_C > 90.0 || xi <= 0.0 || xi >= 1.0) return NAN;
-  T = T_C + 273.15; ps1 = R124NMP_PrefR124(T_C);
+  T = T_C + 273.15; ps1 = R124NMP_PrefR124Bar(T_C);
   x1 = R124NMP_XiToX(xi); g1 = R124NMP_Gamma1(T_C, xi); vl = R124NMP_VL(T_C);
   p = ps1 * x1 * g1;
   for (i = 0; i < 50; i++) {
@@ -60,22 +72,36 @@ double R124NMP_Psol(double T_C, double xi)
   }
   return p; }
 
-double R124NMP_BubbleT(double P_bar, double xi)
+double R124NMP_Psol(double T_C, double xi)  /* MPa */
+{ return R124NMP_PsolBar(T_C, xi) * 0.1; }
+
+static double R124NMP_BubbleTBar(double P_bar, double xi)
 { double lo = 30.0, hi = 90.0, mid; int i;
-  if (!(R124NMP_Psol(lo, xi) <= P_bar && P_bar <= R124NMP_Psol(hi, xi)))
+  if (!(R124NMP_PsolBar(lo, xi) <= P_bar && P_bar <= R124NMP_PsolBar(hi, xi)))
       return NAN;
   for (i = 0; i < 60; i++) { mid = 0.5 * (lo + hi);
-      if (R124NMP_Psol(mid, xi) < P_bar) lo = mid; else hi = mid; }
+      if (R124NMP_PsolBar(mid, xi) < P_bar) lo = mid; else hi = mid; }
   return 0.5 * (lo + hi); }
 
-double R124NMP_DewT(double P_bar);  /* forward: defined below */
+double R124NMP_BubbleT(double P_MPa, double xi)
+{ return R124NMP_BubbleTBar(P_MPa * 10.0, xi); }
+
+static double R124NMP_DewTBar(double P_bar)  /* absorbent non-volatile, bar */
+{ double T = R124NMP_TsatR124Bar(P_bar);
+  return (T >= -30.0 && T <= 90.0) ? T : NAN;  /* dew = pure-fluid reference; Antoine extrapolated to -30 C */ }
+
+double R124NMP_DewT(double P_MPa)  /* absorbent non-volatile, MPa */
+{ return R124NMP_DewTBar(P_MPa * 10.0); }
+
 /* Dew-point temperature [degC] of the solution at (T_C, xi)
    (library-wide TdewByTsolXi convention):
    R124NMP_DewT(R124NMP_Psol(T_C, xi)) on this module's own Antoine pure
-   line.  NAN where Psol or DewT is NAN. */
+   line.  NAN where Psol or DewT is NAN.
+   (Evaluated on the private native bar functions, so the result
+   is unchanged bit for bit.) */
 double R124NMP_TdewByTsolXi(double T_C, double xi)
 {
-    return R124NMP_DewT(R124NMP_Psol(T_C, xi));
+    return R124NMP_DewTBar(R124NMP_PsolBar(T_C, xi));
 }
 
 /* Concentration from dew-point temperature and solution temperature:
@@ -85,16 +111,14 @@ double R124NMP_TdewByTsolXi(double T_C, double xi)
  * there, 0 (xi -> 0) and PrefR124(Tsol) (xi -> 1), serve as the
  * bracket - the bisection only ever evaluates interior points.
  * Returns NAN if no root (e.g. Tsol below Tdew, or Tsol outside the
- * validated 30-90 degC window). */
+ * validated 30-90 degC window).
+ * (Internal calls use the private native bar functions, so the
+ * result is unchanged bit for bit.) */
 double R124NMP_XiByTsolTdew(double Tsol_C, double Tdew_C)
 { double P, lo = 0.0, hi = 1.0, mid; int i;
   if (Tsol_C < 30.0 || Tsol_C > 90.0) return NAN;
-  P = R124NMP_PrefR124(Tdew_C);
-  if (!(P <= R124NMP_PrefR124(Tsol_C))) return NAN;
+  P = R124NMP_PrefR124Bar(Tdew_C);
+  if (!(P <= R124NMP_PrefR124Bar(Tsol_C))) return NAN;
   for (i = 0; i < 80; i++) { mid = 0.5 * (lo + hi);
-      if (R124NMP_Psol(Tsol_C, mid) < P) lo = mid; else hi = mid; }
+      if (R124NMP_PsolBar(Tsol_C, mid) < P) lo = mid; else hi = mid; }
   return 0.5 * (lo + hi); }
-
-double R124NMP_DewT(double P_bar)  /* absorbent non-volatile */
-{ double T = R124NMP_TsatR124(P_bar);
-  return (T >= -30.0 && T <= 90.0) ? T : NAN;  /* dew = pure-fluid reference; Antoine extrapolated to -30 C */ }
