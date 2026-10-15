@@ -2,6 +2,8 @@
  * R134a / R22 / R124 / H2O / NH3 / CH3OH / R32 / R218 / CO2
  * 基准：CoolProp 内置参考状态方程（R134a: Tillner-Roth & Baehr 1994）
  * 参考态：0°C 饱和液体焓 = 100 kJ/kg
+ * 压力公开单位 MPa：Wagner 拟合内部以 bar 计（Pc 为 bar 系数），
+ *   Pref ×0.1 返回 MPa、Tsat 入参 MPa ×10 回 bar 二分；lnP 六工质原生 MPa。
  *   Psat: Wagner 方程 ln(P/Pc)=(Tc/T)(a1 τ+a2 τ^1.5+a3 τ^2.5+a4 τ^5), τ=1-T/Tc
  *     R134a: Tc=374.21K Pc=40.59bar, -50~95°C, 偏差 0.031%
  *     R22:   Tc=369.30K Pc=49.90bar, -50~90°C, 偏差 0.0065%
@@ -10,7 +12,7 @@
  *     Tc=395.428K Pc=36.245bar, -40~110°C, Psat 偏差 0.111%,
  *     hL/hV 偏差 <1.63 kJ/kg；焓由表基准（0°C 液体 = 200）平移 -100
  * 2026-10-13 增补六工质：NIST WebBook 饱和表拟合（笔记见 fit-notes/）；
- *   饱和压 lnP-t 7 次多项式（ln(P/MPa)，x10 以 bar 返回），对表最大偏差
+ *   饱和压 lnP-t 7 次多项式（ln(P/MPa)，直接以 MPa 返回），对表最大偏差
  *   全程/常用带：H2O 0.0291%/0.0128%（1~373°C）、NH3 0.0272%/0.0027%
  *   （-77~132°C）、CH3OH 0.1064%/0.0321%（-90~239°C）、R32 0.0609%/0.0147%
  *   （-136~78°C）、R218 0.1495%/0.0396%（-147~71°C）、CO2 0.0099%/0.0059%
@@ -73,39 +75,42 @@ static double poly6(const double *c, double t)
 
 typedef double (*pref_fn)(double);
 
-static double tsat_bisect(pref_fn f, double P_bar, double t_lo, double t_hi)
+static double tsat_bisect(pref_fn f, double P, double t_lo, double t_hi)
 {
-    /* 超出范围返回 NAN */
-    if (P_bar < f(t_lo) || P_bar > f(t_hi)) return NAN;
+    /* P 的单位与 f 的返回单位一致（由调用方负责换算）；超出范围返回 NAN */
+    if (P < f(t_lo) || P > f(t_hi)) return NAN;
     double lo = t_lo, hi = t_hi;
     for (int i = 0; i < 60; i++) {
         double mid = 0.5 * (lo + hi);
-        if (f(mid) < P_bar) lo = mid; else hi = mid;
+        if (f(mid) < P) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }
 
-double R134a_Pref(double t_C) { return wagner_pref(t_C, R134A_TC, R134A_PC, R134A_W); }
-double R134a_Tsat(double P_bar) { return tsat_bisect(R134a_Pref, P_bar, R134A_TLO, R134A_THI); }
+static double r134a_pref_bar(double t_C) { return wagner_pref(t_C, R134A_TC, R134A_PC, R134A_W); }
+double R134a_Pref(double t_C) { return 0.1 * r134a_pref_bar(t_C); }
+double R134a_Tsat(double P_MPa) { return tsat_bisect(r134a_pref_bar, 10.0 * P_MPa, R134A_TLO, R134A_THI); }
 double R134a_hliq(double t_C) { return poly6(R134A_HL, t_C); }
 double R134a_hgas(double t_C) { return poly6(R134A_HV, t_C); }
 double R134a_hlat(double t_C) { return R134a_hgas(t_C) - R134a_hliq(t_C); }
 
-double R22_Pref(double t_C) { return wagner_pref(t_C, R22_TC, R22_PC, R22_W); }
-double R22_Tsat(double P_bar) { return tsat_bisect(R22_Pref, P_bar, R22_TLO, R22_THI); }
+static double r22_pref_bar(double t_C) { return wagner_pref(t_C, R22_TC, R22_PC, R22_W); }
+double R22_Pref(double t_C) { return 0.1 * r22_pref_bar(t_C); }
+double R22_Tsat(double P_MPa) { return tsat_bisect(r22_pref_bar, 10.0 * P_MPa, R22_TLO, R22_THI); }
 double R22_hliq(double t_C) { return poly6(R22_HL, t_C); }
 double R22_hgas(double t_C) { return poly6(R22_HV, t_C); }
 double R22_hlat(double t_C) { return R22_hgas(t_C) - R22_hliq(t_C); }
 
-double R124_Pref(double t_C) { return wagner_pref36(t_C, R124_TC, R124_PC, R124_W); }
-double R124_Tsat(double P_bar) { return tsat_bisect(R124_Pref, P_bar, R124_TLO, R124_THI); }
+static double r124_pref_bar(double t_C) { return wagner_pref36(t_C, R124_TC, R124_PC, R124_W); }
+double R124_Pref(double t_C) { return 0.1 * r124_pref_bar(t_C); }
+double R124_Tsat(double P_MPa) { return tsat_bisect(r124_pref_bar, 10.0 * P_MPa, R124_TLO, R124_THI); }
 double R124_hliq(double t_C) { return poly6(R124_HL, t_C); }
 double R124_hgas(double t_C) { return poly6(R124_HV, t_C); }
 double R124_hlat(double t_C) { return R124_hgas(t_C) - R124_hliq(t_C); }
 
 
 /* ===== NIST WebBook 表拟合六工质（2026-10-13 增补） ===== */
-/* 饱和压：lnP-t 7 次多项式（笔记取定式，ln(P/MPa)；此处 x10 以 bar 返回）；
+/* 饱和压：lnP-t 7 次多项式（笔记取定式，ln(P/MPa)；此处直接以 MPa 返回）；
  * 焓：6 次多项式，常数项已由各表自带基准平移到统一基准（0°C 液体 = 100），
  * 平移量见各工质注（潜热不变）。系数数组均为降幂序。 */
 
@@ -168,40 +173,40 @@ static double poly7(const double *c, double t)
     return ((((((c[0]*t + c[1])*t + c[2])*t + c[3])*t + c[4])*t + c[5])*t + c[6])*t + c[7];
 }
 
-static double lnp_pref(double t_C, const double *c) { return 10.0 * exp(poly7(c, t_C)); }
+static double lnp_pref(double t_C, const double *c) { return exp(poly7(c, t_C)); }
 
 double H2O_Pref(double t_C) { return lnp_pref(t_C, H2O_LNP); }
-double H2O_Tsat(double P_bar) { return tsat_bisect(H2O_Pref, P_bar, H2O_TLO, H2O_THI); }
+double H2O_Tsat(double P_MPa) { return tsat_bisect(H2O_Pref, P_MPa, H2O_TLO, H2O_THI); }
 double H2O_hliq(double t_C) { return poly6(H2O_HL, t_C); }
 double H2O_hgas(double t_C) { return poly6(H2O_HV, t_C); }
 double H2O_hlat(double t_C) { return H2O_hgas(t_C) - H2O_hliq(t_C); }
 
 double NH3_Pref(double t_C) { return lnp_pref(t_C, NH3_LNP); }
-double NH3_Tsat(double P_bar) { return tsat_bisect(NH3_Pref, P_bar, NH3_TLO, NH3_THI); }
+double NH3_Tsat(double P_MPa) { return tsat_bisect(NH3_Pref, P_MPa, NH3_TLO, NH3_THI); }
 double NH3_hliq(double t_C) { return poly6(NH3_HL, t_C); }
 double NH3_hgas(double t_C) { return poly6(NH3_HV, t_C); }
 double NH3_hlat(double t_C) { return NH3_hgas(t_C) - NH3_hliq(t_C); }
 
 double CH3OH_Pref(double t_C) { return lnp_pref(t_C, CH3OH_LNP); }
-double CH3OH_Tsat(double P_bar) { return tsat_bisect(CH3OH_Pref, P_bar, CH3OH_TLO, CH3OH_THI); }
+double CH3OH_Tsat(double P_MPa) { return tsat_bisect(CH3OH_Pref, P_MPa, CH3OH_TLO, CH3OH_THI); }
 double CH3OH_hliq(double t_C) { return poly6(CH3OH_HL, t_C); }
 double CH3OH_hgas(double t_C) { return poly6(CH3OH_HV, t_C); }
 double CH3OH_hlat(double t_C) { return CH3OH_hgas(t_C) - CH3OH_hliq(t_C); }
 
 double R32_Pref(double t_C) { return lnp_pref(t_C, R32_LNP); }
-double R32_Tsat(double P_bar) { return tsat_bisect(R32_Pref, P_bar, R32_TLO, R32_THI); }
+double R32_Tsat(double P_MPa) { return tsat_bisect(R32_Pref, P_MPa, R32_TLO, R32_THI); }
 double R32_hliq(double t_C) { return poly6(R32_HL, t_C); }
 double R32_hgas(double t_C) { return poly6(R32_HV, t_C); }
 double R32_hlat(double t_C) { return R32_hgas(t_C) - R32_hliq(t_C); }
 
 double R218_Pref(double t_C) { return lnp_pref(t_C, R218_LNP); }
-double R218_Tsat(double P_bar) { return tsat_bisect(R218_Pref, P_bar, R218_TLO, R218_THI); }
+double R218_Tsat(double P_MPa) { return tsat_bisect(R218_Pref, P_MPa, R218_TLO, R218_THI); }
 double R218_hliq(double t_C) { return poly6(R218_HL, t_C); }
 double R218_hgas(double t_C) { return poly6(R218_HV, t_C); }
 double R218_hlat(double t_C) { return R218_hgas(t_C) - R218_hliq(t_C); }
 
 double CO2_Pref(double t_C) { return lnp_pref(t_C, CO2_LNP); }
-double CO2_Tsat(double P_bar) { return tsat_bisect(CO2_Pref, P_bar, CO2_TLO, CO2_THI); }
+double CO2_Tsat(double P_MPa) { return tsat_bisect(CO2_Pref, P_MPa, CO2_TLO, CO2_THI); }
 double CO2_hliq(double t_C) { return poly6(CO2_HL, t_C); }
 double CO2_hgas(double t_C) { return poly6(CO2_HV, t_C); }
 double CO2_hlat(double t_C) { return CO2_hgas(t_C) - CO2_hliq(t_C); }
@@ -216,7 +221,7 @@ int main(void)
                R134a_Pref(t), R134a_hliq(t), R134a_hgas(t),
                R22_Pref(t), R22_hliq(t), R22_hgas(t));
     }
-    printf("Tsat10 %.6f %.6f\n", R134a_Tsat(10.0), R22_Tsat(10.0));
+    printf("Tsat1MPa %.6f %.6f\n", R134a_Tsat(1.0), R22_Tsat(1.0));
     return 0;
 }
 #endif

@@ -1,6 +1,6 @@
 /* R22 纯物质饱和性质（单独计算文件，与合并模块 pure_fluids.c 系数逐字同源）
  * 源：CoolProp 参考状态方程拟合，与合并模块 pure_fluids 系数逐字相同；Wagner 饱和压最大偏差 0.0065%，焓偏差 0.42/0.59 kJ/kg；参考态 0°C 饱和液体 = 100 kJ/kg。
- * 函数：Pref(bar) / Tsat(°C，二分反解，超界返回 NAN) / hliq / hgas / hlat（kJ/kg）。
+ * 函数：Pref(MPa) / Tsat(°C，入参 MPa，二分反解，超界返回 NAN) / hliq / hgas / hlat（kJ/kg）。Wagner 拟合内部以 bar 计，公开边界换算。
  * 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。
  * 编译：gcc -O2 -Wall -DSTANDALONE_MAIN -o test_r22 r22.c -lm */
 #include <stdio.h>
@@ -14,18 +14,20 @@ static const double R22_TLO = -50.0, R22_THI = 90.0;
 
 static double poly6(const double *c, double t)
 { return (((((c[0]*t + c[1])*t + c[2])*t + c[3])*t + c[4])*t + c[5])*t + c[6]; }
-double R22_Pref(double t_C)
+static double R22_pref_bar(double t_C)
 {
     double T = t_C + 273.15, tau = 1.0 - T / R22_TC;
     double s = R22_W[0]*tau + R22_W[1]*pow(tau,1.5) + R22_W[2]*pow(tau,2.5) + R22_W[3]*pow(tau,5.0);
     return R22_PC * exp((R22_TC / T) * s);
 }
-double R22_Tsat(double P_bar)
+double R22_Pref(double t_C) { return 0.1 * R22_pref_bar(t_C); }
+double R22_Tsat(double P_MPa)
 {
-    if (P_bar < R22_Pref(R22_TLO) || P_bar > R22_Pref(R22_THI)) return NAN;
+    double P_bar = 10.0 * P_MPa;
+    if (P_bar < R22_pref_bar(R22_TLO) || P_bar > R22_pref_bar(R22_THI)) return NAN;
     double lo = R22_TLO, hi = R22_THI;
     for (int i = 0; i < 60; i++) { double mid = 0.5*(lo+hi);
-        if (R22_Pref(mid) < P_bar) lo = mid; else hi = mid; }
+        if (R22_pref_bar(mid) < P_bar) lo = mid; else hi = mid; }
     return 0.5 * (lo + hi);
 }
 double R22_hliq(double t_C) { return poly6(R22_HL, t_C); }

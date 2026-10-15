@@ -1,7 +1,7 @@
 Attribute VB_Name = "R124"
 ' R124 纯物质饱和性质（单独计算文件，Excel VBA 工作表函数；与合并模块 pure_fluids.bas 系数逐字同源）
 ' 源：NIST WebBook 饱和表拟合（笔记见 ../fit-notes/R124纯工质-NIST表拟合与Borde仲裁.md），与合并模块 pure_fluids 系数逐字相同；Wagner 变体（1, 1.5, 3, 6）饱和压对表最大偏差 0.111%，焓已由表基准平移 -100 至统一基准。
-' 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。Pref 返回 bar；Tsat 超界返回 #NUM!。
+' 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。Pref 返回 MPa；Tsat 入参 MPa 超界返回 #NUM!。
 ' 注意：本模块未在真实 Excel 中编译运行过，使用前请先编译验证。
 
 Option Explicit
@@ -79,11 +79,11 @@ Private Function TsatBisect(ByVal P_bar As Double) As Double
 End Function
 
 Public Function Pref_R124(ByVal t_C As Double) As Double
-    Pref_R124 = PrefRaw(t_C)
+    Pref_R124 = 0.1 * PrefRaw(t_C)
 End Function
 
-Public Function Tsat_R124(ByVal P_bar As Double) As Variant
-    Tsat_R124 = TsatBisect(P_bar)
+Public Function Tsat_R124(ByVal P_MPa As Double) As Variant
+    Tsat_R124 = TsatBisect(10# * P_MPa)
 End Function
 
 Public Function hliq_R124(ByVal t_C As Double) As Double

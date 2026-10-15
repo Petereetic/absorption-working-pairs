@@ -1,7 +1,7 @@
 Attribute VB_Name = "Methanol"
 ' CH3OH 纯物质饱和性质（单独计算文件，Excel VBA 工作表函数；与合并模块 pure_fluids.bas 系数逐字同源）
 ' 源：NIST WebBook 饱和表紧凑拟合（笔记见 ../fit-notes/甲醇饱和性质拟合-NIST表.md；源表为网页取整输出，残差含取整噪声）；饱和压 lnP-t 7 次式，对表全程最大 0.1064%、常用带（-40~90°C）0.0321%；焓已由表基准平移 +266.341441575 至统一基准。
-' 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。Pref 返回 bar；Tsat 超界返回 #NUM!。
+' 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。Pref 返回 MPa；Tsat 入参 MPa 超界返回 #NUM!。
 ' 注意：本模块未在真实 Excel 中编译运行过，使用前请先编译验证。
 
 Option Explicit
@@ -55,7 +55,7 @@ Private Function LnPPref(ByVal t_C As Double) As Double
     For i = 1 To 7
         r = r * t_C + c(i)
     Next i
-    LnPPref = 10# * Exp(r)
+    LnPPref = Exp(r)
 End Function
 
 Private Function PrefRaw(ByVal t_C As Double) As Double
@@ -74,16 +74,16 @@ Private Function Poly6(ByVal t As Double, ByVal isVap As Boolean) As Double
     Poly6 = r
 End Function
 
-Private Function TsatBisect(ByVal P_bar As Double) As Double
+Private Function TsatBisect(ByVal P_MPa As Double) As Double
     Dim lo As Double, hi As Double, mid As Double, i As Long
-    If P_bar < PrefRaw(TLO) Or P_bar > PrefRaw(THI) Then
+    If P_MPa < PrefRaw(TLO) Or P_MPa > PrefRaw(THI) Then
         TsatBisect = CVErr(xlErrNum)
         Exit Function
     End If
     lo = TLO: hi = THI
     For i = 1 To 60
         mid = 0.5 * (lo + hi)
-        If PrefRaw(mid) < P_bar Then lo = mid Else hi = mid
+        If PrefRaw(mid) < P_MPa Then lo = mid Else hi = mid
     Next i
     TsatBisect = 0.5 * (lo + hi)
 End Function
@@ -92,8 +92,8 @@ Public Function Pref_CH3OH(ByVal t_C As Double) As Double
     Pref_CH3OH = PrefRaw(t_C)
 End Function
 
-Public Function Tsat_CH3OH(ByVal P_bar As Double) As Variant
-    Tsat_CH3OH = TsatBisect(P_bar)
+Public Function Tsat_CH3OH(ByVal P_MPa As Double) As Variant
+    Tsat_CH3OH = TsatBisect(P_MPa)
 End Function
 
 Public Function hliq_CH3OH(ByVal t_C As Double) As Double

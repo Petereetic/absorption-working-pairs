@@ -1,6 +1,6 @@
 /* CO2 纯物质饱和性质（单独计算文件，与合并模块 pure_fluids.c 系数逐字同源）
  * 源：NIST WebBook 饱和表紧凑拟合（笔记见 ../fit-notes/二氧化碳饱和性质拟合-NIST表.md；源表有取整）；饱和压 lnP-t 7 次式，对表全程最大 0.0099%、常用带（-50~25°C）0.0059%；焓已由表基准平移 -100.255791821 至统一基准。
- * 函数：Pref(bar) / Tsat(°C，二分反解，超界返回 NAN) / hliq / hgas / hlat（kJ/kg）。
+ * 函数：Pref(MPa) / Tsat(°C，二分反解，超界返回 NAN) / hliq / hgas / hlat（kJ/kg）。
  * 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。
  * 编译：gcc -O2 -Wall -DSTANDALONE_MAIN -o test_co2 co2.c -lm */
 #include <stdio.h>
@@ -15,13 +15,13 @@ static double poly7(const double *c, double t)
 { return ((((((c[0]*t + c[1])*t + c[2])*t + c[3])*t + c[4])*t + c[5])*t + c[6])*t + c[7]; }
 static double poly6(const double *c, double t)
 { return (((((c[0]*t + c[1])*t + c[2])*t + c[3])*t + c[4])*t + c[5])*t + c[6]; }
-double CO2_Pref(double t_C) { return 10.0 * exp(poly7(CO2_LNP, t_C)); }
-double CO2_Tsat(double P_bar)
+double CO2_Pref(double t_C) { return exp(poly7(CO2_LNP, t_C)); }
+double CO2_Tsat(double P_MPa)
 {
-    if (P_bar < CO2_Pref(CO2_TLO) || P_bar > CO2_Pref(CO2_THI)) return NAN;
+    if (P_MPa < CO2_Pref(CO2_TLO) || P_MPa > CO2_Pref(CO2_THI)) return NAN;
     double lo = CO2_TLO, hi = CO2_THI;
     for (int i = 0; i < 60; i++) { double mid = 0.5*(lo+hi);
-        if (CO2_Pref(mid) < P_bar) lo = mid; else hi = mid; }
+        if (CO2_Pref(mid) < P_MPa) lo = mid; else hi = mid; }
     return 0.5 * (lo + hi);
 }
 double CO2_hliq(double t_C) { return poly6(CO2_HL, t_C); }

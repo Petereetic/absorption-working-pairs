@@ -1,7 +1,7 @@
 Attribute VB_Name = "R22"
 ' R22 纯物质饱和性质（单独计算文件，Excel VBA 工作表函数；与合并模块 pure_fluids.bas 系数逐字同源）
 ' 源：CoolProp 参考状态方程拟合，与合并模块 pure_fluids 系数逐字相同；Wagner 饱和压最大偏差 0.0065%，焓偏差 0.42/0.59 kJ/kg；参考态 0°C 饱和液体 = 100 kJ/kg。
-' 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。Pref 返回 bar；Tsat 超界返回 #NUM!。
+' 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。Pref 返回 MPa；Tsat 入参 MPa 超界返回 #NUM!。
 ' 注意：本模块未在真实 Excel 中编译运行过，使用前请先编译验证。
 
 Option Explicit
@@ -79,11 +79,11 @@ Private Function TsatBisect(ByVal P_bar As Double) As Double
 End Function
 
 Public Function Pref_R22(ByVal t_C As Double) As Double
-    Pref_R22 = PrefRaw(t_C)
+    Pref_R22 = 0.1 * PrefRaw(t_C)
 End Function
 
-Public Function R22_Tsat(ByVal P_bar As Double) As Variant
-    R22_Tsat = TsatBisect(P_bar)
+Public Function R22_Tsat(ByVal P_MPa As Double) As Variant
+    R22_Tsat = TsatBisect(10# * P_MPa)
 End Function
 
 Public Function hliq_R22(ByVal t_C As Double) As Double

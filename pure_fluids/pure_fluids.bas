@@ -2,29 +2,30 @@ Attribute VB_Name = "PureFluids"
 ' 九工质纯物质饱和性质（Excel VBA 工作表函数）：R134a / R22 / R124 / H2O / NH3 / CH3OH / R32 / R218 / CO2
 ' 基准：CoolProp 内置参考状态方程（R134a: Tillner-Roth & Baehr 1994）
 ' 参考态：0°C 饱和液体焓 = 100 kJ/kg（与用户现有模型统一）
+' 压力公开单位 MPa（2026-10-14 改）：Wagner 拟合内部以 bar 计（Pc 为 bar），公开函数边界换算；lnP 六工质原生 MPa。
 '
 ' 工作表函数：
-'   =Pref_R134a(t_C)  饱和压力 bar，t_C: °C（-50~95）
-'   =R134a_Tsat(P_bar) 饱和温度 °C，P_bar: bar
+'   =Pref_R134a(t_C)  饱和压力 MPa，t_C: °C（-50~95）
+'   =Tsat_R134a(P_MPa) 饱和温度 °C，P_MPa: MPa
 '   =hliq_R134a(t_C)    饱和液体焓 kJ/kg
 '   =hgas_R134a(t_C)    饱和蒸气焓 kJ/kg
-'   =Pref_R22(t_C)    饱和压力 bar（-50~90）
-'   =R22_Tsat(P_bar)  饱和温度 °C
+'   =Pref_R22(t_C)    饱和压力 MPa（-50~90）
+'   =Tsat_R22(P_MPa)  饱和温度 °C
 '   =hliq_R22(t_C)      饱和液体焓 kJ/kg
 '   =hgas_R22(t_C)      饱和蒸气焓 kJ/kg
-'   =Pref_R124(t_C)   R124 饱和压力 bar（-40~110；NIST 表 Wagner 拟合）
-'   =Tsat_R124(P_bar) R124 饱和温度 °C
+'   =Pref_R124(t_C)   R124 饱和压力 MPa（-40~110；NIST 表 Wagner 拟合）
+'   =Tsat_R124(P_MPa) R124 饱和温度 °C
 '   =hliq_R124(t_C)     R124 饱和液体焓 kJ/kg（基准同上，已平移）
 '   =hgas_R124(t_C)     R124 饱和蒸气焓 kJ/kg
 ' （R124 函数名用"属性在前"式：Excel 工作表不接受 R+数字打头的函数名）
 ' 2026-10-13 增补六工质（NIST WebBook 饱和表拟合，笔记见 fit-notes/）：
-'   =Pref_H2O(t_C) / =Tsat_H2O(P_bar) / =hliq_H2O / =hgas_H2O / =hlat_H2O（1~373°C）
+'   =Pref_H2O(t_C) / =Tsat_H2O(P_MPa) / =hliq_H2O / =hgas_H2O / =hlat_H2O（1~373°C）
 '   =Pref_NH3 / =Tsat_NH3 / =hliq_NH3 / =hgas_NH3 / =hlat_NH3（-77~132°C）
 '   =Pref_CH3OH / =Tsat_CH3OH / =hliq_CH3OH / =hgas_CH3OH / =hlat_CH3OH（-90~239°C）
 '   =Pref_R32 / =Tsat_R32 / =hliq_R32 / =hgas_R32 / =hlat_R32（-136~78°C）
 '   =Pref_R218 / =Tsat_R218 / =hliq_R218 / =hgas_R218 / =hlat_R218（-147~71°C）
 '   =Pref_CO2 / =Tsat_CO2 / =hliq_CO2 / =hgas_CO2 / =hlat_CO2（-56~30°C）
-'   六工质焓已平移到统一基准，平移量见各工质段注；饱和压以 bar 返回。
+'   六工质焓已平移到统一基准，平移量见各工质段注；饱和压以 MPa 返回。
 '
 ' 注意：本模块未在真实 Excel 中编译运行过，使用前请先编译验证。
 
@@ -168,11 +169,11 @@ End Function
 
 ' ================= R134a 工作表函数 =================
 Public Function Pref_R134a(ByVal t_C As Double) As Double
-    Pref_R134a = WagnerPref(t_C, R134A_TC, R134A_PC, 1)
+    Pref_R134a = 0.1 * WagnerPref(t_C, R134A_TC, R134A_PC, 1)
 End Function
 
-Public Function R134a_Tsat(ByVal P_bar As Double) As Variant
-    R134a_Tsat = TsatBisect(P_bar, 1)
+Public Function Tsat_R134a(ByVal P_MPa As Double) As Variant
+    Tsat_R134a = TsatBisect(10# * P_MPa, 1)
 End Function
 
 Public Function hliq_R134a(ByVal t_C As Double) As Double
@@ -190,11 +191,11 @@ End Function
 
 ' ================= R22 工作表函数 =================
 Public Function Pref_R22(ByVal t_C As Double) As Double
-    Pref_R22 = WagnerPref(t_C, R22_TC, R22_PC, 2)
+    Pref_R22 = 0.1 * WagnerPref(t_C, R22_TC, R22_PC, 2)
 End Function
 
-Public Function R22_Tsat(ByVal P_bar As Double) As Variant
-    R22_Tsat = TsatBisect(P_bar, 2)
+Public Function Tsat_R22(ByVal P_MPa As Double) As Variant
+    Tsat_R22 = TsatBisect(10# * P_MPa, 2)
 End Function
 
 Public Function hliq_R22(ByVal t_C As Double) As Double
@@ -288,11 +289,11 @@ Private Function TsatBisect_R124(ByVal P_bar As Double) As Double
 End Function
 
 Public Function Pref_R124(ByVal t_C As Double) As Double
-    Pref_R124 = WagnerPref36_R124(t_C)
+    Pref_R124 = 0.1 * WagnerPref36_R124(t_C)
 End Function
 
-Public Function Tsat_R124(ByVal P_bar As Double) As Variant
-    Tsat_R124 = TsatBisect_R124(P_bar)
+Public Function Tsat_R124(ByVal P_MPa As Double) As Variant
+    Tsat_R124 = TsatBisect_R124(10# * P_MPa)
 End Function
 
 Public Function hliq_R124(ByVal t_C As Double) As Double
@@ -309,7 +310,7 @@ Public Function hlat_R124(ByVal t_C As Double) As Double
 End Function
 
 ' =============== NIST WebBook 表拟合六工质（2026-10-13 增补）===============
-' 饱和压：lnP-t 7 次多项式（笔记取定式，ln(P/MPa)；此处 x10 以 bar 返回）；
+' 饱和压：lnP-t 7 次多项式（笔记取定式，ln(P/MPa)；此处直接以 MPa 返回）；
 ' 焓：6 次多项式，常数项已平移到统一基准（0°C 饱和液体 = 100 kJ/kg），
 ' 平移量见各工质段注（仅常数项变动，潜热不变）。
 ' fluid 编号：3=H2O，4=NH3，5=CH3OH，6=R32，7=R218，8=CO2。
@@ -625,7 +626,7 @@ Private Function LnpPref(ByVal t_C As Double, ByVal fluid As Long) As Double
     For i = 1 To 7
         r = r * t_C + c(i)
     Next i
-    LnpPref = 10# * Exp(r)
+    LnpPref = Exp(r)
 End Function
 
 Private Function Poly6F(ByVal t As Double, ByVal fluid As Long, ByVal isVap As Boolean) As Double
@@ -640,18 +641,18 @@ Private Function Poly6F(ByVal t As Double, ByVal fluid As Long, ByVal isVap As B
     Poly6F = r
 End Function
 
-Private Function TsatBisectF(ByVal P_bar As Double, ByVal fluid As Long) As Double
+Private Function TsatBisectF(ByVal P_MPa As Double, ByVal fluid As Long) As Double
     Dim lo As Double, hi As Double, mid As Double, i As Long
     Dim tlo As Double, thi As Double
     tlo = FluidTlo(fluid): thi = FluidThi(fluid)
-    If P_bar < LnpPref(tlo, fluid) Or P_bar > LnpPref(thi, fluid) Then
+    If P_MPa < LnpPref(tlo, fluid) Or P_MPa > LnpPref(thi, fluid) Then
         TsatBisectF = CVErr(xlErrNum)
         Exit Function
     End If
     lo = tlo: hi = thi
     For i = 1 To 60
         mid = 0.5 * (lo + hi)
-        If LnpPref(mid, fluid) < P_bar Then lo = mid Else hi = mid
+        If LnpPref(mid, fluid) < P_MPa Then lo = mid Else hi = mid
     Next i
     TsatBisectF = 0.5 * (lo + hi)
 End Function
@@ -661,8 +662,8 @@ Public Function Pref_H2O(ByVal t_C As Double) As Double
     Pref_H2O = LnpPref(t_C, 3)
 End Function
 
-Public Function Tsat_H2O(ByVal P_bar As Double) As Variant
-    Tsat_H2O = TsatBisectF(P_bar, 3)
+Public Function Tsat_H2O(ByVal P_MPa As Double) As Variant
+    Tsat_H2O = TsatBisectF(P_MPa, 3)
 End Function
 
 Public Function hliq_H2O(ByVal t_C As Double) As Double
@@ -683,8 +684,8 @@ Public Function Pref_NH3(ByVal t_C As Double) As Double
     Pref_NH3 = LnpPref(t_C, 4)
 End Function
 
-Public Function Tsat_NH3(ByVal P_bar As Double) As Variant
-    Tsat_NH3 = TsatBisectF(P_bar, 4)
+Public Function Tsat_NH3(ByVal P_MPa As Double) As Variant
+    Tsat_NH3 = TsatBisectF(P_MPa, 4)
 End Function
 
 Public Function hliq_NH3(ByVal t_C As Double) As Double
@@ -705,8 +706,8 @@ Public Function Pref_CH3OH(ByVal t_C As Double) As Double
     Pref_CH3OH = LnpPref(t_C, 5)
 End Function
 
-Public Function Tsat_CH3OH(ByVal P_bar As Double) As Variant
-    Tsat_CH3OH = TsatBisectF(P_bar, 5)
+Public Function Tsat_CH3OH(ByVal P_MPa As Double) As Variant
+    Tsat_CH3OH = TsatBisectF(P_MPa, 5)
 End Function
 
 Public Function hliq_CH3OH(ByVal t_C As Double) As Double
@@ -727,8 +728,8 @@ Public Function Pref_R32(ByVal t_C As Double) As Double
     Pref_R32 = LnpPref(t_C, 6)
 End Function
 
-Public Function Tsat_R32(ByVal P_bar As Double) As Variant
-    Tsat_R32 = TsatBisectF(P_bar, 6)
+Public Function Tsat_R32(ByVal P_MPa As Double) As Variant
+    Tsat_R32 = TsatBisectF(P_MPa, 6)
 End Function
 
 Public Function hliq_R32(ByVal t_C As Double) As Double
@@ -749,8 +750,8 @@ Public Function Pref_R218(ByVal t_C As Double) As Double
     Pref_R218 = LnpPref(t_C, 7)
 End Function
 
-Public Function Tsat_R218(ByVal P_bar As Double) As Variant
-    Tsat_R218 = TsatBisectF(P_bar, 7)
+Public Function Tsat_R218(ByVal P_MPa As Double) As Variant
+    Tsat_R218 = TsatBisectF(P_MPa, 7)
 End Function
 
 Public Function hliq_R218(ByVal t_C As Double) As Double
@@ -771,8 +772,8 @@ Public Function Pref_CO2(ByVal t_C As Double) As Double
     Pref_CO2 = LnpPref(t_C, 8)
 End Function
 
-Public Function Tsat_CO2(ByVal P_bar As Double) As Variant
-    Tsat_CO2 = TsatBisectF(P_bar, 8)
+Public Function Tsat_CO2(ByVal P_MPa As Double) As Variant
+    Tsat_CO2 = TsatBisectF(P_MPa, 8)
 End Function
 
 Public Function hliq_CO2(ByVal t_C As Double) As Double

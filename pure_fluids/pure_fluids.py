@@ -12,7 +12,8 @@
 #
 # 拟合式：
 #   饱和压力 Wagner 方程：ln(P/Pc) = (Tc/T)·(a1·τ + a2·τ^1.5 + a3·τ^2.5 + a4·τ^5),
-#     τ = 1-T/Tc, T in K, P in bar
+#     τ = 1-T/Tc, T in K, P in bar（拟合内部单位，Pc 以 bar 计；
+#     公开接口 Pref 以 MPa 返回、Tsat 以 MPa 入参，边界处 ×0.1／×10 换算）
 #     R134a: Tc=374.21K, Pc=40.59bar, 适用 -50~95°C, 最大偏差 0.031%
 #     R22:   Tc=369.30K, Pc=49.90bar, 适用 -50~90°C, 最大偏差 0.0065%
 #   饱和液体/蒸气焓：6 次多项式 h(t), t in °C, kJ/kg
@@ -24,7 +25,7 @@
 #   fit-notes/）：H2O（373 点，1~373°C）、NH3（210 点，-77~132°C）、
 #   CH3OH（330 点，-90~239°C）、R32（215 点，-136~78°C）、
 #   R218（219 点，-147~71°C）、CO2（601 点，-56~30°C）。
-#   饱和压取笔记取定式 lnP-t 7 次多项式（ln(P/MPa)，本模块 ×10 以 bar 返回），
+#   饱和压取笔记取定式 lnP-t 7 次多项式（ln(P/MPa)，本模块直接以 MPa 返回），
 #   对表最大偏差（全程/常用带）：H2O 0.0291%/0.0128%，NH3 0.0272%/0.0027%，
 #   CH3OH 0.1064%/0.0321%，R32 0.0609%/0.0147%，R218 0.1495%/0.0396%，
 #   CO2 0.0099%/0.0059%；焓 6 次多项式（常用带最大偏差 0.29~5.51 kJ/kg，
@@ -91,28 +92,34 @@ def _poly6(c, t):
     return (((((c[0] * t + c[1]) * t + c[2]) * t + c[3]) * t + c[4]) * t + c[5]) * t + c[6]
 
 
-def _tsat_bisect(P_bar, pref_fn, t_lo, t_hi):
+def _tsat_bisect(P, pref_fn, t_lo, t_hi):
+    # P 的单位与 pref_fn 的返回单位一致（由调用方负责换算）
     Plo, Phi = pref_fn(t_lo), pref_fn(t_hi)
-    if not (Plo <= P_bar <= Phi):
+    if not (Plo <= P <= Phi):
         return None
     lo, hi = t_lo, t_hi
     for _ in range(60):
         mid = 0.5 * (lo + hi)
-        if pref_fn(mid) < P_bar:
+        if pref_fn(mid) < P:
             lo = mid
         else:
             hi = mid
     return 0.5 * (lo + hi)
 
 
-def R134a_Pref(t_C):
-    """R134a 饱和压力，bar。t_C: °C，适用 -50~95°C。"""
+def _R134a_pref_bar(t_C):
+    """R134a 饱和压力内部值，bar（Wagner 拟合原生单位）。"""
     return _wagner_pref(t_C, _R134a_Tc, _R134a_Pc, _R134a_W)
 
 
-def R134a_Tsat(P_bar):
-    """R134a 饱和温度，°C。P_bar: bar。超出范围返回 None。"""
-    return _tsat_bisect(P_bar, R134a_Pref, _R134a_TLO, _R134a_THI)
+def R134a_Pref(t_C):
+    """R134a 饱和压力，MPa。t_C: °C，适用 -50~95°C。"""
+    return 0.1 * _R134a_pref_bar(t_C)
+
+
+def R134a_Tsat(P_MPa):
+    """R134a 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    return _tsat_bisect(10.0 * P_MPa, _R134a_pref_bar, _R134a_TLO, _R134a_THI)
 
 
 def R134a_hliq(t_C):
@@ -130,14 +137,19 @@ def R134a_hlat(t_C):
     return R134a_hgas(t_C) - R134a_hliq(t_C)
 
 
-def R22_Pref(t_C):
-    """R22 饱和压力，bar。t_C: °C，适用 -50~90°C。"""
+def _R22_pref_bar(t_C):
+    """R22 饱和压力内部值，bar（Wagner 拟合原生单位）。"""
     return _wagner_pref(t_C, _R22_Tc, _R22_Pc, _R22_W)
 
 
-def R22_Tsat(P_bar):
-    """R22 饱和温度，°C。P_bar: bar。超出范围返回 None。"""
-    return _tsat_bisect(P_bar, R22_Pref, _R22_TLO, _R22_THI)
+def R22_Pref(t_C):
+    """R22 饱和压力，MPa。t_C: °C，适用 -50~90°C。"""
+    return 0.1 * _R22_pref_bar(t_C)
+
+
+def R22_Tsat(P_MPa):
+    """R22 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    return _tsat_bisect(10.0 * P_MPa, _R22_pref_bar, _R22_TLO, _R22_THI)
 
 
 def R22_hliq(t_C):
@@ -155,14 +167,19 @@ def R22_hlat(t_C):
     return R22_hgas(t_C) - R22_hliq(t_C)
 
 
-def R124_Pref(t_C):
-    """R124 饱和压力，bar。t_C: °C，适用 -40~110°C（NIST 表 Wagner 拟合）。"""
+def _R124_pref_bar(t_C):
+    """R124 饱和压力内部值，bar（Wagner 拟合原生单位）。"""
     return _wagner_pref36(t_C, _R124_Tc, _R124_Pc, _R124_W)
 
 
-def R124_Tsat(P_bar):
-    """R124 饱和温度，°C。P_bar: bar。超出范围返回 None。"""
-    return _tsat_bisect(P_bar, R124_Pref, _R124_TLO, _R124_THI)
+def R124_Pref(t_C):
+    """R124 饱和压力，MPa。t_C: °C，适用 -40~110°C（NIST 表 Wagner 拟合）。"""
+    return 0.1 * _R124_pref_bar(t_C)
+
+
+def R124_Tsat(P_MPa):
+    """R124 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    return _tsat_bisect(10.0 * P_MPa, _R124_pref_bar, _R124_TLO, _R124_THI)
 
 
 def R124_hliq(t_C):
@@ -183,7 +200,7 @@ def R124_hlat(t_C):
 
 # =============== NIST WebBook 表拟合六工质（2026-10-13 增补）===============
 # 式形：饱和压 lnP–t 7 次多项式（笔记取定式，ln(P/MPa)=Σc_k t^k，
-#   条内以 bar 返回，已 ×10 换算）；焓 6 次多项式（系数降幂，与 _poly6 同序）。
+#   条内直接以 MPa 返回）；焓 6 次多项式（系数降幂，与 _poly6 同序）。
 # 焓常数项已由各表自带基准平移至本模块统一基准（0°C 饱和液体 = 100 kJ/kg），
 #   平移量见各工质注（仅常数项变动，潜热不变）。适用范围与残差见头注及 fit-notes/。
 
@@ -247,18 +264,18 @@ def _poly7(c, t):
 
 
 def _lnp_pref(t_C, c):
-    """lnP–t 7 次多项式饱和压：笔记式给 MPa，本模块以 bar 返回（×10）。"""
-    return 10.0 * math.exp(_poly7(c, t_C))
+    """lnP–t 7 次多项式饱和压：笔记式原生 MPa，本模块直接以 MPa 返回。"""
+    return math.exp(_poly7(c, t_C))
 
 
 def H2O_Pref(t_C):
-    """H2O 饱和压力，bar。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
+    """H2O 饱和压力，MPa。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
     return _lnp_pref(t_C, _H2O_LNP)
 
 
-def H2O_Tsat(P_bar):
-    """H2O 饱和温度，°C。P_bar: bar。超出范围返回 None。"""
-    return _tsat_bisect(P_bar, H2O_Pref, _H2O_TLO, _H2O_THI)
+def H2O_Tsat(P_MPa):
+    """H2O 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    return _tsat_bisect(P_MPa, H2O_Pref, _H2O_TLO, _H2O_THI)
 
 
 def H2O_hliq(t_C):
@@ -277,13 +294,13 @@ def H2O_hlat(t_C):
 
 
 def NH3_Pref(t_C):
-    """NH3 饱和压力，bar。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
+    """NH3 饱和压力，MPa。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
     return _lnp_pref(t_C, _NH3_LNP)
 
 
-def NH3_Tsat(P_bar):
-    """NH3 饱和温度，°C。P_bar: bar。超出范围返回 None。"""
-    return _tsat_bisect(P_bar, NH3_Pref, _NH3_TLO, _NH3_THI)
+def NH3_Tsat(P_MPa):
+    """NH3 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    return _tsat_bisect(P_MPa, NH3_Pref, _NH3_TLO, _NH3_THI)
 
 
 def NH3_hliq(t_C):
@@ -302,13 +319,13 @@ def NH3_hlat(t_C):
 
 
 def CH3OH_Pref(t_C):
-    """CH3OH 饱和压力，bar。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
+    """CH3OH 饱和压力，MPa。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
     return _lnp_pref(t_C, _CH3OH_LNP)
 
 
-def CH3OH_Tsat(P_bar):
-    """CH3OH 饱和温度，°C。P_bar: bar。超出范围返回 None。"""
-    return _tsat_bisect(P_bar, CH3OH_Pref, _CH3OH_TLO, _CH3OH_THI)
+def CH3OH_Tsat(P_MPa):
+    """CH3OH 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    return _tsat_bisect(P_MPa, CH3OH_Pref, _CH3OH_TLO, _CH3OH_THI)
 
 
 def CH3OH_hliq(t_C):
@@ -327,13 +344,13 @@ def CH3OH_hlat(t_C):
 
 
 def R32_Pref(t_C):
-    """R32 饱和压力，bar。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
+    """R32 饱和压力，MPa。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
     return _lnp_pref(t_C, _R32_LNP)
 
 
-def R32_Tsat(P_bar):
-    """R32 饱和温度，°C。P_bar: bar。超出范围返回 None。"""
-    return _tsat_bisect(P_bar, R32_Pref, _R32_TLO, _R32_THI)
+def R32_Tsat(P_MPa):
+    """R32 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    return _tsat_bisect(P_MPa, R32_Pref, _R32_TLO, _R32_THI)
 
 
 def R32_hliq(t_C):
@@ -352,13 +369,13 @@ def R32_hlat(t_C):
 
 
 def R218_Pref(t_C):
-    """R218 饱和压力，bar。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
+    """R218 饱和压力，MPa。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
     return _lnp_pref(t_C, _R218_LNP)
 
 
-def R218_Tsat(P_bar):
-    """R218 饱和温度，°C。P_bar: bar。超出范围返回 None。"""
-    return _tsat_bisect(P_bar, R218_Pref, _R218_TLO, _R218_THI)
+def R218_Tsat(P_MPa):
+    """R218 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    return _tsat_bisect(P_MPa, R218_Pref, _R218_TLO, _R218_THI)
 
 
 def R218_hliq(t_C):
@@ -377,13 +394,13 @@ def R218_hlat(t_C):
 
 
 def CO2_Pref(t_C):
-    """CO2 饱和压力，bar。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
+    """CO2 饱和压力，MPa。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
     return _lnp_pref(t_C, _CO2_LNP)
 
 
-def CO2_Tsat(P_bar):
-    """CO2 饱和温度，°C。P_bar: bar。超出范围返回 None。"""
-    return _tsat_bisect(P_bar, CO2_Pref, _CO2_TLO, _CO2_THI)
+def CO2_Tsat(P_MPa):
+    """CO2 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    return _tsat_bisect(P_MPa, CO2_Pref, _CO2_TLO, _CO2_THI)
 
 
 def CO2_hliq(t_C):
@@ -408,5 +425,5 @@ if __name__ == "__main__":
             ("R124", R124_Pref, R124_hliq, R124_hgas, R124_Tsat)]:
         print(f"== {name} ==")
         for t in [-40, -10, 0, 25, 50, 80]:
-            print(f"  {t:4d}C: Pref={P(t):7.3f} bar  hliq={hL(t):7.2f}  hgas={hV(t):7.2f} kJ/kg")
-        print(f"  Tsat(10 bar) = {Ts(10):.2f} C")
+            print(f"  {t:4d}C: Pref={P(t):7.3f} MPa  hliq={hL(t):7.2f}  hgas={hV(t):7.2f} kJ/kg")
+        print(f"  Tsat(1.0 MPa) = {Ts(1.0):.2f} C")

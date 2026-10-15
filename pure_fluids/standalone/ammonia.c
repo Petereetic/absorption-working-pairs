@@ -1,6 +1,6 @@
 /* NH3 纯物质饱和性质（单独计算文件，与合并模块 pure_fluids.c 系数逐字同源）
  * 源：NIST WebBook 饱和表紧凑拟合（笔记见 ../fit-notes/纯氨饱和性质拟合-NIST表.md）；饱和压 lnP-t 7 次式，对表全程最大 0.0272%、常用带（-50~60°C）0.0027%；焓已由表基准平移 -244.768062686 至统一基准。
- * 函数：Pref(bar) / Tsat(°C，二分反解，超界返回 NAN) / hliq / hgas / hlat（kJ/kg）。
+ * 函数：Pref(MPa) / Tsat(°C，二分反解，超界返回 NAN) / hliq / hgas / hlat（kJ/kg）。
  * 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。
  * 编译：gcc -O2 -Wall -DSTANDALONE_MAIN -o test_ammonia ammonia.c -lm */
 #include <stdio.h>
@@ -15,13 +15,13 @@ static double poly7(const double *c, double t)
 { return ((((((c[0]*t + c[1])*t + c[2])*t + c[3])*t + c[4])*t + c[5])*t + c[6])*t + c[7]; }
 static double poly6(const double *c, double t)
 { return (((((c[0]*t + c[1])*t + c[2])*t + c[3])*t + c[4])*t + c[5])*t + c[6]; }
-double NH3_Pref(double t_C) { return 10.0 * exp(poly7(NH3_LNP, t_C)); }
-double NH3_Tsat(double P_bar)
+double NH3_Pref(double t_C) { return exp(poly7(NH3_LNP, t_C)); }
+double NH3_Tsat(double P_MPa)
 {
-    if (P_bar < NH3_Pref(NH3_TLO) || P_bar > NH3_Pref(NH3_THI)) return NAN;
+    if (P_MPa < NH3_Pref(NH3_TLO) || P_MPa > NH3_Pref(NH3_THI)) return NAN;
     double lo = NH3_TLO, hi = NH3_THI;
     for (int i = 0; i < 60; i++) { double mid = 0.5*(lo+hi);
-        if (NH3_Pref(mid) < P_bar) lo = mid; else hi = mid; }
+        if (NH3_Pref(mid) < P_MPa) lo = mid; else hi = mid; }
     return 0.5 * (lo + hi);
 }
 double NH3_hliq(double t_C) { return poly6(NH3_HL, t_C); }

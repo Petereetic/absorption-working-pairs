@@ -1,6 +1,6 @@
 /* R124 纯物质饱和性质（单独计算文件，与合并模块 pure_fluids.c 系数逐字同源）
  * 源：NIST WebBook 饱和表拟合（笔记见 ../fit-notes/R124纯工质-NIST表拟合与Borde仲裁.md），与合并模块 pure_fluids 系数逐字相同；Wagner 变体（1, 1.5, 3, 6）饱和压对表最大偏差 0.111%，焓已由表基准平移 -100 至统一基准。
- * 函数：Pref(bar) / Tsat(°C，二分反解，超界返回 NAN) / hliq / hgas / hlat（kJ/kg）。
+ * 函数：Pref(MPa) / Tsat(°C，入参 MPa，二分反解，超界返回 NAN) / hliq / hgas / hlat（kJ/kg）。Wagner 拟合内部以 bar 计，公开边界换算。
  * 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。
  * 编译：gcc -O2 -Wall -DSTANDALONE_MAIN -o test_r124 r124.c -lm */
 #include <stdio.h>
@@ -14,18 +14,20 @@ static const double R124_TLO = -40.0, R124_THI = 110.0;
 
 static double poly6(const double *c, double t)
 { return (((((c[0]*t + c[1])*t + c[2])*t + c[3])*t + c[4])*t + c[5])*t + c[6]; }
-double R124_Pref(double t_C)
+static double R124_pref_bar(double t_C)
 {
     double T = t_C + 273.15, tau = 1.0 - T / R124_TC;
     double s = R124_W[0]*tau + R124_W[1]*pow(tau,1.5) + R124_W[2]*pow(tau,3.0) + R124_W[3]*pow(tau,6.0);
     return R124_PC * exp((R124_TC / T) * s);
 }
-double R124_Tsat(double P_bar)
+double R124_Pref(double t_C) { return 0.1 * R124_pref_bar(t_C); }
+double R124_Tsat(double P_MPa)
 {
-    if (P_bar < R124_Pref(R124_TLO) || P_bar > R124_Pref(R124_THI)) return NAN;
+    double P_bar = 10.0 * P_MPa;
+    if (P_bar < R124_pref_bar(R124_TLO) || P_bar > R124_pref_bar(R124_THI)) return NAN;
     double lo = R124_TLO, hi = R124_THI;
     for (int i = 0; i < 60; i++) { double mid = 0.5*(lo+hi);
-        if (R124_Pref(mid) < P_bar) lo = mid; else hi = mid; }
+        if (R124_pref_bar(mid) < P_bar) lo = mid; else hi = mid; }
     return 0.5 * (lo + hi);
 }
 double R124_hliq(double t_C) { return poly6(R124_HL, t_C); }
