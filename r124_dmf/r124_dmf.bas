@@ -3,25 +3,36 @@ Attribute VB_Name = "R124DMF"
 ' Source: Xu, Wang, Wu, Hu & Jiang, J. Chem. Eng. Data 2017, 62, 3414-3422
 ' (five-parameter NRTL Eqs. 4-11, parameters Table 8; Antoine psat and VL
 ' fits to the paper's Table 5 REFPROP values).
-' Conventions: T_C in degC, xi = R124 mass fraction, P in bar.
+' Conventions: T_C in degC, xi = R124 mass fraction, P in MPa
+' (public boundary). Internal native unit is bar: Private *_bar
+' helpers carry the original formulas verbatim, public functions
+' only scale at the boundary (MPa = bar x 0.1, MPa x 10 on input).
 ' Validated range 30-90 degC; functions return Empty outside it.
 ' Verified vs the paper's 60 measured points: AARD 1.17 %.
 ' NOTE: this VBA has NOT been compiled/tested in real Excel.
 
 Option Explicit
 
-Public Function Pref_R124DMF(T_C As Double) As Double
+Private Function Pref_R124DMF_bar(T_C As Double) As Double
     Dim T As Double
     T = T_C + 273.15
-    Pref_R124DMF = Exp(14.750463 - 2527.6371 / (T - 10.9815)) / 100#
+    Pref_R124DMF_bar = Exp(14.750463 - 2527.6371 / (T - 10.9815)) / 100#
 End Function
 
-Public Function TsatR124_R124DMF(P_bar As Double) As Variant
+Public Function Pref_R124DMF(T_C As Double) As Double   ' public: MPa
+    Pref_R124DMF = Pref_R124DMF_bar(T_C) * 0.1
+End Function
+
+Private Function TsatR124_R124DMF_bar(P_bar As Double) As Variant
     If P_bar <= 0# Then
-        TsatR124_R124DMF = Empty
+        TsatR124_R124DMF_bar = Empty
         Exit Function
     End If
-    TsatR124_R124DMF = 2527.6371 / (14.750463 - Log(P_bar * 100#)) + 10.9815 - 273.15
+    TsatR124_R124DMF_bar = 2527.6371 / (14.750463 - Log(P_bar * 100#)) + 10.9815 - 273.15
+End Function
+
+Public Function TsatR124_R124DMF(P_MPa As Double) As Variant   ' public: P in MPa
+    TsatR124_R124DMF = TsatR124_R124DMF_bar(P_MPa * 10#)
 End Function
 
 Private Function VL_R124DMF(T_C As Double) As Double   ' m3/mol
@@ -67,15 +78,15 @@ Public Function Gamma1_R124DMF(T_C As Double, xi As Double) As Variant
                       + t12 * G12 / (x2 + x1 * G12) ^ 2))
 End Function
 
-Public Function Psol_R124DMF(T_C As Double, xi As Double) As Variant
+Private Function Psol_R124DMF_bar(T_C As Double, xi As Double) As Variant
     Dim T As Double, ps1 As Double, x1 As Double, g1 As Variant
     Dim vl As Double, p As Double, pn As Double, k As Long
     If T_C < 30# Or T_C > 90# Or xi <= 0# Or xi >= 1# Then
-        Psol_R124DMF = Empty
+        Psol_R124DMF_bar = Empty
         Exit Function
     End If
     T = T_C + 273.15
-    ps1 = Pref_R124DMF(T_C)
+    ps1 = Pref_R124DMF_bar(T_C)
     x1 = XiToX_R124DMF(xi)
     g1 = Gamma1_R124DMF(T_C, xi)
     vl = VL_R124DMF(T_C)
@@ -88,29 +99,44 @@ Public Function Psol_R124DMF(T_C As Double, xi As Double) As Variant
         End If
         p = pn
     Next k
-    Psol_R124DMF = p
+    Psol_R124DMF_bar = p
 End Function
 
-Public Function BubbleT_R124DMF(P_bar As Double, xi As Double) As Variant
+Public Function Psol_R124DMF(T_C As Double, xi As Double) As Variant   ' public: MPa
+    Dim Pv As Variant
+    Pv = Psol_R124DMF_bar(T_C, xi)
+    If IsEmpty(Pv) Then
+        Psol_R124DMF = Empty
+    Else
+        Psol_R124DMF = Pv * 0.1
+    End If
+End Function
+
+Private Function BubbleT_R124DMF_bar(P_bar As Double, xi As Double) As Variant
     Dim lo As Double, hi As Double, mid As Double, k As Long
     lo = 30#: hi = 90#
-    If P_bar < Psol_R124DMF(lo, xi) Or P_bar > Psol_R124DMF(hi, xi) Then
-        BubbleT_R124DMF = Empty
+    If P_bar < Psol_R124DMF_bar(lo, xi) Or P_bar > Psol_R124DMF_bar(hi, xi) Then
+        BubbleT_R124DMF_bar = Empty
         Exit Function
     End If
     For k = 1 To 60
         mid = 0.5 * (lo + hi)
-        If Psol_R124DMF(mid, xi) < P_bar Then lo = mid Else hi = mid
+        If Psol_R124DMF_bar(mid, xi) < P_bar Then lo = mid Else hi = mid
     Next k
-    BubbleT_R124DMF = 0.5 * (lo + hi)
+    BubbleT_R124DMF_bar = 0.5 * (lo + hi)
+End Function
+
+Public Function BubbleT_R124DMF(P_MPa As Double, xi As Double) As Variant   ' public: P in MPa
+    BubbleT_R124DMF = BubbleT_R124DMF_bar(P_MPa * 10#, xi)
 End Function
 
 ' Concentration from dew-point temperature and solution temperature:
-' the dew point fixes the pressure, P = PrefR124(Tdew) (DMF treated as
-' non-volatile), then solve Psol(Tsol, xi) = P for xi by bisection.
-' Psol is only defined on the open interval 0 < xi < 1; its limits
-' there, 0 (xi -> 0) and PrefR124(Tsol) (xi -> 1), serve as the
-' bracket - the bisection only ever evaluates interior points.
+' the dew point fixes the pressure, P = Pref_R124DMF_bar(Tdew) in
+' native bar (DMF treated as non-volatile), then solve
+' Psol_R124DMF_bar(Tsol, xi) = P for xi by bisection.
+' Psol_bar is only defined on the open interval 0 < xi < 1; its limits
+' there, 0 (xi -> 0) and Pref_R124DMF_bar(Tsol) (xi -> 1), serve as
+' the bracket - the bisection only ever evaluates interior points.
 ' Returns Empty if no root (e.g. Tsol below Tdew, or Tsol outside the
 ' validated 30-90 degC window).
 Public Function XiByTsolTdew_R124DMF(Tsol_C As Double, Tdew_C As Double) As Variant
@@ -119,40 +145,45 @@ Public Function XiByTsolTdew_R124DMF(Tsol_C As Double, Tdew_C As Double) As Vari
         XiByTsolTdew_R124DMF = Empty
         Exit Function
     End If
-    P = Pref_R124DMF(Tdew_C)
-    If P > Pref_R124DMF(Tsol_C) Then
+    P = Pref_R124DMF_bar(Tdew_C)
+    If P > Pref_R124DMF_bar(Tsol_C) Then
         XiByTsolTdew_R124DMF = Empty
         Exit Function
     End If
     lo = 0#: hi = 1#
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If Psol_R124DMF(Tsol_C, mid) < P Then lo = mid Else hi = mid
+        If Psol_R124DMF_bar(Tsol_C, mid) < P Then lo = mid Else hi = mid
     Next k
     XiByTsolTdew_R124DMF = 0.5 * (lo + hi)
 End Function
 
 
 ' ---------- 露点温度（溶液）[°C]：全库 TdewByTsolXi 约定 ----------
-' Tdew = DewT_R124DMF(Psol_R124DMF(T_C, xi))：以本模块自有纯 R124
-' Antoine 线评价溶液表面压力 Psol 所对应的饱和温度。吸收剂视为
-' 不挥发。Psol 无解（Empty）时返回 Empty。
+' Tdew = DewT_R124DMF(Psol_R124DMF(T_C, xi))（公开边界）；内部以原生
+' bar 计算：DewT_R124DMF_bar(Psol_R124DMF_bar(T_C, xi))，结果不变：
+' 以本模块自有纯 R124 Antoine 线评价溶液表面压力 Psol 所对应的
+' 饱和温度。吸收剂视为不挥发。Psol 无解（Empty）时返回 Empty。
 Public Function TdewByTsolXi_R124DMF(T_C As Double, xi As Double) As Variant
     Dim Pv As Variant
-    Pv = Psol_R124DMF(T_C, xi)
+    Pv = Psol_R124DMF_bar(T_C, xi)
     If IsEmpty(Pv) Then
         TdewByTsolXi_R124DMF = Empty
     Else
-        TdewByTsolXi_R124DMF = DewT_R124DMF(Pv)
+        TdewByTsolXi_R124DMF = DewT_R124DMF_bar(Pv)
     End If
 End Function
 
-Public Function DewT_R124DMF(P_bar As Double) As Variant   ' absorbent non-volatile
+Private Function DewT_R124DMF_bar(P_bar As Double) As Variant   ' absorbent non-volatile
     Dim T As Variant
-    T = TsatR124_R124DMF(P_bar)
+    T = TsatR124_R124DMF_bar(P_bar)
     If IsEmpty(T) Or T < -30# Or T > 90# Then
-        DewT_R124DMF = Empty
+        DewT_R124DMF_bar = Empty
     Else
-        DewT_R124DMF = T
+        DewT_R124DMF_bar = T
     End If
+End Function
+
+Public Function DewT_R124DMF(P_MPa As Double) As Variant   ' public: P in MPa
+    DewT_R124DMF = DewT_R124DMF_bar(P_MPa * 10#)
 End Function
