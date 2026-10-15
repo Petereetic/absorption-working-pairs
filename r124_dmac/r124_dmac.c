@@ -2,9 +2,12 @@
  * viscosity. Transcribed from Borde, Jelinek & Daltrophe, Int. J.
  * Refrigeration 20(4), 256-266, 1997.
  *
- * Conventions: T_C in degC, xi = R124 mass fraction, P in bar,
+ * Conventions: T_C in degC, xi = R124 mass fraction, P in MPa at
+ * the public boundary (changed 2026-10-14 from bar; 1 MPa = 10 bar),
  * h in kJ/kg (reference: pure liquids = 100 kJ/kg at 0 degC),
- * rho in kg/m3, eta in mPa s.
+ * rho in kg/m3, eta in mPa s.  The Borde correlations are evaluated
+ * internally in their native bar via static *_bar helpers; public
+ * functions only scale by 0.1 (outputs) or 10 (inputs).
  *
  * Two printed values are corrected on documented evidence (see
  * Borde1997与硕士论文_核验.md): Table 9 rho_00 exponent (E+01 -> E+00)
@@ -40,7 +43,7 @@ static double psat_eq15(const double c[6], double T_C)
  * pure_fluids R124_Pref.  Band -40..110 C, max deviation vs the
  * NIST table 0.111 %.  Changed 2026-10-12 from Borde Eq. (15)
  * (coefficients recorded above; no longer evaluated). */
-double R124DMAC_PrefR124(double T_C)
+static double pref_r124_bar(double T_C)
 {
     static const double W[4] = {-7.401179377235425, 1.4613603991162563,
                                 -3.476435267708954, -1.772232810745864};
@@ -49,22 +52,28 @@ double R124DMAC_PrefR124(double T_C)
                                          + W[2] * tau * tau * tau
                                          + W[3] * pow(tau, 6.0)));
 }
-double R124DMAC_PsatDMAC(double T_C) { return psat_eq15(PS_DMAC, T_C); }
+/* Public: pure R124 saturation pressure in MPa. */
+double R124DMAC_PrefR124(double T_C) { return 0.1 * pref_r124_bar(T_C); }
+/* Public: pure DMAC saturation pressure in MPa (Eq. (15), native bar). */
+double R124DMAC_PsatDMAC(double T_C) { return 0.1 * psat_eq15(PS_DMAC, T_C); }
 
-double R124DMAC_DewT(double P_bar)
+static double tsat_r124_bar(double P_bar)
 {
     double lo = -40.0, hi = 110.0, mid;
     int k;
-    if (P_bar < R124DMAC_PrefR124(lo) || P_bar > R124DMAC_PrefR124(hi))
+    if (P_bar < pref_r124_bar(lo) || P_bar > pref_r124_bar(hi))
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (R124DMAC_PrefR124(mid) < P_bar) lo = mid; else hi = mid;
+        if (pref_r124_bar(mid) < P_bar) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }
+/* Public: pure-R124 saturation (dew) temperature at P_MPa. */
+double R124DMAC_DewT(double P_MPa) { return tsat_r124_bar(P_MPa * 10.0); }
 
-/* Eq. (16) bubble pressure, Table 3: P = sum_j sum_i p_ij xi^i T^j (T in K) */
+/* Eq. (16) bubble pressure, Table 3: P = sum_j sum_i p_ij xi^i T^j (T in K;
+ * source unit bar -- psol_bar() is the native value, public Psol is MPa) */
 static const double PTAB[8][8] = {
     { 0.11502e-01, -0.28240e+02,  0.41188e+02, -0.26168e+02,  0.0,          0.18381e+03, -0.31190e+03,  0.13914e+03},
     {-0.13711e-01,  0.24179e+00, -0.26951e+00,  0.0,          0.0,          0.75999e-01,  0.0,          0.0},
@@ -76,7 +85,7 @@ static const double PTAB[8][8] = {
     {-0.67036e-17, -0.53440e-16,  0.14140e-15, -0.94881e-16,  0.0,          0.56692e-15, -0.10014e-14,  0.53340e-15}
 };
 
-double R124DMAC_Psol(double T_C, double xi)
+static double psol_bar(double T_C, double xi)
 {
     double T = T_C + 273.15, s = 0.0, xip, Tp;
     int i, j;
@@ -91,17 +100,26 @@ double R124DMAC_Psol(double T_C, double xi)
     return s;
 }
 
-double R124DMAC_BubbleT(double P_bar, double xi)
+/* Public: bubble-point pressure in MPa. */
+double R124DMAC_Psol(double T_C, double xi) { return 0.1 * psol_bar(T_C, xi); }
+
+static double bubble_t_bar(double P_bar, double xi)
 {
     double lo = 0.0, hi = 150.0, mid;
     int k;
-    if (P_bar < R124DMAC_Psol(lo, xi) || P_bar > R124DMAC_Psol(hi, xi))
+    if (P_bar < psol_bar(lo, xi) || P_bar > psol_bar(hi, xi))
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (R124DMAC_Psol(mid, xi) < P_bar) lo = mid; else hi = mid;
+        if (psol_bar(mid, xi) < P_bar) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
+}
+
+/* Public: bubble-point temperature at P_MPa. */
+double R124DMAC_BubbleT(double P_MPa, double xi)
+{
+    return bubble_t_bar(P_MPa * 10.0, xi);
 }
 
 /* Concentration from dew-point temperature and solution temperature:
@@ -110,14 +128,14 @@ double R124DMAC_BubbleT(double P_bar, double xi)
  * Returns NAN if no root (P outside the bubble-pressure span at Tsol). */
 double R124DMAC_XiByTsolTdew(double Tsol_C, double Tdew_C)
 {
-    double P = R124DMAC_PrefR124(Tdew_C);
+    double P = pref_r124_bar(Tdew_C);
     double lo = 0.0, hi = 1.0, mid;
     int k;
-    if (P < R124DMAC_Psol(Tsol_C, 0.0) || P > R124DMAC_Psol(Tsol_C, 1.0))
+    if (P < psol_bar(Tsol_C, 0.0) || P > psol_bar(Tsol_C, 1.0))
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (R124DMAC_Psol(Tsol_C, mid) < P) lo = mid; else hi = mid;
+        if (psol_bar(Tsol_C, mid) < P) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }
@@ -130,7 +148,7 @@ double R124DMAC_XiByTsolTdew(double Tsol_C, double Tdew_C)
    NAN if DewT has no root. */
 double R124DMAC_TdewByTsolXi(double T_C, double xi)
 {
-    return R124DMAC_DewT(R124DMAC_Psol(T_C, xi));
+    return tsat_r124_bar(psol_bar(T_C, xi));
 }
 
 double R124DMAC_hsol(double T_C, double xi);  /* forward: defined below */
@@ -270,9 +288,9 @@ double R124DMAC_EtaMix(double T_C, double xi)
 #include <stdio.h>
 int main(void)
 {
-    printf("Psat R124 at 20 C    = %.3f bar (expect ~3.269, NIST)\n", R124DMAC_PrefR124(20.0));
-    printf("Psol(80 C, 0.5)   = %.3f bar\n", R124DMAC_Psol(80.0, 0.5));
-    printf("BubbleT(2.977, 0.5)  = %.2f C (expect ~80)\n", R124DMAC_BubbleT(2.977, 0.5));
+    printf("Psat R124 at 20 C    = %.4f MPa (expect ~0.3269, NIST)\n", R124DMAC_PrefR124(20.0));
+    printf("Psol(80 C, 0.5)   = %.4f MPa\n", R124DMAC_Psol(80.0, 0.5));
+    printf("BubbleT(0.2977 MPa, 0.5)  = %.2f C (expect ~80)\n", R124DMAC_BubbleT(0.2977, 0.5));
     printf("HExcess(20 C, 0.557) = %.2f kJ/kg\n", R124DMAC_HExcess(20.0, 0.557));
     printf("Hsol(0 C, 0)         = %.2f kJ/kg (expect ~100)\n", R124DMAC_hsol(0.0, 0.0));
     printf("RhoMix(0 C, 0.5)     = %.1f kg/m3\n", R124DMAC_RhoMix(0.0, 0.5));
@@ -303,7 +321,7 @@ static double hgas_R124(double T_C)
 static double abs_resid(double xr, double xi_w, double hs, double hv,
                         double P_bar)
 {
-    double Tout = R124DMAC_BubbleT(P_bar, xr);
+    double Tout = bubble_t_bar(P_bar, xr);
     double r;
     if (isnan(Tout)) return NAN;
     r = (xr - xi_w) / (1.0 - xr);
@@ -324,7 +342,7 @@ double R124DMAC_AbsVapFlow(double Ts_C, double xi_w, double ms,
     int i, have_prev = 0, have_bracket = 0;
     const int n = 400;
     if (Tv_C < -40.0 || Tv_C > 110.0 || xi_w >= 0.95) return NAN;
-    P = R124DMAC_PrefR124(Tv_C);
+    P = pref_r124_bar(Tv_C);
     hv = hgas_R124(Tv_C);
     hs = R124DMAC_hsol(Ts_C, xi_w);
     for (i = 1; i <= n && !have_bracket; i++) {
@@ -349,7 +367,7 @@ double R124DMAC_AbsVapFlow(double Ts_C, double xi_w, double ms,
         }
         xr = 0.5 * (blo + bhi);
         r = (xr - xi_w) / (1.0 - xr);
-        if (Tout_C) *Tout_C = R124DMAC_BubbleT(P, xr);
+        if (Tout_C) *Tout_C = bubble_t_bar(P, xr);
         if (xi_r) *xi_r = xr;
         return ms * r;
     }

@@ -2,9 +2,12 @@
 ' viscosity. Transcribed from Borde, Jelinek & Daltrophe, Int. J.
 ' Refrigeration 20(4), 256-266, 1997.
 '
-' Conventions: T_C in degC, xi = R124 mass fraction, P in bar,
+' Conventions: T_C in degC, xi = R124 mass fraction, P in MPa at
+' the public boundary (changed 2026-10-14 from bar; 1 MPa = 10 bar),
 ' h in kJ/kg (reference: pure liquids = 100 kJ/kg at 0 degC),
-' rho in kg/m3, eta in mPa s.
+' rho in kg/m3, eta in mPa s.  The Borde correlations are evaluated
+' internally in their native bar via Private *Native helpers; Public
+' functions only scale by 0.1 (outputs) or 10 (inputs).
 '
 ' Two printed values are corrected on documented evidence (see the
 ' verification record in this folder): Table 9 rho_00 exponent
@@ -26,36 +29,49 @@ Private Function PsatEq15(A As Double, B As Double, C As Double, _
     PsatEq15 = Exp(A + B / (T + C) + D * T + E * Log(T) + F * T * T)
 End Function
 
-Public Function Pref_R124DMAC(T_C As Double) As Double
-    ' Pure R124 saturation pressure [bar]: NIST WebBook saturation-
-    ' table Wagner-type fit (exponents 1, 1.5, 3, 6), identical
-    ' coefficients to pure_fluids Pref_R124. Band -40..110 degC,
-    ' max deviation vs the NIST table 0.111 %. Changed 2026-10-12
-    ' from Borde Eq. (15), which reads systematically low vs NIST.
+Private Function PrefNative_R124DMAC(T_C As Double) As Double
+    ' Pure R124 saturation pressure in native bar: NIST WebBook
+    ' saturation-table Wagner-type fit (exponents 1, 1.5, 3, 6),
+    ' identical coefficients to pure_fluids Pref_R124. Band
+    ' -40..110 degC, max deviation vs the NIST table 0.111 %.
+    ' Changed 2026-10-12 from Borde Eq. (15), which reads
+    ' systematically low vs NIST.
     Dim T As Double, tau As Double
     T = T_C + 273.15
     tau = 1# - T / 395.428
-    Pref_R124DMAC = 36.245 * Exp((395.428 / T) * (-7.401179377235425 * tau _
+    PrefNative_R124DMAC = 36.245 * Exp((395.428 / T) * (-7.401179377235425 * tau _
         + 1.4613603991162563 * tau ^ 1.5 - 3.476435267708954 * tau ^ 3 _
         - 1.772232810745864 * tau ^ 6))
 End Function
 
-Public Function PsatDMAC_R124DMAC(T_C As Double) As Double
-    PsatDMAC_R124DMAC = PsatEq15(6.01834, -1800.24, -138.5, 0#, 0#, 0#, T_C)
+Public Function Pref_R124DMAC(T_C As Double) As Double
+    ' Pure R124 saturation pressure [MPa] (native bar x 0.1).
+    Pref_R124DMAC = 0.1 * PrefNative_R124DMAC(T_C)
 End Function
 
-Public Function DewT_R124DMAC(P_bar As Double) As Variant
+Public Function PsatDMAC_R124DMAC(T_C As Double) As Double
+    ' Pure DMAC saturation pressure [MPa]: Eq. (15) native bar x 0.1.
+    PsatDMAC_R124DMAC = 0.1 * PsatEq15(6.01834, -1800.24, -138.5, 0#, 0#, 0#, T_C)
+End Function
+
+Private Function DewTNative_R124DMAC(P_bar As Double) As Variant
+    ' Pure-R124 saturation temperature at native bar (inverts PrefNative).
     Dim lo As Double, hi As Double, mid As Double, k As Long
     lo = -40#: hi = 110#
-    If P_bar < Pref_R124DMAC(lo) Or P_bar > Pref_R124DMAC(hi) Then
-        DewT_R124DMAC = Empty
+    If P_bar < PrefNative_R124DMAC(lo) Or P_bar > PrefNative_R124DMAC(hi) Then
+        DewTNative_R124DMAC = Empty
         Exit Function
     End If
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If Pref_R124DMAC(mid) < P_bar Then lo = mid Else hi = mid
+        If PrefNative_R124DMAC(mid) < P_bar Then lo = mid Else hi = mid
     Next k
-    DewT_R124DMAC = 0.5 * (lo + hi)
+    DewTNative_R124DMAC = 0.5 * (lo + hi)
+End Function
+
+Public Function DewT_R124DMAC(P_MPa As Double) As Variant
+    ' Pure-R124 saturation (dew) temperature [degC] at P_MPa.
+    DewT_R124DMAC = DewTNative_R124DMAC(P_MPa * 10#)
 End Function
 
 Private Function PCoef() As Variant
@@ -70,7 +86,8 @@ Private Function PCoef() As Variant
         Array(-6.7036E-18, -5.344E-17, 1.414E-16, -9.4881E-17, 0#, 5.6692E-16, -1.0014E-15, 5.334E-16))
 End Function
 
-Public Function Psol_R124DMAC(T_C As Double, xi As Double) As Double
+Private Function PsolNative_R124DMAC(T_C As Double, xi As Double) As Double
+    ' Eq. (16) bubble-point pressure in native bar.
     Dim pc As Variant, T As Double, s As Double, row As Double
     Dim i As Long, j As Long
     pc = PCoef()
@@ -83,21 +100,32 @@ Public Function Psol_R124DMAC(T_C As Double, xi As Double) As Double
         Next i
         s = s + row * T ^ j
     Next j
-    Psol_R124DMAC = s
+    PsolNative_R124DMAC = s
 End Function
 
-Public Function BubbleT_R124DMAC(P_bar As Double, xi As Double) As Variant
+Public Function Psol_R124DMAC(T_C As Double, xi As Double) As Double
+    ' Eq. (16) bubble-point pressure [MPa] (native bar x 0.1).
+    Psol_R124DMAC = 0.1 * PsolNative_R124DMAC(T_C, xi)
+End Function
+
+Private Function BubbleTNative_R124DMAC(P_bar As Double, xi As Double) As Variant
+    ' Bubble-point temperature by bisection on native bar.
     Dim lo As Double, hi As Double, mid As Double, k As Long
     lo = 0#: hi = 150#
-    If P_bar < Psol_R124DMAC(lo, xi) Or P_bar > Psol_R124DMAC(hi, xi) Then
-        BubbleT_R124DMAC = Empty
+    If P_bar < PsolNative_R124DMAC(lo, xi) Or P_bar > PsolNative_R124DMAC(hi, xi) Then
+        BubbleTNative_R124DMAC = Empty
         Exit Function
     End If
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If Psol_R124DMAC(mid, xi) < P_bar Then lo = mid Else hi = mid
+        If PsolNative_R124DMAC(mid, xi) < P_bar Then lo = mid Else hi = mid
     Next k
-    BubbleT_R124DMAC = 0.5 * (lo + hi)
+    BubbleTNative_R124DMAC = 0.5 * (lo + hi)
+End Function
+
+Public Function BubbleT_R124DMAC(P_MPa As Double, xi As Double) As Variant
+    ' Bubble-point temperature [degC] at P_MPa.
+    BubbleT_R124DMAC = BubbleTNative_R124DMAC(P_MPa * 10#, xi)
 End Function
 
 ' Concentration from dew-point temperature and solution temperature:
@@ -106,15 +134,15 @@ End Function
 ' Returns Empty if no root (P outside the bubble-pressure span at Tsol).
 Public Function XiByTsolTdew_R124DMAC(Tsol_C As Double, Tdew_C As Double) As Variant
     Dim P As Double, lo As Double, hi As Double, mid As Double, k As Long
-    P = Pref_R124DMAC(Tdew_C)
-    If P < Psol_R124DMAC(Tsol_C, 0#) Or P > Psol_R124DMAC(Tsol_C, 1#) Then
+    P = PrefNative_R124DMAC(Tdew_C)
+    If P < PsolNative_R124DMAC(Tsol_C, 0#) Or P > PsolNative_R124DMAC(Tsol_C, 1#) Then
         XiByTsolTdew_R124DMAC = Empty
         Exit Function
     End If
     lo = 0#: hi = 1#
     For k = 1 To 80
         mid = 0.5 * (lo + hi)
-        If Psol_R124DMAC(Tsol_C, mid) < P Then lo = mid Else hi = mid
+        If PsolNative_R124DMAC(Tsol_C, mid) < P Then lo = mid Else hi = mid
     Next k
     XiByTsolTdew_R124DMAC = 0.5 * (lo + hi)
 End Function
@@ -126,7 +154,7 @@ End Function
 ' 评价溶液表面压力 Psol 所对应的饱和温度。
 ' DMAC 视为不挥发。压力超出 DewT 二分跨度时返回 Empty。
 Public Function TdewByTsolXi_R124DMAC(T_C As Double, xi As Double) As Variant
-    TdewByTsolXi_R124DMAC = DewT_R124DMAC(Psol_R124DMAC(T_C, xi))
+    TdewByTsolXi_R124DMAC = DewTNative_R124DMAC(PsolNative_R124DMAC(T_C, xi))
 End Function
 
 ' ---------- 由溶液比焓反解溶液温度 [°C] ----------
@@ -282,7 +310,7 @@ End Function
 Private Function AbsResid_R124DMAC(xr As Double, xi_w As Double, _
         hs As Double, hv As Double, P_bar As Double) As Variant
     Dim Tout As Variant, r As Double
-    Tout = BubbleT_R124DMAC(P_bar, xr)
+    Tout = BubbleTNative_R124DMAC(P_bar, xr)
     If IsEmpty(Tout) Then
         AbsResid_R124DMAC = Empty
         Exit Function
@@ -307,7 +335,7 @@ Public Function AbsVapFlow_R124DMAC(Ts_C As Double, xi_w As Double, _
         AbsVapFlow_R124DMAC = Empty
         Exit Function
     End If
-    P = Pref_R124DMAC(Tv_C)
+    P = PrefNative_R124DMAC(Tv_C)
     hv = hgas_R124DMAC(Tv_C)
     hs = hsol_R124DMAC(Ts_C, xi_w)
     havePrev = False

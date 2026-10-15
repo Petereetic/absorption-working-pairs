@@ -9,7 +9,11 @@ Conventions (as in the paper):
   xi  = weight fraction of R124 in the liquid solution (0..1)
   x   = mole fraction of R124 in the liquid solution
   T_C = temperature in degC;  T = T_C + 273.15 in K where an equation needs K
-  P   = bar;  h = kJ/kg;  rho = kg/m3;  eta = mPa s (= cP)
+  P   = MPa at the public boundary (changed 2026-10-14 from bar;
+  1 MPa = 10 bar);  h = kJ/kg;  rho = kg/m3;  eta = mPa s (= cP)
+  The Borde correlations are evaluated internally in their native
+  bar via private *_bar helpers; public functions only scale by
+  0.1 (pressure outputs) or 10 (pressure inputs) at the boundary.
 
 Two misprints in the paper are corrected here, each arbitrated by the paper's
 own data (see 公式说明.md for the full evidence):
@@ -37,6 +41,8 @@ _M_DMAC = 87.12    # g/mol (Table 1)
 
 # ---- Pure-component vapour pressure, Eq. (15): ------------------------------
 # ln(Ps/bar) = A + B/(T+C) + D*T + E*ln(T) + F*T^2 ,  T in K   (Table 2)
+# (Eq. (15) is quoted in its source unit bar; the public psat()
+# below returns MPa, the private _psat_bar() is the native value.)
 _PSAT = {
     "R124":   (-119.33446, -1351.341,    0.0, -0.12497, 27.21197, 8.32656e-5),
     "DMAC":   (   6.01834, -1800.240, -138.5,  0.0,      0.0,      0.0),
@@ -46,11 +52,15 @@ _PSAT = {
     "DMETEG": (  24.56738, -21564.48,  328.4,  0.0,      0.0,      0.0),
 }
 
-def psat(comp, T_C):
-    """Saturation pressure (bar) of a pure component, Eq. (15). T_C in degC."""
+def _psat_bar(comp, T_C):
+    """Saturation pressure in native bar of a pure component, Eq. (15)."""
     A, B, C, D, E, F = _PSAT[comp]
     T = T_C + 273.15
     return math.exp(A + B / (T + C) + D * T + E * math.log(T) + F * T * T)
+
+def psat(comp, T_C):
+    """Saturation pressure (MPa) of a pure component, Eq. (15). T_C in degC."""
+    return 0.1 * _psat_bar(comp, T_C)
 
 # Pure-R124 saturation pressure: NIST WebBook saturation-table fit
 # (Wagner type, exponents 1, 1.5, 3, 6), identical to
@@ -62,8 +72,8 @@ _R124_NIST_PC = 36.245
 _R124_NIST_W = (-7.401179377235425, 1.4613603991162563,
                 -3.476435267708954, -1.772232810745864)
 
-def pref_R124(T_C):
-    """Pure R124 saturation pressure (bar): NIST-table Wagner fit
+def _pref_R124_bar(T_C):
+    """Pure R124 saturation pressure in native bar: NIST-table Wagner fit
     (same coefficients as pure_fluids.R124_Pref), band -40..110 degC."""
     T = T_C + 273.15
     tau = 1.0 - T / _R124_NIST_TC
@@ -72,25 +82,40 @@ def pref_R124(T_C):
         a[0] * tau + a[1] * tau ** 1.5 + a[2] * tau ** 3.0
         + a[3] * tau ** 6.0))
 
-def psat_DMAC(T_C):
-    return psat("DMAC", T_C)
+def pref_R124(T_C):
+    """Pure R124 saturation pressure (MPa): NIST-table Wagner fit
+    (same coefficients as pure_fluids.R124_Pref), band -40..110 degC."""
+    return 0.1 * _pref_R124_bar(T_C)
 
-def Tsat_R124(P_bar):
-    """Saturation temperature (degC) of pure R124 at P_bar
-    (inverts pref_R124, the NIST-table fit; span -40..110 degC)."""
+def _psat_DMAC_bar(T_C):
+    return _psat_bar("DMAC", T_C)
+
+def psat_DMAC(T_C):
+    """Saturation pressure (MPa) of pure DMAC, Eq. (15). T_C in degC."""
+    return 0.1 * _psat_DMAC_bar(T_C)
+
+def _Tsat_R124_bar(P_bar):
+    """Saturation temperature (degC) of pure R124 at P_bar in native bar
+    (inverts _pref_R124_bar, the NIST-table fit; span -40..110 degC)."""
     lo, hi = -40.0, 110.0
-    if not (pref_R124(lo) <= P_bar <= pref_R124(hi)):
+    if not (_pref_R124_bar(lo) <= P_bar <= _pref_R124_bar(hi)):
         return None
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if pref_R124(mid) < P_bar:
+        if _pref_R124_bar(mid) < P_bar:
             lo = mid
         else:
             hi = mid
     return 0.5 * (lo + hi)
 
+def Tsat_R124(P_MPa):
+    """Saturation temperature (degC) of pure R124 at P_MPa
+    (inverts pref_R124, the NIST-table fit; span -40..110 degC)."""
+    return _Tsat_R124_bar(P_MPa * 10.0)
+
 # ---- Bubble-point pressure of R124-DMAC, Eq. (16): --------------------------
-# P = sum_j sum_i p_ij * xi^i * T^j   (bar; xi weight fraction; T in K)
+# P = sum_j sum_i p_ij * xi^i * T^j   (source unit bar; xi weight fraction;
+# T in K; the public psol() below returns MPa, _psol_bar() is native.)
 # Table 3, rows j = 0..7, columns i = 0..7.
 _P = [
     [ 0.11502e-01, -0.28240e+02,  0.41188e+02, -0.26168e+02,  0.0,          0.18381e+03, -0.31190e+03,  0.13914e+03],
@@ -103,8 +128,8 @@ _P = [
     [-0.67036e-17, -0.53440e-16,  0.14140e-15, -0.94881e-16,  0.0,          0.56692e-15, -0.10014e-14,  0.53340e-15],
 ]
 
-def psol(T_C, xi):
-    """Bubble-point pressure (bar). T_C in degC, xi = R124 mass fraction."""
+def _psol_bar(T_C, xi):
+    """Bubble-point pressure in native bar. T_C in degC, xi mass fraction."""
     T = T_C + 273.15
     s = 0.0
     for j in range(8):
@@ -114,19 +139,29 @@ def psol(T_C, xi):
         s += row * T ** j
     return s
 
-def bubble_T(P_bar, xi, Tlo_C=0.0, Thi_C=150.0):
-    """Bubble-point temperature (degC) by bisection. None if out of range."""
-    Plo, Phi = psol(Tlo_C, xi), psol(Thi_C, xi)
+def psol(T_C, xi):
+    """Bubble-point pressure (MPa). T_C in degC, xi = R124 mass fraction."""
+    return 0.1 * _psol_bar(T_C, xi)
+
+def _bubble_T_bar(P_bar, xi, Tlo_C=0.0, Thi_C=150.0):
+    """Bubble-point temperature (degC) by bisection on native bar.
+    None if out of range."""
+    Plo, Phi = _psol_bar(Tlo_C, xi), _psol_bar(Thi_C, xi)
     if not (Plo <= P_bar <= Phi):
         return None
     lo, hi = Tlo_C, Thi_C
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if psol(mid, xi) < P_bar:
+        if _psol_bar(mid, xi) < P_bar:
             lo = mid
         else:
             hi = mid
     return 0.5 * (lo + hi)
+
+def bubble_T(P_MPa, xi, Tlo_C=0.0, Thi_C=150.0):
+    """Bubble-point temperature (degC) at P_MPa by bisection.
+    None if out of range."""
+    return _bubble_T_bar(P_MPa * 10.0, xi, Tlo_C, Thi_C)
 
 def xi_by_tsol_tdew(Tsol_C, Tdew_C):
     """Concentration from dew-point temperature and solution temperature.
@@ -134,26 +169,31 @@ def xi_by_tsol_tdew(Tsol_C, Tdew_C):
     The dew point fixes the pressure, P = pref_R124(Tdew) (DMAC treated
     as non-volatile); then solve psol(Tsol, xi) = P by bisection.
     None if no root (P outside the bubble-pressure span at Tsol)."""
-    P = pref_R124(Tdew_C)
-    Plo, Phi = psol(Tsol_C, 0.0), psol(Tsol_C, 1.0)
+    P = _pref_R124_bar(Tdew_C)
+    Plo, Phi = _psol_bar(Tsol_C, 0.0), _psol_bar(Tsol_C, 1.0)
     if not (Plo <= P <= Phi):
         return None
     lo, hi = 0.0, 1.0
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if psol(Tsol_C, mid) < P:
+        if _psol_bar(Tsol_C, mid) < P:
             lo = mid
         else:
             hi = mid
     return 0.5 * (lo + hi)
 
-def dew_T(P_bar, xi=None):
-    """Dew-point temperature (degC): pure-R124 saturation temperature.
+def _dew_T_bar(P_bar, xi=None):
+    """Dew-point temperature (degC) at native bar: pure-R124 saturation
+    temperature (DMAC treated as non-volatile)."""
+    return _Tsat_R124_bar(P_bar)
+
+def dew_T(P_MPa, xi=None):
+    """Dew-point temperature (degC) at P_MPa: pure-R124 saturation temperature.
 
     DMAC is treated as non-volatile (psat_DMAC/pref_R124 < 0.6 % at 80 degC),
     so the vapour is essentially pure R124.
     """
-    return Tsat_R124(P_bar)
+    return _Tsat_R124_bar(P_MPa * 10.0)
 
 
 def tdew_by_tsol_xi(T_C, xi):
@@ -165,7 +205,7 @@ def tdew_by_tsol_xi(T_C, xi):
     Psol (pref_R124; Borde Eq (15) before 2026-10-12).
     DMAC is treated as non-volatile.  None if the pressure lies
     outside the dew_T bisection span."""
-    return dew_T(psol(T_C, xi))
+    return _dew_T_bar(_psol_bar(T_C, xi))
 
 
 def tsol_by_hsol(h, xi):
@@ -344,12 +384,12 @@ def abs_vap_flow(Ts_C, xi_w, ms, Tv_C):
     """
     if not (-40.0 <= Tv_C <= 110.0) or xi_w >= 0.95:
         return None
-    P = pref_R124(Tv_C)
+    P = _pref_R124_bar(Tv_C)
     hv = _hgas_R124(Tv_C)
     hs = hsol(Ts_C, xi_w)
 
     def resid(xr):
-        Tout = bubble_T(P, xr)
+        Tout = _bubble_T_bar(P, xr)
         if Tout is None:
             return None
         r = (xr - xi_w) / (1.0 - xr)
@@ -380,4 +420,4 @@ def abs_vap_flow(Ts_C, xi_w, ms, Tv_C):
             hi = mid
     xr = 0.5 * (lo + hi)
     r = (xr - xi_w) / (1.0 - xr)
-    return ms * r, bubble_T(P, xr), xr
+    return ms * r, _bubble_T_bar(P, xr), xr

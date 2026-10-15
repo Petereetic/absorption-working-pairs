@@ -1,7 +1,13 @@
 """Verification of r124_dmac.py against Borde et al. 1997's own data.
 
+NOTE (2026-10-14): the module's public pressure boundary is now MPa
+(was bar).  Expected values below were converted from bar to MPa
+(x0.1) where they refer to module outputs/inputs; source-side values
+quoted from the paper itself (Figure 2 readings, the thesis-table
+demonstration in check 8) stay in bar and are converted explicitly.
+
 Checks (each is internal to the paper unless marked [fig]):
- 1. Eq. (15) vapour pressures at the Table 1 normal boiling points -> 1.013 bar
+ 1. Eq. (15) vapour pressures at the Table 1 normal boiling points -> 0.1013 MPa (= 1.013 bar)
  2. Eq. (16) bubble polynomial at xi=1 / xi=0 vs Eq. (15) pure vapour pressures
  3. Eq. (16) vs Figure 2 spot readings [fig, eyeball tolerance]
  4. Eq. (19) excess enthalpy vs Figure 3 curve minima [fig]
@@ -18,24 +24,24 @@ print("== 1. Eq.(15) at normal boiling points (Table 1) ==")
 TB = {"R124": -11.0, "DMAC": 165.0, "NMP": 203.0, "MCL": 235.8,
       "DMEU": 223.0, "DMETEG": 275.3}
 for c, tb in TB.items():
-    print(f"  {c:7s} tb={tb:7.1f} C  Psat={m.psat(c, tb):.3f} bar  (target 1.013)")
+    print(f"  {c:7s} tb={tb:7.1f} C  Psat={m.psat(c, tb):.4f} MPa  (target 0.1013)")
 
 print("== 2. Eq.(16) endpoints vs Eq.(15) ==")
 # Documented characteristic of the printed fit (see 核验 record S.4.1):
 # at xi=1 the polynomial runs +13..+23 % above Eq. (15); at xi=0 the
-# absolute deviation stays <= 0.03 bar.
+# absolute deviation stays <= 0.003 MPa (= 0.03 bar).
 for T in range(0, 141, 20):
     pp, ps = m.psol(T, 1.0), m.psat("R124", T)
     print(f"  xi=1, T={T:3d} C: poly={pp:8.3f}, psat={ps:8.3f}, dev={100*(pp/ps-1):+6.1f} %")
 for T in (0, 60, 120):
     pp, ps = m.psol(T, 0.0), m.psat("DMAC", T)
-    print(f"  xi=0, T={T:3d} C: poly={pp:.4f}, psat={ps:.4f}, abs err={pp-ps:+.4f} bar")
+    print(f"  xi=0, T={T:3d} C: poly={pp:.4f}, psat={ps:.4f}, abs err={pp-ps:+.4f} MPa")
 
 print("== 3. Eq.(16) vs Figure 2 spot readings [fig] ==")
 for xi, T, p_fig in ((0.6, 100, 7.3), (0.4, 80, 3.3), (0.8, 120, 13.0),
                      (0.2, 60, 1.1), (1.0, 140, 23.5)):
-    p = m.psol(T, xi)
-    print(f"  xi={xi}, T={T} C: model {p:6.2f} bar, figure ~{p_fig} bar")
+    p = m.psol(T, xi)  # MPa; figure readings are in bar, converted x0.1
+    print(f"  xi={xi}, T={T} C: model {p:6.3f} MPa, figure ~{p_fig * 0.1:.2f} MPa")
 
 print("== 4. Eq.(19) excess enthalpy vs Figure 3 [fig] ==")
 for T in (0, 20, 60, 100, 140):
@@ -96,4 +102,4 @@ def _thP(xi, Tv):
 for xi, T in ((0.5, 80), (0.8, 100)):
     print(f"  xi={xi}, T={T} C: thesis table (T in C, as its text states) "
           f"P={_thP(xi, float(T)):.4g} bar; (T in K) P={_thP(xi, T + 273.15):.4g} bar; "
-          f"Borde original P={m.psol(T, xi):.3f} bar")
+          f"Borde original P={m.psol(T, xi) * 10:.3f} bar (module MPa x10)")
