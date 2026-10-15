@@ -14,7 +14,7 @@
 static const double M_R22 = 86.47;      /* g/mol */
 static const double M_DEGDME = 134.17;  /* g/mol */
 static const double TM_C = 10.0;        /* °C */
-static const double KGCM2_TO_BAR = 0.980665;
+static const double KGCM2_TO_MPA = 0.0980665; /* 1 kg/cm2 = 0.0980665 MPa（精确定义） */
 
 /* 表2：式(1) n=0..5 (A, B, C) */
 static const double T2[6][3] = {
@@ -53,27 +53,31 @@ double r22degdme_psol_kgcm2(double X, double T_K)
     return exp(sA + sB / T_K + sC * log(T_K));
 }
 
-/* 式(1)：泡点压力 bar，t_C 摄氏度 */
+/* 式(1)：泡点压力 MPa，t_C 摄氏度。
+ * 【注意：函数名 r22degdme_psol_bar 为原名保留（改名待裁），返回值
+ * 单位已由 bar 改为 MPa】＝原生 kg/cm2 值 ×0.0980665。 */
 double r22degdme_psol_bar(double X, double t_C)
 {
-    return r22degdme_psol_kgcm2(X, t_C + 273.15) * KGCM2_TO_BAR;
+    return r22degdme_psol_kgcm2(X, t_C + 273.15) * KGCM2_TO_MPA;
 }
 
 /* 由露点温度与溶液温度反解浓度 X（R22 摩尔分数），二分 80 次。
- * 露点定压 P = r22degdme_psol_bar(1.0, Tdew_C)：式(1) 在 X=1 端即
- * 本模块的纯 R22 饱和压力（DEGDME 视为不挥发）；再二分求
- * r22degdme_psol_bar(X, Tsol_C) = P，括号取式(1) 有效浓度域
- * X ∈ [0.1, 1.0]。无根时返回 NAN（如 Tsol 明显低于 Tdew）。 */
+ * 露点定压 P = r22degdme_psol_kgcm2(1.0, Tdew_C+273.15) [kg/cm2
+ * 原生]：式(1) 在 X=1 端即本模块的纯 R22 饱和压力（DEGDME 视为
+ * 不挥发）；再二分求 r22degdme_psol_kgcm2(X, Tsol_C+273.15) = P，
+ * 括号取式(1) 有效浓度域 X ∈ [0.1, 1.0]。内部一律走原生 kg/cm2
+ * 函数（不经 MPa 导出线），保证浓度输出逐位不变。
+ * 无根时返回 NAN（如 Tsol 明显低于 Tdew）。 */
 double r22degdme_XiByTsolTdew(double Tsol_C, double Tdew_C)
 {
-    double P = r22degdme_psol_bar(1.0, Tdew_C);
+    double P = r22degdme_psol_kgcm2(1.0, Tdew_C + 273.15);
     double lo = 0.1, hi = 1.0, mid;
     int k;
-    if (P < r22degdme_psol_bar(0.1, Tsol_C) || P > r22degdme_psol_bar(1.0, Tsol_C))
+    if (P < r22degdme_psol_kgcm2(0.1, Tsol_C + 273.15) || P > r22degdme_psol_kgcm2(1.0, Tsol_C + 273.15))
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (r22degdme_psol_bar(mid, Tsol_C) < P) lo = mid; else hi = mid;
+        if (r22degdme_psol_kgcm2(mid, Tsol_C + 273.15) < P) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }
@@ -81,19 +85,21 @@ double r22degdme_XiByTsolTdew(double Tsol_C, double Tdew_C)
 
 /* 溶液在 (X, t_C) 的露点温度 [°C]（全库 TdewByTsolXi 约定）：
  * 本模块自有纯 R22 线（式(1) X=1 端）上满足
- * r22degdme_psol_bar(1.0, Tdew) = r22degdme_psol_bar(X, t_C) 的
- * 温度，二分 80 次反解，括号 t ∈ [-50, 190] °C。注意：式(1)
+ * r22degdme_psol_kgcm2(1.0, Tdew+273.15) =
+ * r22degdme_psol_kgcm2(X, t_C+273.15) [kg/cm2 原生] 的温度，
+ * 二分 80 次反解，括号 t ∈ [-50, 190] °C。内部一律走原生 kg/cm2
+ * 函数（不经 MPa 导出线），保证温度输出逐位不变。注意：式(1)
  * 标称温度辖区 -20~190 °C，Tdew < -20 °C 为纯端外推。无根返回 NAN。 */
 double r22degdme_TdewByTsolXi(double X, double t_C)
 {
-    double P = r22degdme_psol_bar(X, t_C);
+    double P = r22degdme_psol_kgcm2(X, t_C + 273.15);
     double lo = -50.0, hi = 190.0, mid;
     int k;
-    if (P < r22degdme_psol_bar(1.0, lo) || P > r22degdme_psol_bar(1.0, hi))
+    if (P < r22degdme_psol_kgcm2(1.0, lo + 273.15) || P > r22degdme_psol_kgcm2(1.0, hi + 273.15))
         return NAN;
     for (k = 0; k < 80; k++) {
         mid = 0.5 * (lo + hi);
-        if (r22degdme_psol_bar(1.0, mid) < P) lo = mid; else hi = mid;
+        if (r22degdme_psol_kgcm2(1.0, mid + 273.15) < P) lo = mid; else hi = mid;
     }
     return 0.5 * (lo + hi);
 }

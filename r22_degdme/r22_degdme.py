@@ -25,7 +25,7 @@ import math
 _M_R22 = 86.47      # g/mol, CHClF2
 _M_DEGDME = 134.17  # g/mol, C6H14O3 (bis(2-methoxyethyl)ether)
 _TM_C = 10.0        # 混合热测定温度 / 焓参考温度，°C
-_KGCM2_TO_BAR = 0.980665
+_KGCM2_TO_MPA = 0.0980665  # 1 kg/cm2 = 0.0980665 MPa（精确定义）
 
 # 表2：式(1) n=0..5 的 (A, B, C)
 _T2 = [
@@ -65,27 +65,32 @@ def psol_kgcm2(X, T_K):
 
 
 def psol_bar(X, t_C):
-    """式(1)：泡点压力，bar。t_C=摄氏度。"""
-    return psol_kgcm2(X, t_C + 273.15) * _KGCM2_TO_BAR
+    """式(1)：泡点压力，MPa。
+
+    【注意：函数名 psol_bar 为原名保留（改名待裁），返回值单位已由
+    bar 改为 MPa】＝原生 kg/cm2 值 ×0.0980665。t_C=摄氏度。"""
+    return psol_kgcm2(X, t_C + 273.15) * _KGCM2_TO_MPA
 
 
 def xi_by_tsol_tdew(Tsol_C, Tdew_C):
     """由露点温度与溶液温度反解浓度 X（R22 摩尔分数），二分 80 次。
 
-    露点定压 P = psol_bar(1.0, Tdew_C)：式(1) 在 X=1 端即本模块的纯
-    R22 饱和压力（DEGDME 视为不挥发）；再二分求
-    psol_bar(X, Tsol_C) = P，括号取式(1) 有效浓度域 X ∈ [0.1, 1.0]。
+    露点定压 P = psol_kgcm2(1.0, Tdew_C+273.15) [kg/cm2 原生]：
+    式(1) 在 X=1 端即本模块的纯 R22 饱和压力（DEGDME 视为不挥
+    发）；再二分求 psol_kgcm2(X, Tsol_C+273.15) = P，括号取式(1)
+    有效浓度域 X ∈ [0.1, 1.0]。内部一律走原生 kg/cm2 函数（不经
+    MPa 导出线），保证温度/浓度输出逐位不变。
     无根时返回 None（如 Tsol 明显低于 Tdew，P 超出 Tsol 下的泡点
     压力区间）。
     """
-    P = psol_bar(1.0, Tdew_C)
-    Plo, Phi = psol_bar(0.1, Tsol_C), psol_bar(1.0, Tsol_C)
+    P = psol_kgcm2(1.0, Tdew_C + 273.15)
+    Plo, Phi = psol_kgcm2(0.1, Tsol_C + 273.15), psol_kgcm2(1.0, Tsol_C + 273.15)
     if not (Plo <= P <= Phi):
         return None
     lo, hi = 0.1, 1.0
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if psol_bar(mid, Tsol_C) < P:
+        if psol_kgcm2(mid, Tsol_C + 273.15) < P:
             lo = mid
         else:
             hi = mid
@@ -96,19 +101,21 @@ def xi_by_tsol_tdew(Tsol_C, Tdew_C):
 def tdew_by_tsol_xi(X, t_C):
     """溶液在 (X, t_C) 的露点温度 [°C]（全库 TdewByTsolXi 约定）：
     Tdew 为本模块自有纯 R22 线（式(1) 的 X=1 端）满足
-    psol_bar(1.0, Tdew) = psol_bar(X, t_C) 的温度，二分 80 次
-    反解，求解括号 t ∈ [-50, 190] °C。注意：式(1) 标称温度辖
+    psol_kgcm2(1.0, Tdew+273.15) = psol_kgcm2(X, t_C+273.15)
+    [kg/cm2 原生] 的温度，二分 80 次反解，求解括号
+    t ∈ [-50, 190] °C。内部一律走原生 kg/cm2 函数（不经 MPa
+    导出线），保证温度输出逐位不变。注意：式(1) 标称温度辖
     区为 -20~190 °C，Tdew < -20 °C 的结果用到纯端在辖区外的
     外推（Rankine 型方程形式外推），引用时须连同此标注。
     DEGDME 视为不挥发。P 超出纯端在括号内的压力跨度时返回 None。
     （本模块函数惯例为 (X, T) 参数序，本函数从之。）"""
-    P = psol_bar(X, t_C)
+    P = psol_kgcm2(X, t_C + 273.15)
     lo, hi = -50.0, 190.0
-    if not (psol_bar(1.0, lo) <= P <= psol_bar(1.0, hi)):
+    if not (psol_kgcm2(1.0, lo + 273.15) <= P <= psol_kgcm2(1.0, hi + 273.15)):
         return None
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if psol_bar(1.0, mid) < P:
+        if psol_kgcm2(1.0, mid + 273.15) < P:
             lo = mid
         else:
             hi = mid
@@ -164,8 +171,8 @@ def hsol(X, t_C):
 if __name__ == "__main__":
     # 自检：与论文图6（ΔHm 最低点约 -5000 J/mol）及物理量级对照
     print("Psol(X=1.0, 10°C)  = %.3f kg/cm2" % psol_kgcm2(1.0, 283.15))
-    print("Psol(X=0.5, 10°C)  = %.3f bar" % psol_bar(0.5, 10.0))
-    print("Psol(X=0.5, 80°C)  = %.3f bar" % psol_bar(0.5, 80.0))
+    print("Psol(X=0.5, 10°C)  = %.4f MPa" % psol_bar(0.5, 10.0))
+    print("Psol(X=0.5, 80°C)  = %.4f MPa" % psol_bar(0.5, 80.0))
     print("Cp  (X=0.5, 10°C)  = %.1f J/mol/K" % cp_molar(0.5, 10.0))
     print("dHm (X=0.5)        = %.0f J/mol" % heat_of_mixing(0.5))
     print("Hsol(X=0.5, 10°C)  = %.2f kJ/kg" % hsol(0.5, 10.0))
