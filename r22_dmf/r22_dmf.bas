@@ -7,8 +7,8 @@ Attribute VB_Name = "R22DMF"
 '   适用: T -25~120 C, xi 0.10~1.00 (xi>0.80 且 T>65C 时为外推, 慎用)。
 ' 溶液焓: Fatouh 等 1993 关联式 (Ardita 论文 2.38~2.43), kJ/kg,
 '   参考态 273.15K 饱和液体=100 kJ/kg。适用约 T -20~95C。
-' 用法: =Psol_R22DMF(40, 0.5)   -> 泡点压力 bar
-'       =BubbleT_R22DMF(3.8, 0.5)  -> 泡点温度 C
+' 用法: =Psol_R22DMF(40, 0.5)   -> 泡点压力 MPa
+'       =BubbleT_R22DMF(0.38, 0.5)  -> 泡点温度 C
 '       =XiByTsolTdew_R22DMF(0, 60)  -> 由露点/溶液温度反解浓度 xi
 '       =hsol_R22DMF(30, 0.5)      -> 溶液焓 kJ/kg
 '==============================================================================
@@ -76,22 +76,27 @@ Private Function Psol_K(T As Double, xi As Double) As Double
 End Function
 
 Public Function Psol_R22DMF(T_C As Double, xi As Double) As Double
-    ' 泡点压力 bar; T_C 摄氏度, xi 为 R22 质量分数
-    Psol_R22DMF = Psol_K(T_C + 273.15, xi)
+    ' 泡点压力 MPa; T_C 摄氏度, xi 为 R22 质量分数 (内部 Psol_K 为 bar 原生值, 出口 x0.1)
+    Psol_R22DMF = Psol_K(T_C + 273.15, xi) * 0.1
 End Function
 
-Public Function BubbleT_R22DMF(P_bar As Double, xi As Double) As Variant
-    ' 泡点温度 摄氏度 (二分法反算); 超出范围返回 #N/A
+' 内部: 以 bar 原生压力反算泡点温度 摄氏度 (二分法); 超出范围返回 #N/A
+Private Function BubbleT_K(P_bar As Double, xi As Double) As Variant
     Dim lo As Double, hi As Double, mid As Double, i As Long
     lo = -25#: hi = 120#
     If P_bar < Psol_K(lo + 273.15, xi) Or P_bar > Psol_K(hi + 273.15, xi) Then
-        BubbleT_R22DMF = CVErr(xlErrNA): Exit Function
+        BubbleT_K = CVErr(xlErrNA): Exit Function
     End If
     For i = 1 To 60
         mid = 0.5 * (lo + hi)
         If Psol_K(mid + 273.15, xi) < P_bar Then lo = mid Else hi = mid
     Next i
-    BubbleT_R22DMF = 0.5 * (lo + hi)
+    BubbleT_K = 0.5 * (lo + hi)
+End Function
+
+Public Function BubbleT_R22DMF(P_MPa As Double, xi As Double) As Variant
+    ' 泡点温度 摄氏度 (二分法反算); 入参 P_MPa 为 MPa (入口 x10 回 bar); 超出范围返回 #N/A
+    BubbleT_R22DMF = BubbleT_K(P_MPa * 10#, xi)
 End Function
 
 Public Function XiByTsolTdew_R22DMF(Tsol_C As Double, Tdew_C As Double) As Variant
@@ -115,11 +120,12 @@ End Function
 
 
 ' ---------- 露点温度（溶液）[°C]：全库 TdewByTsolXi 约定 ----------
-' Tdew = BubbleT_R22DMF(Psol_R22DMF(T_C, xi), 1)：以本模块自有纯
+' Tdew = BubbleT_K(Psol_K(T_C + 273.15, xi), 1)（内部走 bar 原生私有函数,
+' 与原 BubbleT_R22DMF(Psol_R22DMF(...)) 复合路径等价）：以本模块自有纯
 ' R22 等浓度线（xi=1 端）评价溶液表面压力 Psol 所对应的饱和
-' 温度。DMF 视为不挥发。无根时随 BubbleT 返回 #N/A。
+' 温度。DMF 视为不挥发。无根时随 BubbleT_K 返回 #N/A。
 Public Function TdewByTsolXi_R22DMF(T_C As Double, xi As Double) As Variant
-    TdewByTsolXi_R22DMF = BubbleT_R22DMF(Psol_R22DMF(T_C, xi), 1#)
+    TdewByTsolXi_R22DMF = BubbleT_K(Psol_K(T_C + 273.15, xi), 1#)
 End Function
 
 ' ---------- 由溶液比焓反解溶液温度 [°C] ----------

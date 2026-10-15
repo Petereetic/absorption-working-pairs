@@ -35,42 +35,53 @@ def _pchip(x, y, xq):
     return ((2*t**3-3*t**2+1)*y[k] + (t**3-2*t**2+t)*h[k]*dk[k]
             + (-2*t**3+3*t**2)*y[k+1] + (t**3-t**2)*h[k]*dk[k+1])
 
-def psol(T_C, xi):
-    """Bubble-point pressure (bar). T_C in degC, xi = R22 mass fraction."""
+def _psol_bar(T_C, xi):
+    """Private native value: bubble-point pressure (bar). T_C in degC,
+    xi = R22 mass fraction. Public psol() wraps this with MPa scaling."""
     T = T_C + 273.15
     xc = min(max(xi, _XI_LO), _XI_HI)
     xs = [r[0] for r in _ISO]
     Pj = [math.exp(r[1] + r[2]/T + r[3]*math.log(T)) for r in _ISO]
     return _pchip(xs, Pj, xc)
 
-def bubble_T(P_bar, xi, Tlo_C=-25.0, Thi_C=120.0):
-    """Bubble-point temperature (degC) by bisection. Returns None if out of range."""
+def psol(T_C, xi):
+    """Bubble-point pressure (MPa). T_C in degC, xi = R22 mass fraction."""
+    return _psol_bar(T_C, xi) * 0.1
+
+def _bubble_T_bar(P_bar, xi, Tlo_C=-25.0, Thi_C=120.0):
+    """Private native value: bubble-point temperature (degC) for a
+    pressure in bar, by bisection. Returns None if out of range."""
     xc = min(max(xi, _XI_LO), _XI_HI)
-    Plo, Phi = psol(Tlo_C, xc), psol(Thi_C, xc)
+    Plo, Phi = _psol_bar(Tlo_C, xc), _psol_bar(Thi_C, xc)
     if not (Plo <= P_bar <= Phi): return None
     lo, hi = Tlo_C, Thi_C
     for _ in range(60):
         mid = 0.5*(lo+hi)
-        if psol(mid, xc) < P_bar: lo = mid
+        if _psol_bar(mid, xc) < P_bar: lo = mid
         else: hi = mid
     return 0.5*(lo+hi)
+
+def bubble_T(P_MPa, xi, Tlo_C=-25.0, Thi_C=120.0):
+    """Bubble-point temperature (degC) by bisection; P_MPa in MPa.
+    Returns None if out of range."""
+    return _bubble_T_bar(P_MPa * 10.0, xi, Tlo_C, Thi_C)
 
 def xi_by_tsol_tdew(Tsol_C, Tdew_C):
     """Concentration from dew-point temperature and solution temperature.
 
-    The dew point fixes the pressure, P = psol(Tdew, 1.0) (the pure-R22
+    The dew point fixes the pressure, P = _psol_bar(Tdew, 1.0) (the pure-R22
     isopleth of this module; DMF treated as non-volatile); then solve
     psol(Tsol, xi) = P by bisection over the valid xi range
     0.10..1.00. None if no root (P outside the bubble-pressure span
     at Tsol)."""
-    P = psol(Tdew_C, 1.0)
-    Plo, Phi = psol(Tsol_C, _XI_LO), psol(Tsol_C, _XI_HI)
+    P = _psol_bar(Tdew_C, 1.0)
+    Plo, Phi = _psol_bar(Tsol_C, _XI_LO), _psol_bar(Tsol_C, _XI_HI)
     if not (Plo <= P <= Phi):
         return None
     lo, hi = _XI_LO, _XI_HI
     for _ in range(80):
         mid = 0.5 * (lo + hi)
-        if psol(Tsol_C, mid) < P:
+        if _psol_bar(Tsol_C, mid) < P:
             lo = mid
         else:
             hi = mid
@@ -83,8 +94,10 @@ def tdew_by_tsol_xi(T_C, xi):
     i.e. the saturation temperature on this module's own pure-R22
     isopleth (xi = 1 end of the fitted surface) at the solution
     surface pressure Psol.  DMF treated as non-volatile.  None if
-    the pressure is outside the bubble_T span at xi = 1."""
-    return bubble_T(psol(T_C, xi), 1.0)
+    the pressure is outside the bubble_T span at xi = 1.
+    (Evaluated on the private native bar functions so the result
+    is identical to the pre-MPa version.)"""
+    return _bubble_T_bar(_psol_bar(T_C, xi), 1.0)
 
 
 def tsol_by_hsol(h, xi):
@@ -174,7 +187,7 @@ if __name__ == "__main__":
     errs=[]
     for T,x,P in pts:
         if x < 0.099: continue
-        errs.append(abs(psol(T-273.15,x)-P)/P*100)
+        errs.append(abs(psol(T-273.15,x)-P*0.1)/(P*0.1)*100)
     errs=np.array(errs) if (np:=__import__('numpy')) else errs
     print(f"psol: n={len(errs)} AARD={sum(errs)/len(errs):.3f}% max={max(errs):.2f}%")
     # reference points
@@ -182,6 +195,6 @@ if __name__ == "__main__":
     print("h_DMF(0C)   =", round(h_DMF(0),2), "(ref 100)")
     print("h_sol(30C,0.5) =", round(hsol(30,0.5),2))
     print("h_sol(98.7C,0.5)=", round(hsol(98.7,0.5),2), "(thesis hand-calc 383.75; see note)")
-    print("psol(40C,0.5)=", round(psol(40,0.5),3), "bar (data 3.796 @31.8C? no: 313.15K/50%=3.796)")
-    print("psol(30C,0.5)=", round(psol(30,0.5),3))
-    print("bubble_T(3.796bar,0.5)=", round(bubble_T(3.796,0.5),2), "C (expect ~40C)")
+    print("psol(40C,0.5)=", round(psol(40,0.5),4), "MPa (data 0.3796 @31.8C? no: 313.15K/50%=0.3796)")
+    print("psol(30C,0.5)=", round(psol(30,0.5),4))
+    print("bubble_T(0.3796MPa,0.5)=", round(bubble_T(0.3796,0.5),2), "C (expect ~40C)")

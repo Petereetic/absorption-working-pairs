@@ -87,8 +87,8 @@ Private Function EJPchip(x() As Double, y() As Double, xq As Double) As Double
             + (-2 * t3 + 3 * t2) * y(k + 1) + (t3 - t2) * h(k) * dk(k + 1)
 End Function
 
-' Bubble-point pressure [bar]. T_C [degC], xi = R22 mass fraction.
-Public Function EJP_BubbleP(T_C As Double, xi As Double) As Double
+' Private native value: bubble-point pressure [bar]. T_C [degC], xi = R22 mass fraction.
+Private Function EJP_BubbleP_bar(T_C As Double, xi As Double) As Double
     Dim T As Double, lnT As Double, j As Long
     Dim X(0 To 9) As Double, Pj(0 To 9) As Double
     T = T_C + 273.15: lnT = Log(T)
@@ -98,7 +98,12 @@ Public Function EJP_BubbleP(T_C As Double, xi As Double) As Double
         X(j) = IsoXi(j)
         Pj(j) = Exp(IsoA(j) + IsoB(j) / T + IsoC(j) * lnT)
     Next j
-    EJP_BubbleP = EJPchip(X, Pj, xi)
+    EJP_BubbleP_bar = EJPchip(X, Pj, xi)
+End Function
+
+' Bubble-point pressure [MPa]. T_C [degC], xi = R22 mass fraction.
+Public Function EJP_BubbleP(T_C As Double, xi As Double) As Double
+    EJP_BubbleP = EJP_BubbleP_bar(T_C, xi) * 0.1
 End Function
 
 Private Function EjFpoly(F0 As Double, F1 As Double, F2 As Double, T As Double) As Double
@@ -163,30 +168,30 @@ End Function
 
 ' ---------- ejector model ----------
 ' Isentropic lift work of the vapour [kJ/kg]. Ts_C = suction vapour temp.
-Public Function Ej_Wisen(Ps_bar As Double, Pd_bar As Double, Ts_C As Double) As Double
+Public Function Ej_Wisen(Ps_MPa As Double, Pd_MPa As Double, Ts_C As Double) As Double
     Dim pi As Double, Ts As Double
-    pi = Pd_bar / Ps_bar: Ts = Ts_C + 273.15
+    pi = Pd_MPa / Ps_MPa: Ts = Ts_C + 273.15
     Ej_Wisen = EJ_KAPPA / (EJ_KAPPA - 1) * EJ_RS * Ts * _
                (pi ^ ((EJ_KAPPA - 1) / EJ_KAPPA) - 1) / 1000
 End Function
 
 ' Ideal-gas vapour density [kg/m3] (pure R22; DMF vapour neglected).
-Public Function Ej_RhoVap(P_bar As Double, T_C As Double) As Double
-    Ej_RhoVap = P_bar * 100000# / (EJ_RS * (T_C + 273.15))
+Public Function Ej_RhoVap(P_MPa As Double, T_C As Double) As Double
+    Ej_RhoVap = P_MPa * 1000000# / (EJ_RS * (T_C + 273.15))
 End Function
 
 ' Minimum motive ratio ml [kg liquid / kg vapour] from the diffuser
 ' recovery condition. Tmix_C = temperature used for the vapour density
 ' inside the mixture (engineering estimate).
-Public Function Ej_MinMotive(Pm_bar As Double, Ps_bar As Double, Pd_bar As Double, _
+Public Function Ej_MinMotive(Pm_MPa As Double, Ps_MPa As Double, Pd_MPa As Double, _
                              Tmix_C As Double, rho_l As Double, _
                              phi_n As Double, eta_d As Double) As Double
     Dim Pm As Double, Ps As Double, Pd As Double
     Dim rho_vd As Double, vj As Double
     Dim lo As Double, hi As Double, mid As Double
     Dim vm As Double, rho_m As Double, i As Long
-    Pm = Pm_bar * 100000#: Ps = Ps_bar * 100000#: Pd = Pd_bar * 100000#
-    rho_vd = Ej_RhoVap(Pd_bar, Tmix_C)
+    Pm = Pm_MPa * 1000000#: Ps = Ps_MPa * 1000000#: Pd = Pd_MPa * 1000000#
+    rho_vd = Ej_RhoVap(Pd_MPa, Tmix_C)
     vj = phi_n * Sqr(2 * (Pm - Ps) / rho_l)
     lo = 0.3: hi = 5000#
     For i = 1 To 100
@@ -200,9 +205,9 @@ End Function
 
 ' Pump shaft work per kg of entrained vapour [kJ/kg].
 ' Pump draws solution from the discharge vessel (Pd) up to Pm.
-Public Function Ej_PumpWork(ml As Double, Pm_bar As Double, Pd_bar As Double, _
+Public Function Ej_PumpWork(ml As Double, Pm_MPa As Double, Pd_MPa As Double, _
                             rho_l As Double, eta_p As Double) As Double
-    Ej_PumpWork = ml * (Pm_bar - Pd_bar) * 100000# / (rho_l * eta_p) / 1000
+    Ej_PumpWork = ml * (Pm_MPa - Pd_MPa) * 1000000# / (rho_l * eta_p) / 1000
 End Function
 
 ' Adiabatic outlet liquid temperature [degC]: ml kg of solution
@@ -230,17 +235,17 @@ Public Sub TestEjectorPump()
     Ps = EJP_BubbleP(30, 0.2): Pd = EJP_BubbleP(5, 0.4)
     wis = Ej_Wisen(Ps, Pd, 30)
     Debug.Print "Note 1: Ps="; Ps; " Pd="; Pd; " pi="; Pd / Ps; " w_is="; wis
-    ml = Ej_MinMotive(9, Ps, Pd, 9.85, 1100, 0.95, 0.85)
-    W = Ej_PumpWork(ml, 9, Pd, 1100, 0.75)
-    Debug.Print "  Pm=9: ml="; ml; " W="; W; " eta="; wis / W
-    W = Ej_PumpWork(9, 9, Pd, 1100, 0.75)
-    Debug.Print "  Design ml=9, Pm=9: W="; W; " eta="; wis / W
+    ml = Ej_MinMotive(0.9, Ps, Pd, 9.85, 1100, 0.95, 0.85)
+    W = Ej_PumpWork(ml, 0.9, Pd, 1100, 0.75)
+    Debug.Print "  Pm=0.9 MPa: ml="; ml; " W="; W; " eta="; wis / W
+    W = Ej_PumpWork(9, 0.9, Pd, 1100, 0.75)
+    Debug.Print "  Design ml=9, Pm=0.9 MPa: W="; W; " eta="; wis / W
     ' Note 2: liquid xi=0.40 @ 18C, vapour source xi=0.20 @ 42C, rho_l=1075
     Ps = EJP_BubbleP(42, 0.2): Pd = EJP_BubbleP(18, 0.4)
     wis = Ej_Wisen(Ps, Pd, 42)
     Debug.Print "Note 2: Ps="; Ps; " Pd="; Pd; " pi="; Pd / Ps; " w_is="; wis
-    ml = Ej_MinMotive(4, Ps, Pd, 23.85, 1075, 0.95, 0.85)
-    W = Ej_PumpWork(ml, 4, Pd, 1075, 0.75)
-    Debug.Print "  Pm=4: ml="; ml; " W="; W; " eta="; wis / W; _
+    ml = Ej_MinMotive(0.4, Ps, Pd, 23.85, 1075, 0.95, 0.85)
+    W = Ej_PumpWork(ml, 0.4, Pd, 1075, 0.75)
+    Debug.Print "  Pm=0.4 MPa: ml="; ml; " W="; W; " eta="; wis / W; _
                 " T_out="; Ej_Tout(ml, 18, 0.4, 42, W)
 End Sub

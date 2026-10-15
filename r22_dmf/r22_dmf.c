@@ -52,8 +52,9 @@ static double pchip(const double *x, const double *y, int n, double xq)
     }
 }
 
-/* Bubble-point pressure, bar. T_C in degC, xi = R22 mass fraction. */
-double R22DMF_Psol(double T_C, double xi)
+/* Private native value: bubble-point pressure, bar.
+ * T_C in degC, xi = R22 mass fraction. */
+static double R22DMF_Psol_bar(double T_C, double xi)
 {
     double T = T_C + 273.15, Pj[NISO], lnT = log(T);
     int j;
@@ -64,36 +65,50 @@ double R22DMF_Psol(double T_C, double xi)
     return pchip(ISO_XI, Pj, NISO, xi);
 }
 
-/* Bubble-point temperature, degC, by bisection. Returns NAN if P out of range. */
-double R22DMF_BubbleT(double P_bar, double xi)
+/* Bubble-point pressure, MPa. T_C in degC, xi = R22 mass fraction. */
+double R22DMF_Psol(double T_C, double xi)
+{
+    return R22DMF_Psol_bar(T_C, xi) * 0.1;
+}
+
+/* Private native value: bubble-point temperature, degC, for a pressure
+ * in bar, by bisection. Returns NAN if P out of range. */
+static double R22DMF_BubbleT_bar(double P_bar, double xi)
 {
     double lo = -25.0, hi = 120.0, mid;
     int i;
-    if (P_bar < R22DMF_Psol(lo, xi) || P_bar > R22DMF_Psol(hi, xi))
+    if (P_bar < R22DMF_Psol_bar(lo, xi) || P_bar > R22DMF_Psol_bar(hi, xi))
         return NAN;
     for (i = 0; i < 60; i++) {
         mid = 0.5*(lo+hi);
-        if (R22DMF_Psol(mid, xi) < P_bar) lo = mid; else hi = mid;
+        if (R22DMF_Psol_bar(mid, xi) < P_bar) lo = mid; else hi = mid;
     }
     return 0.5*(lo+hi);
 }
 
+/* Bubble-point temperature, degC, by bisection; P_MPa in MPa.
+ * Returns NAN if P out of range. */
+double R22DMF_BubbleT(double P_MPa, double xi)
+{
+    return R22DMF_BubbleT_bar(P_MPa * 10.0, xi);
+}
+
 /* Concentration from dew-point temperature and solution temperature:
- * the dew point fixes the pressure, P = R22DMF_Psol(Tdew, 1.0)
+ * the dew point fixes the pressure, P = R22DMF_Psol_bar(Tdew, 1.0)
  * (pure-R22 isopleth of this module; DMF treated as non-volatile),
- * then solve R22DMF_Psol(Tsol, xi) = P for xi by bisection over
+ * then solve R22DMF_Psol_bar(Tsol, xi) = P for xi by bisection over
  * the valid xi range 0.10..1.00. Returns NAN if no root (P outside
  * the bubble-pressure span at Tsol). */
 double R22DMF_XiByTsolTdew(double Tsol_C, double Tdew_C)
 {
-    double P = R22DMF_Psol(Tdew_C, 1.0);
+    double P = R22DMF_Psol_bar(Tdew_C, 1.0);
     double lo = 0.10, hi = 1.0, mid;
     int i;
-    if (P < R22DMF_Psol(Tsol_C, 0.10) || P > R22DMF_Psol(Tsol_C, 1.0))
+    if (P < R22DMF_Psol_bar(Tsol_C, 0.10) || P > R22DMF_Psol_bar(Tsol_C, 1.0))
         return NAN;
     for (i = 0; i < 80; i++) {
         mid = 0.5*(lo+hi);
-        if (R22DMF_Psol(Tsol_C, mid) < P) lo = mid; else hi = mid;
+        if (R22DMF_Psol_bar(Tsol_C, mid) < P) lo = mid; else hi = mid;
     }
     return 0.5*(lo+hi);
 }
@@ -101,11 +116,11 @@ double R22DMF_XiByTsolTdew(double Tsol_C, double Tdew_C)
 
 /* Dew-point temperature [degC] of the solution at (T_C, xi)
    (library-wide TdewByTsolXi convention):
-   R22DMF_BubbleT(R22DMF_Psol(T_C, xi), 1.0) on this module's own
+   R22DMF_BubbleT_bar(R22DMF_Psol_bar(T_C, xi), 1.0) on this module's own
    pure-R22 isopleth (xi = 1).  NAN if BubbleT has no root. */
 double R22DMF_TdewByTsolXi(double T_C, double xi)
 {
-    return R22DMF_BubbleT(R22DMF_Psol(T_C, xi), 1.0);
+    return R22DMF_BubbleT_bar(R22DMF_Psol_bar(T_C, xi), 1.0);
 }
 
 double R22DMF_hsol(double T_C, double xi);  /* forward: defined below */
@@ -178,10 +193,10 @@ double R22DMF_hsol(double T_C, double xi)
 int main(void)
 {
     printf("R22-DMF property check\n");
-    printf("Psol(40C, 0.50)  = %.3f bar  (data 3.796 @40C)\n", R22DMF_Psol(40, .5));
-    printf("Psol(0C, 0.50)   = %.3f bar  (data 1.317 @0C)\n", R22DMF_Psol(0, .5));
-    printf("Psol(0C, 1.00)   = %.3f bar  (data 5.098, pure R22)\n", R22DMF_Psol(0, 1.0));
-    printf("BubbleT(3.796bar,.5)= %.2f C\n", R22DMF_BubbleT(3.796, .5));
+    printf("Psol(40C, 0.50)  = %.4f MPa  (data 0.3796 @40C)\n", R22DMF_Psol(40, .5));
+    printf("Psol(0C, 0.50)   = %.4f MPa  (data 0.1317 @0C)\n", R22DMF_Psol(0, .5));
+    printf("Psol(0C, 1.00)   = %.4f MPa  (data 0.5098, pure R22)\n", R22DMF_Psol(0, 1.0));
+    printf("BubbleT(0.3796MPa,.5)= %.2f C\n", R22DMF_BubbleT(0.3796, .5));
     printf("H_R22L(0C)  = %.2f kJ/kg (ref 100)\n", R22DMF_hliq_R22(0));
     printf("H_DMF(0C)   = %.2f kJ/kg (ref 100)\n", R22DMF_H_DMF(0));
     printf("Hsol(30C,.5)= %.2f kJ/kg\n", R22DMF_hsol(30, .5));
