@@ -42,6 +42,6 @@ for row in read_deng():
         print(f"{T:8.2f} {xe:8.4f} {pe:8.1f} {ph:9.1f} {dh:7.2f} {pm:8.1f} {dm:7.2f}")
 
 n = len(devs_han)
-print(f"\nvs Han 2011 插值: 平均 |偏差| = {sum(devs_han)/n:.2f}%, 最大 = {max(devs_han):.2f}%")
-print(f"  (论文称: 平均 1.51%, 最大 2.89% —— 注: 论文用的是 Han 的 NRTL 关联式, 此处用数据线性插值)")
-print(f"冻结模型验证:  AARD = {sum(devs_mod)/n:.2f}%, 最大 = {max(devs_mod):.2f}%")
+print(f"\nvs Han 2011 interpolation: mean |dev| = {sum(devs_han)/n:.2f}%, max = {max(devs_han):.2f}%")
+print(f"  (paper states: mean 1.51%, max 2.89% -- note: the paper used Han's NRTL correlation; here the data are linearly interpolated)")
+print(f"Frozen-model validation:  AARD = {sum(devs_mod)/n:.2f}%, max = {max(devs_mod):.2f}%")

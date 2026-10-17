@@ -90,7 +90,7 @@ TABLE_242 = (
 
 
 def _selfcheck():
-    print("== 自验 1：p0(T) 对纯甲醇蒸气压（与现有库 Antoine 式对比） ==")
+    print("== Self-check 1: p0(T) vs pure-methanol vapour pressure (compared with the Antoine correlation in the existing library) ==")
     import methanol_bromide as mb
     for t_C in (0.0, 25.0, 40.0, 64.7, 100.0, 120.0):
         T = t_C + 273.15
@@ -98,7 +98,7 @@ def _selfcheck():
         pref = mb.meoh_pref_bar(T) * 1000.0   # mbar
         print(f"  t={t_C:6.1f} C  exp(p0)={p0:9.1f} mbar  Antoine={pref:9.1f} mbar"
               f"  dev={100.0 * (p0 - pref) / pref:+.2f}%")
-    print("== 自验 2：简化关联式 vs 表 2.4.2 实测 44 点 ==")
+    print("== Self-check 2: simplified correlation vs the 44 measured points of Table 2.4.2 ==")
     all_dev = []
     for w_m, w_H, pts in TABLE_242:
         devs = []
@@ -110,10 +110,10 @@ def _selfcheck():
         print(f"  w={w_m:.4f} (w_H={w_H})  N={len(pts):2d}  mean rel dev="
               f"{100 * mrd:5.2f}%  bias={100 * sum(devs) / len(devs):+6.2f}%  "
               f"max|dev|={100 * max(abs(d) for d in devs):5.2f}%")
-    print(f"  全部 44 点：mean rel dev={100 * sum(abs(d) for d in all_dev) / len(all_dev):.2f}%  "
+    print(f"  All 44 points: mean rel dev={100 * sum(abs(d) for d in all_dev) / len(all_dev):.2f}%  "
           f"bias={100 * sum(all_dev) / len(all_dev):+.2f}%")
-    print("  （对照：作者状态方程对同批数据的蒸气压 mean rel dev 按组成 "
-          "5.0/2.6/3.4/2.3%，表 2.6.2.1；测量精度估计 2%，§2.4.2）")
+    print("  (For reference: the author's equation of state gives, for the same data set, vapour-pressure mean rel dev by composition "
+          "5.0/2.6/3.4/2.3%, Table 2.6.2.1; estimated measurement accuracy 2%, §2.4.2)")
 
 
 if __name__ == "__main__":

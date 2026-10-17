@@ -23,7 +23,7 @@ for line in out.strip().splitlines():
     elif f[0] == "inv":
         P, w = float(f[1]), float(f[2])
         maxdev = max(maxdev, abs(float(f[3]) - mb.T_bubble_PW(P, w)))
-print("C vs Python  最大偏差: %.3g" % maxdev)
+print("C vs Python  maximum deviation: %.3g" % maxdev)
 
 # PCHIP vs. scipy comparison (only checks that the in-house implementation agrees with the standard algorithm)
 try:
@@ -34,38 +34,38 @@ try:
     for i in range(2001):
         w = 0.243 + (0.509 - 0.243) * i / 2000
         dmax = max(dmax, abs(p1(w) - mb._c1(w)), abs(p2(w) - mb._c2(w)))
-    print("PCHIP vs scipy 最大偏差: %.3g" % dmax)
+    print("PCHIP vs scipy maximum deviation: %.3g" % dmax)
 except ImportError:
-    print("scipy 不可用，跳过 PCHIP 对照")
+    print("scipy not available, skipping the PCHIP comparison")
 
 # Isobaric temperature table of Appendix A of the thesis: bubble-point temperatures at P = 300 mmHg
 # (Unit ruling of 2026-10-14: the module inputs are now MPa; 300 mmHg = 0.039997 MPa; the former bar convention was 0.39997)
-print("\n泡点温度抽查（附录 A，300 mmHg）:")
+print("\nBubble-point temperature spot check (Appendix A, 300 mmHg):")
 for w, tref in [(0.250, 419.0), (0.262, 411.7), (0.301, 391.4), (0.356, 380.3)]:
     t = mb.T_bubble_PW(0.039997, w)
-    print("  w=%.3f  计算 %7.2f K  论文 %6.1f K  偏差 %+.2f K" % (w, t, tref, t - tref))
+    print("  w=%.3f  calc %7.2f K  paper %6.1f K  dev %+.2f K" % (w, t, tref, t - tref))
 
 # Enthalpy-of-vaporisation table of Appendix A of the thesis
-print("\nH' 抽查（附录 A 表，p.196）:")
+print("\nH' spot check (Appendix A table, p.196):")
 for T, w, href in [(283.15, 0.25, 1940.0), (283.15, 0.356, 1601.0), (373.15, 0.25, 1645.0)]:
     hv = mb.h_prime(T, w)
-    print("  T=%.0fC w=%.3f  计算 %7.1f  论文 %6.0f  偏差 %+.2f%%"
+    print("  T=%.0fC w=%.3f  calc %7.1f  paper %6.0f  dev %+.2f%%"
           % (T - 273.15, w, hv, href, 100.0 * (hv - href) / href))
 
 # Measured specific heats of Table 3.7 of the thesis (also the ruling evidence for the sign of the last term of B in Eq. (3.4): take "-")
-print("\nCp 抽查（表 3.7 实测）:")
+print("\nCp spot check (Table 3.7, measured):")
 for tc, w, cref in [(51.3, 0.403, 1.27), (69.9, 0.403, 1.30),
                     (40.0, 0.311, 1.19), (80.6, 0.311, 1.26)]:
     cv = mb.cp(tc + 273.15, w)
-    print("  t=%.1fC w=%.3f  计算 %.3f  实测 %.2f  偏差 %+.2f%%"
+    print("  t=%.1fC w=%.3f  calc %.3f  measured %.2f  dev %+.2f%%"
           % (tc, w, cv, cref, 100.0 * (cv - cref) / cref))
 
 # Pure-methanol Antoine fit errors (the 7 data points of Appendix A)
-print("\n纯甲醇 Antoine 拟合（附录 A 数据点）:")
+print("\nPure-methanol Antoine fit (Appendix A data points):")
 for mmhg, tk in [(300, 316.7), (500, 328.3), (600, 332.6), (700, 336.4),
                  (800, 339.7), (900, 342.7), (1000, 345.4)]:
     pc = mb.meoh_pref_bar(tk) / 1.3332239e-4
-    print("  T=%.1f K  计算 %7.2f mmHg  论文 %d mmHg  偏差 %+.2f%%"
+    print("  T=%.1f K  calc %7.2f mmHg  paper %d mmHg  dev %+.2f%%"
           % (tk, pc, mmhg, 100.0 * (pc - mmhg) / mmhg))
-print("  400 mmHg 处拟合温度 %.2f K（论文印 373.1 K，Ratio 列反推 323.1 K，判误印）"
+print("  fitted temperature at 400 mmHg %.2f K (paper prints 373.1 K; back-calculated from the Ratio column as 323.1 K, judged a misprint)"
       % mb.meoh_Tsat_bar(400 * 1.3332239e-4))

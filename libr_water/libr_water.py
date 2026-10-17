@@ -86,7 +86,7 @@ def _check_region(X, T, func_name, check_unknown=True, tunkn=None):
         pass
     elif X >= star:
         raise ValueError(
-            "%s: 点 (X=%.2f%%, T=%.2f°C) 在结晶区内 (冰点浓度 X*=%.2f%%)"
+            "%s: point (X=%.2f%%, T=%.2f°C) is in the crystallisation region (freezing-point concentration X*=%.2f%%)"
             % (func_name, X, T, star))
     elif not check_unknown:
         return  # Other functions: passed the freezing-point check -> compute directly
@@ -102,12 +102,12 @@ def _check_region(X, T, func_name, check_unknown=True, tunkn=None):
                      * (_XUNKN[n] - _XUNKN[n - 1]))
         if X <= xstar:
             raise ValueError(
-                "%s: 点 (X=%.2f%%, T=%.2f°C) 在未知区内 (X*<=%.2f%% 无数据)"
+                "%s: point (X=%.2f%%, T=%.2f°C) is in the unknown region (X*<=%.2f%%, no data)"
                 % (func_name, X, T, xstar))
         return
     # T > TUNKN[3]: the original code falls into 150 -> unknown region
     raise ValueError(
-        "%s: T=%.2f°C 超过未知区表上限 (%.1f°C),无数据" % (func_name, T, tunkn[3]))
+        "%s: T=%.2f°C exceeds the upper limit of the unknown-region table (%.1f°C), no data" % (func_name, T, tunkn[3]))
 
 
 def _poly(X, T, A, kup):
@@ -176,7 +176,7 @@ _A_SIG = [
 def _range_check(X, T, func_name, x_lo, x_hi, t_lo, t_hi):
     if not (x_lo <= X <= x_hi and t_lo <= T <= t_hi):
         raise ValueError(
-            "%s: (X=%.2f%%, T=%.2f°C) 超出拟合范围 X∈[%.g,%.g%%], T∈[%.g,%.g°C]"
+            "%s: (X=%.2f%%, T=%.2f°C) outside the fit range X in [%.g,%.g%%], T in [%.g,%.g°C]"
             % (func_name, X, T, x_lo, x_hi, t_lo, t_hi))
 
 
@@ -255,7 +255,7 @@ def crystallization_T(X):
     if X < 57.5:
         return float('nan')
     if X > 100:
-        raise ValueError("crystallization_T: X=%.2f%% 超出 100%%" % X)
+        raise ValueError("crystallization_T: X=%.2f%% exceeds 100%%" % X)
     # Freezing-point polyline XN/TN: take the highest T at which X=XSTAR(T) (for a vertical segment take the upper endpoint)
     best = None
     for n in range(1, 7):
@@ -338,7 +338,7 @@ def _psol_chua_Pa(X, T):
     The <x-60> correction terms for x>60% cannot reproduce Fig.1/2 with the values as printed in the original, so they are not implemented.
     All internal arithmetic uses this Pa value."""
     if not (0 <= X <= 60 and 0 <= T <= 190):
-        raise ValueError("psol_chua: (X=%.2f%%, T=%.2f°C) 超出范围 [0-60%%, 0-190°C]"
+        raise ValueError("psol_chua: (X=%.2f%%, T=%.2f°C) out of range [0-60%%, 0-190°C]"
                          % (X, T))
     x = X
     AD = sum(a * x ** i for i, a in enumerate(_DUHR_A[:17]))
@@ -452,7 +452,7 @@ def rho_chua(X, T):
 
     ρ = Σ_{k=1..5} x^{k-1}·[G_{0,k} + T·(G_{1,k} + T·G_{2,k})]"""
     if not (0 <= X <= 70 and 0 <= T <= 200):
-        raise ValueError("rho_chua: (X=%.2f%%, T=%.2f°C) 超出范围" % (X, T))
+        raise ValueError("rho_chua: (X=%.2f%%, T=%.2f°C) out of range" % (X, T))
     G = _G_RHO_CHUA  # 5×3: G[k][0..2] = G_{0,k},G_{1,k},G_{2,k}
     s = 0.0
     xk = 1.0
@@ -465,9 +465,9 @@ def rho_chua(X, T):
 
 if __name__ == '__main__':
     # Quick self-check
-    print('h(0%%,25°C) = %.3f kJ/kg (期望 ~104.6)' % hsol(0.0, 25.0))
-    print('rho(60%%,25°C) = %.1f kg/m³ (期望 ~1700)' % rho_libr(60.0, 25.0))
-    print('eta(60%%,25°C) = %.2f mPa·s (期望 ~10 量级)' % (eta_libr(60.0, 25.0) * 1e3))
+    print('h(0%%,25°C) = %.3f kJ/kg (expected ~104.6)' % hsol(0.0, 25.0))
+    print('rho(60%%,25°C) = %.1f kg/m³ (expected ~1700)' % rho_libr(60.0, 25.0))
+    print('eta(60%%,25°C) = %.2f mPa·s (expected order ~10)' % (eta_libr(60.0, 25.0) * 1e3))
     print('psol(50%%,80°C) = %.6f MPa' % psol(50.0, 80.0))
     print('t_dew(50%%,80°C) = %.2f °C' % t_dew(50.0, 80.0))
     print('lambda(50%%,80°C) = %.4f W/(m K)' % lambda_libr(50.0, 80.0))

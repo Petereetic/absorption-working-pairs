@@ -57,8 +57,8 @@ M_R22, M_DMF = 86.47, 73.09          # molecular weights used by Eq. (8)
 R_KCAL = 1.986                        # kcal/(kmol·K), as given by Eq. (8)
 KCAL2KJ = 4.1868
 
-_CORRUPT_MSG = ("Borde 1978 式(1)/式(8) 印刷常数已数值证实损坏，"
-                "结果非物理，仅供转录核验，不得用于工程计算。")
+_CORRUPT_MSG = ("Borde 1978 Eqs. (1)/(8): the printed constants are numerically confirmed corrupt, "
+                "the results are non-physical, for transcription checking only, not for engineering calculation.")
 
 
 def _poly(c, x):

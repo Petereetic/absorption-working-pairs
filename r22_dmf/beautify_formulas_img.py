@@ -126,13 +126,13 @@ def process_docx(path, img_paths, modes):
                 if after:
                     p.add_run(after)
             changed += 1
-            print(f'  替换: {t[:60]}...')
+            print(f'  replaced: {t[:60]}...')
             break
     doc.save(path)
-    print(f'{path}: 共替换 {changed} 处')
+    print(f'{path}: {changed} replacements in total')
 
 if __name__ == '__main__':
-    print('渲染公式图片...')
+    print('Rendering formula images...')
     img_paths = {}
     modes = {}
     for key, mathtext, mode in FORMULAS:

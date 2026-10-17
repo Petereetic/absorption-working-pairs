@@ -222,11 +222,11 @@ def tsol_by_hsol(h, x1):
 
 
 if __name__ == "__main__":
-    print("VLE 验证 (T, x1 -> p):")
+    print("VLE check (T, x1 -> p):")
     for T, x1, pe in [(303.30, 0.4437, 337.0), (323.34, 0.7247, 923.8), (353.24, 0.6594, 1665.2)]:
         p, y1 = psol(T, x1)
-        print(f"  T={T}K x1={x1}: p={p*1000:.1f} kPa (实验 {pe:.1f}), y1={y1:.4f}")
-    print("\n溶液焓 h(T,x1) [kJ/kg]:")
+        print(f"  T={T}K x1={x1}: p={p*1000:.1f} kPa (experiment {pe:.1f}), y1={y1:.4f}")
+    print("\nSolution enthalpy h(T,x1) [kJ/kg]:")
     for T in [300, 330, 350]:
         for x1 in [0.2, 0.5, 0.8]:
             print(f"  T={T}K x1={x1}: h={hsol(T, x1):.2f}")

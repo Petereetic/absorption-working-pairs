@@ -17,8 +17,8 @@ def load(name):
 
 han = load("han2011.csv")
 cui = load("cui2007.csv")
-print(f"Han 2011: {len(han)} 点, T={min(p[0] for p in han):.2f}~{max(p[0] for p in han):.2f}K")
-print(f"Cui 2007: {len(cui)} 点, T={min(p[0] for p in cui):.2f}~{max(p[0] for p in cui):.2f}K")
+print(f"Han 2011: {len(han)} points, T={min(p[0] for p in han):.2f}~{max(p[0] for p in han):.2f}K")
+print(f"Cui 2007: {len(cui)} points, T={min(p[0] for p in cui):.2f}~{max(p[0] for p in cui):.2f}K")
 
 # ---- 1) Han vs Cui: at the same temperature, interpolate Cui in the x direction and compare with Han ----
 cui_by_T = {}
@@ -42,11 +42,11 @@ for T, x, p in han:
             diffs_by_T.setdefault(T, []).append(d)
             break
 
-print(f"\n=== Han vs Cui 直接对比 (同T插值, n={len(diffs)}) ===")
-print(f"平均相对偏差: {sum(diffs)/len(diffs):+.2f}%, 平均|偏差|: {sum(abs(d) for d in diffs)/len(diffs):.2f}%, 最大|偏差|: {max(abs(d) for d in diffs):.2f}%")
+print(f"\n=== Han vs Cui direct comparison (same-T interpolation, n={len(diffs)}) ===")
+print(f"Mean relative deviation: {sum(diffs)/len(diffs):+.2f}%, mean |dev|: {sum(abs(d) for d in diffs)/len(diffs):.2f}%, max |dev|: {max(abs(d) for d in diffs):.2f}%")
 for T in sorted(diffs_by_T):
     s = diffs_by_T[T]
-    print(f"T={T:7.2f}K  n={len(s):3d}  平均偏差={sum(s)/len(s):+6.2f}%  平均|偏差|={sum(abs(d) for d in s)/len(s):5.2f}%")
+    print(f"T={T:7.2f}K  n={len(s):3d}  mean dev={sum(s)/len(s):+6.2f}%  mean |dev|={sum(abs(d) for d in s)/len(s):5.2f}%")
 
 # ---- 2) Validate Han 2011 with the frozen model ----
 pts = []
@@ -59,24 +59,24 @@ for T, x1, pe in han:
 n = len(pts)
 aard = sum(abs(d) for _, _, _, _, d in pts) / n
 mx = max(pts, key=lambda r: abs(r[4]))
-print(f"\n=== 冻结模型 vs Han 2011 (n={n}) ===")
-print(f"总体 AARD: {aard:.2f}%, 最大 |偏差|: {abs(mx[4]):.2f}%  (T={mx[0]:.2f}K, x1={mx[1]}, p_exp={mx[2]:.2f} kPa, p_calc={mx[3]:.2f} kPa)")
+print(f"\n=== Frozen model vs Han 2011 (n={n}) ===")
+print(f"Overall AARD: {aard:.2f}%, max |dev|: {abs(mx[4]):.2f}%  (T={mx[0]:.2f}K, x1={mx[1]}, p_exp={mx[2]:.2f} kPa, p_calc={mx[3]:.2f} kPa)")
 mean = sum(d for _, _, _, _, d in pts) / n
-print(f"平均偏差(带符号): {mean:+.2f}%  (正=模型高估)")
+print(f"Mean deviation (signed): {mean:+.2f}%  (positive = model overestimates)")
 
-print("\n--- 按温度统计 AARD ---")
+print("\n--- AARD by temperature ---")
 for T in sorted(set(p[0] for p in pts)):
     sub = [p for p in pts if p[0] == T]
     a = sum(abs(p[4]) for p in sub) / len(sub)
     m = sum(p[4] for p in sub) / len(sub)
-    print(f"T={T:7.2f}K  n={len(sub):2d}  AARD={a:5.2f}%  平均偏差={m:+6.2f}%")
+    print(f"T={T:7.2f}K  n={len(sub):2d}  AARD={a:5.2f}%  mean dev={m:+6.2f}%")
 
-print("\n--- 偏差最大的 10 个点 ---")
+print("\n--- 10 points with the largest deviation ---")
 for T, x1, pe, pc, d in sorted(pts, key=lambda r: abs(r[4]), reverse=True)[:10]:
     print(f"T={T:7.2f}K x1={x1:.4f} p_exp={pe:9.2f} p_calc={pc:9.2f} dev={d:+6.2f}%")
 
-print("\n--- 与 Cui 验证结果对照的关键温度 ---")
+print("\n--- Key temperatures compared with the Cui validation results ---")
 for T in (283.15, 293.15, 303.15, 363.15):
     sub = [p for p in pts if p[0] == T]
     a = sum(abs(p[4]) for p in sub) / len(sub)
-    print(f"Han T={T:.2f}K: AARD={a:.2f}%   (Cui 同T: 283K=8.53%, 363K=26.21%)")
+    print(f"Han T={T:.2f}K: AARD={a:.2f}%   (Cui same T: 283K=8.53%, 363K=26.21%)")

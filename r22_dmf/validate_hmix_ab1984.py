@@ -58,7 +58,7 @@ def hmix_fatouh(T_C, xi):
 
 if __name__ == "__main__":
     print("xi | " + " | ".join(f"T={t}C Fatouh/AB-1984" for t in [0, 20, 40]))
-    print("kJ/kg. 负值=放热混合。")
+    print("kJ/kg. Negative values = exothermic mixing.")
     for xi in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
         cells = [f"{hmix_fatouh(t, xi):6.1f}/{excess_enthalpy_AB(t, xi):6.1f}"
                  for t in [0, 20, 40]]

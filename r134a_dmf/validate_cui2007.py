@@ -17,29 +17,29 @@ with open("/home/hatch/workspace/your_files/r134a_dmf/cui2007.csv") as f:
 n = len(pts)
 aard = sum(abs(d) for _, _, _, _, d in pts) / n
 mx = max(pts, key=lambda r: abs(r[4]))
-print(f"总点数: {n}")
-print(f"总体 AARD: {aard:.2f}%, 最大 |偏差|: {abs(mx[4]):.2f}%  (T={mx[0]:.2f}K, x1={mx[1]}, p_exp={mx[2]:.2f} kPa, p_calc={mx[3]:.2f} kPa)")
+print(f"Total points: {n}")
+print(f"Overall AARD: {aard:.2f}%, max |dev|: {abs(mx[4]):.2f}%  (T={mx[0]:.2f}K, x1={mx[1]}, p_exp={mx[2]:.2f} kPa, p_calc={mx[3]:.2f} kPa)")
 
-print("\n--- 按温度统计 AARD ---")
+print("\n--- AARD by temperature ---")
 Ts = sorted(set(p[0] for p in pts))
 for T in Ts:
     sub = [p for p in pts if p[0] == T]
     a = sum(abs(p[4]) for p in sub) / len(sub)
     w = max(sub, key=lambda r: abs(r[4]))
-    print(f"T={T:7.2f}K  n={len(sub):2d}  AARD={a:5.2f}%  最大|偏差|={abs(w[4]):5.2f}% (x1={w[1]})")
+    print(f"T={T:7.2f}K  n={len(sub):2d}  AARD={a:5.2f}%  max|dev|={abs(w[4]):5.2f}% (x1={w[1]})")
 
-print("\n--- 偏差最大的 10 个点 ---")
+print("\n--- 10 points with the largest deviation ---")
 for T, x1, pe, pc, d in sorted(pts, key=lambda r: abs(r[4]), reverse=True)[:10]:
     print(f"T={T:7.2f}K x1={x1:.4f} p_exp={pe:9.2f} p_calc={pc:9.2f} dev={d:+6.2f}%")
 
-print("\n--- 293.15/303.15K 子集 (Feng 2016 裁决用) ---")
+print("\n--- 293.15/303.15K subset (for the Feng 2016 adjudication) ---")
 sub = [p for p in pts if p[0] in (293.15, 303.15)]
 a = sum(abs(p[4]) for p in sub) / len(sub)
 print(f"n={len(sub)} AARD={a:.2f}%")
 for T, x1, pe, pc, d in sorted(sub, key=lambda r: r[1]):
     print(f"T={T:7.2f}K x1={x1:.4f} p_exp={pe:9.2f} p_calc={pc:9.2f} dev={d:+6.2f}%")
 
-print("\n--- 283.15/363.15K 外推边界子集 ---")
+print("\n--- 283.15/363.15K extrapolation-boundary subset ---")
 sub = [p for p in pts if p[0] in (283.15, 363.15)]
 a = sum(abs(p[4]) for p in sub) / len(sub)
 print(f"n={len(sub)} AARD={a:.2f}%")

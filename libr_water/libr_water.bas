@@ -64,7 +64,7 @@ Private Function CheckRegion(ByVal X As Double, ByVal T As Double, _
         End If
         found = True
         If X >= xstar Then
-            CheckRegion = "结晶区": Exit Function
+            CheckRegion = "crystallisation region": Exit Function
         End If
         Exit For
 NextN1:
@@ -78,11 +78,11 @@ NextN1:
             xstar = XUNKN(n - 1) + (T - tunkn(n - 1)) _
                     / (tunkn(n) - tunkn(n - 1)) * (XUNKN(n) - XUNKN(n - 1))
         End If
-        If X <= xstar Then CheckRegion = "未知区(无数据)": Exit Function
+        If X <= xstar Then CheckRegion = "unknown region (no data)": Exit Function
         CheckRegion = "": Exit Function
 NextN2:
     Next n
-    CheckRegion = "未知区(无数据)"
+    CheckRegion = "unknown region (no data)"
 End Function
 
 Private Function InRange(ByVal X As Double, ByVal T As Double, _

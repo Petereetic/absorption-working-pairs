@@ -63,6 +63,6 @@ for (T, x1, pe), pc_paper in zip(pts, pcal_paper):
     worst.append(abs(d))
 
 worst_sorted = sorted(worst, reverse=True)
-print(f"112 点: 我算的 pcal vs 论文 pcal, 平均|偏差|={sum(worst)/112:.3f}%, 最大|偏差|={worst_sorted[0]:.3f}%")
-print("最大的5个:", [f"{v:.2f}%" for v in worst_sorted[:5]])
+print(f"112 points: my pcal vs the paper's pcal, mean |dev|={sum(worst)/112:.3f}%, max |dev|={worst_sorted[0]:.3f}%")
+print("Largest 5:", [f"{v:.2f}%" for v in worst_sorted[:5]])
 # If the mean deviation is <0.5% and the maximum <1.5%, the entered (T,x) correspond one-to-one to the paper's rows

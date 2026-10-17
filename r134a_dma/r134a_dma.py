@@ -147,7 +147,7 @@ def h_solution_w(T, w1):
 
 
 if __name__ == "__main__":
-    print("R134a-DMA 泡点/溶液焓 (Nezu et al. 2002)")
+    print("R134a-DMA bubble point / solution enthalpy (Nezu et al. 2002)")
     print("=" * 60)
     # Bubble-point worked example
     for Tc, w in [(30, 0.5), (80, 0.4), (0, 0.3), (100, 0.6)]:
@@ -169,7 +169,7 @@ if __name__ == "__main__":
         print(f"Hsol({Tc}°C, w={w}) = {h:.2f} kJ/kg  (hE={hE:.2f})")
     print("-" * 60)
     # Endpoint checks
-    print(f"h_R134aL(0°C) = {h_r134a_L(273.15):.2f} (应=200)")
-    print(f"h_DMA(0°C) = {h_dma_L(273.15):.2f} (应=200)")
-    print(f"Hsol(30°C, w=1) = {h_solution_w(303.15, 1.0):.2f} (应≈h_R134a)")
-    print(f"Hsol(30°C, w=0) = {h_solution_w(303.15, 0.0):.2f} (应≈h_DMA)")
+    print(f"h_R134aL(0°C) = {h_r134a_L(273.15):.2f} (expected =200)")
+    print(f"h_DMA(0°C) = {h_dma_L(273.15):.2f} (expected =200)")
+    print(f"Hsol(30°C, w=1) = {h_solution_w(303.15, 1.0):.2f} (expected ~h_R134a)")
+    print(f"Hsol(30°C, w=0) = {h_solution_w(303.15, 0.0):.2f} (expected ~h_DMA)")

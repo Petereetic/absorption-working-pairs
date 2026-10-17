@@ -249,20 +249,20 @@ int main(void)
         {353.24, 0.6594, 1665.2},
     };
 
-    printf("VLE 验证 (T, x1 -> p):\n");
+    printf("VLE check (T, x1 -> p):\n");
     for (i = 0; i < 3; i++) {
         psol(chk[i][0], chk[i][1], &p, &y1);
-        printf("  T=%.2fK x1=%.4f: p=%.1f kPa (实验 %.1f), y1=%.4f\n",
+        printf("  T=%.2fK x1=%.4f: p=%.1f kPa (experiment %.1f), y1=%.4f\n",
                chk[i][0], chk[i][1], p * 1000.0, chk[i][2], y1);
     }
 
-    printf("\n反算泡点温度:\n");
+    printf("\nBubble-point temperature back-calculation:\n");
     T = bubble_T(0.3370, 0.4437, 330.0);
-    printf("  p=0.337MPa x1=0.4437 -> T=%.2fK (期望 ~303.3K)\n", T);
+    printf("  p=0.337MPa x1=0.4437 -> T=%.2fK (expected ~303.3K)\n", T);
     T = bubble_T(0.9238, 0.7247, 330.0);
-    printf("  p=0.9238MPa x1=0.7247 -> T=%.2fK (期望 ~323.3K)\n", T);
+    printf("  p=0.9238MPa x1=0.7247 -> T=%.2fK (expected ~323.3K)\n", T);
 
-    printf("\n溶液焓 h(T,x1) [kJ/kg]:\n");
+    printf("\nSolution enthalpy h(T,x1) [kJ/kg]:\n");
     {
         double Ts[] = {300.0, 330.0, 350.0};
         double xs[] = {0.2, 0.5, 0.8};
@@ -273,6 +273,6 @@ int main(void)
                        Ts[ti], xs[xi], hsol(Ts[ti], xs[xi]));
     }
 
-    printf("\n质量分数换算示例: w1=0.5 -> x1=%.4f\n", w_to_x(0.5));
+    printf("\nMass-fraction conversion example: w1=0.5 -> x1=%.4f\n", w_to_x(0.5));
     return 0;
 }
