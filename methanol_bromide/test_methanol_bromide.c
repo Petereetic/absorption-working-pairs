@@ -1,11 +1,11 @@
-/* Iedema 密度/黏度验算点测试（test_methanol_bromide.c）
- * 编译：gcc -O2 -Wall -Wextra -o test_mb test_methanol_bromide.c -lm
- * 验算点取自 Iedema1984_密度黏度提取.md（对论文表 2.7.2.2.1/2.7.3 数据）：
- *   rho(0.3483, 19.5°C, w_H=0) = 1661.5 kg/m3（提取记录计算值；实测 1664.5）
+/* Check points for the Iedema density/viscosity formulas (test_methanol_bromide.c)
+ * Build: gcc -O2 -Wall -Wextra -o test_mb test_methanol_bromide.c -lm
+ * Check points taken from the Iedema-1984 density/viscosity extraction notes (data of paper Tables 2.7.2.2.1/2.7.3):
+ *   rho(0.3483, 19.5°C, w_H=0) = 1661.5 kg/m3 (value computed in the extraction record; measured 1664.5)
  *   rho(0.35,   25.0°C, w_H=0) = 1652.0 kg/m3
- *   eta(0.3916, 20°C) = 0.0204 Pa·s（实测 0.0212）
- *   eta(0.2919, 20°C) = 0.0535 Pa·s（实测 0.0524）
- * 容差：密度 ±1.5 kg/m3；黏度 ±3%（相对）。
+ *   eta(0.3916, 20°C) = 0.0204 Pa·s (measured 0.0212)
+ *   eta(0.2919, 20°C) = 0.0535 Pa·s (measured 0.0524)
+ * Tolerances: density ±1.5 kg/m3; viscosity ±3% (relative).
  */
 #include <stdio.h>
 #include <math.h>

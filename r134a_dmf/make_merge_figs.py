@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""合并研究配图(含 Han 2011):
-图1 偏差随温度变化: Cui vs Han 并排对比;
-图2 303.15K p-x 对比 (+Han 实验点);
-图3 分温度 AARD: Cui vs Han。"""
+"""Figures for the merged study (including Han 2011):
+Fig. 1 Deviation vs. temperature: Cui vs Han side by side;
+Fig. 2 303.15K p-x comparison (+ Han experimental points);
+Fig. 3 AARD by temperature: Cui vs Han."""
 import csv, sys, os
 import matplotlib
 matplotlib.use("Agg")
@@ -34,7 +34,7 @@ def load(name):
 cui = load("cui2007.csv")
 han = load("han2011.csv")
 
-# ---------- 图1: Cui vs Han 偏差线并排 ----------
+# ---------- Fig. 1: Cui vs Han deviation lines side by side ----------
 fig, axes = plt.subplots(1, 2, figsize=(11, 4.6), sharey=True)
 for ax, pts, title, ls, mk in [
     (axes[0], cui, "Cui 2007（90点）", "-", "o"),
@@ -57,7 +57,7 @@ fig.tight_layout()
 fig.savefig(D + "fig1-dev-vs-T.png", dpi=300)
 plt.close(fig)
 
-# ---------- 图2: 303.15K p-x 对比 ----------
+# ---------- Fig. 2: 303.15K p-x comparison ----------
 T0 = 303.15
 p1s = pref_r134a(T0) * 1000.0
 p2s = psat_dmf(T0) * 1000.0
@@ -83,7 +83,7 @@ fig.tight_layout()
 fig.savefig(D + "fig2-px-303K.png", dpi=300)
 plt.close(fig)
 
-# ---------- 图3: 分温度 AARD 对比 ----------
+# ---------- Fig. 3: AARD by temperature ----------
 def aard_by_T(pts):
     out = {}
     for T in sorted(set(p[0] for p in pts)):

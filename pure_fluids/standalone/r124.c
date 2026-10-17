@@ -1,8 +1,8 @@
-/* R124 纯物质饱和性质（单独计算文件，与合并模块 pure_fluids.c 系数逐字同源）
- * 源：NIST WebBook 饱和表拟合（笔记见 ../fit-notes/R124纯工质-NIST表拟合与Borde仲裁.md），与合并模块 pure_fluids 系数逐字相同；Wagner 变体（1, 1.5, 3, 6）饱和压对表最大偏差 0.111%，焓已由表基准平移 -100 至统一基准。
- * 函数：Pref(MPa) / Tsat(°C，入参 MPa，二分反解，超界返回 NAN) / hliq / hgas / hlat（kJ/kg）。Wagner 拟合内部以 bar 计，公开边界换算。
- * 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。
- * 编译：gcc -O2 -Wall -DSTANDALONE_MAIN -o test_r124 r124.c -lm */
+/* R124 pure-substance saturation properties (standalone calculation file; coefficients verbatim identical to the merged module pure_fluids.c)
+ * Source: fit to the NIST WebBook saturation table (see fit notes in ../fit-notes/, "R124 pure fluid - NIST table fit and Borde arbitration"), coefficients verbatim identical to the merged module pure_fluids; Wagner variant (1, 1.5, 3, 6) saturation pressure max deviation vs. table 0.111%; enthalpy shifted from the table datum by -100 to the uniform reference.
+ * Functions: Pref (MPa) / Tsat (°C, input in MPa, inverse by bisection, returns NAN when out of range) / hliq / hgas / hlat (kJ/kg). The Wagner fit works internally in bar, with conversion at the public boundary.
+ * Reference state: saturated-liquid enthalpy at 0°C = 100 kJ/kg (uniform module reference).
+ * Build: gcc -O2 -Wall -DSTANDALONE_MAIN -o test_r124 r124.c -lm */
 #include <stdio.h>
 #include <math.h>
 

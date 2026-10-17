@@ -1,37 +1,37 @@
 /*
- * ammonia_water_transport.c -- 输运物性参考实现 (C)
+ * ammonia_water_transport.c -- Reference implementation of the transport properties (C)
  * =================================================
  * M. Conde Engineering (2004)
  * "Thermophysical Properties of NH3 + H2O Solutions for the Industrial
- *  Design of Absorption Refrigeration Equipment", 第 5~15 章 + 附录 A/B/C。
+ *  Design of Absorption Refrigeration Equipment", Chapters 5-15 + Appendices A/B/C.
  *
- * 与同目录 ammonia_water_transport.py 逐行对应,双精度计算。
- * gcc -O2 -Wall -Wextra 零警告编译。
+ * Corresponds line by line to ammonia_water_transport.py in the same directory; computed in double precision.
+ * Compiles with gcc -O2 -Wall -Wextra with zero warnings.
  *
- * 约定:
- *   x : 液相氨摩尔分数 ; y : 气相氨摩尔分数 ; T : K
- *   返回 SI: cp kJ/(kg K), lambda W/(m K), eta Pa s,
- *           sigma N/m, rho kg/m^3, D m^2/s ; pc_sol 为 MPa
- *           (§5 系数 B_PC 原生以 bar 计(书中源口径),公开函数出口 x0.1)
+ * Conventions:
+ *   x : liquid-phase ammonia mole fraction ; y : vapour-phase ammonia mole fraction ; T : K
+ *   Returns are SI: cp kJ/(kg K), lambda W/(m K), eta Pa s,
+ *           sigma N/m, rho kg/m^3, D m^2/s ; pc_sol is in MPa
+ *           (the §5 coefficients B_PC are natively in bar (the book's source convention); public functions convert x0.1 at the exit)
  *
- * 注意:
- *   附录 A 总式书中印刷为 λ̄0×λ̄1×λ̄2,系排印错误,实为加法
- *   (IAPWS 1998 原文、XSteam 实现、稀薄气体极限物理要求)。
- *   §13 正文"Appendix A"为笔误(水蒸气黏度实为附录 B);
- *   §12 正文"Appendix B"为笔误(水蒸气导热实为附录 A)。
- *   附录 C Δη 求和内印刷为 ρ,按 Fenghour 原文应为 ρ^i(i=2,3,4)。
+ * Notes:
+ *   The overall formula of Appendix A is printed in the book as λ̄0×λ̄1×λ̄2, a typesetting error; it is actually additive
+ *   (the IAPWS 1998 original, the XSteam implementation, and the physical requirement of the dilute-gas limit).
+ *   The "Appendix A" in the §13 text is a misprint (the water-vapour viscosity is actually Appendix B);
+ *   the "Appendix B" in the §12 text is a misprint (the water-vapour thermal conductivity is actually Appendix A).
+ *   The Δη sum of Appendix C is printed with ρ inside; per the Fenghour original it should be ρ^i (i=2,3,4).
  */
 #include <math.h>
 
 /* ------------------------------------------------------------------ */
-/* 临界常数                                                           */
+/* Critical constants                                                           */
 /* ------------------------------------------------------------------ */
 #define T_C_NH3   405.4
 #define T_C_H2O   647.14
 #define RHO_C_NH3 225.0
 #define RHO_C_H2O 322.0
 
-/* §5 溶液临界温度/压力: x 的四次多项式 */
+/* §5 Solution critical temperature/pressure: quartic polynomials in x */
 static const double A_TC[5] = {647.14, -199.822371, 109.035522,
                                -239.626217, 88.689691};
 static const double B_PC[5] = {220.64, -37.923795, 36.424739,
@@ -45,7 +45,7 @@ double tc_sol(double x)
     return s;
 }
 
-/* 溶液临界压力原生值 [bar](系数书中源口径),仅供内部/核对 */
+/* Native value of the solution critical pressure [bar] (the book-source convention of the coefficients); for internal/check use only */
 static double pc_sol_bar(double x)
 {
     double s = 0.0, xp = 1.0;
@@ -54,13 +54,13 @@ static double pc_sol_bar(double x)
     return s;
 }
 
-/* 溶液临界压力 [MPa] = 原生 bar 值 x 0.1 */
+/* Solution critical pressure [MPa] = native bar value x 0.1 */
 double pc_sol(double x)
 {
     return pc_sol_bar(x) * 0.1;
 }
 
-/* 对应状态温度 */
+/* Corresponding-states temperatures */
 static void tstar(double T, double x, double *Ts_nh3, double *Ts_h2o)
 {
     double theta = T / tc_sol(x);
@@ -69,7 +69,7 @@ static void tstar(double T, double x, double *Ts_nh3, double *Ts_h2o)
 }
 
 /* ------------------------------------------------------------------ */
-/* 附录 A: IAPWS 水导热系数(1998 工业用公式)                          */
+/* Appendix A: IAPWS thermal conductivity of water (1998 industrial formulation)                          */
 /* λ = λ0(T̄) + λ1(ρ̄) + λ2(T̄,ρ̄) [W/(m K)]                            */
 /* ------------------------------------------------------------------ */
 static const double L_TC[4][6] = {
@@ -110,7 +110,7 @@ static double iapws_lambda_water(double T, double rho)
 }
 
 /* ------------------------------------------------------------------ */
-/* 附录 B: IAPWS 水动力黏度(工业用公式), η2 = 1                       */
+/* Appendix B: IAPWS dynamic viscosity of water (industrial formulation), η2 = 1                       */
 /* η = η* η̄0(T̄) η̄1(T̄,ρ̄) [Pa s]                                      */
 /* ------------------------------------------------------------------ */
 static const double H_VISC[4] = {1.000, 0.978197, 0.579829, -0.202354};
@@ -157,7 +157,7 @@ static double iapws_eta_water(double T, double rho)
 }
 
 /* ------------------------------------------------------------------ */
-/* 附录 C: Fenghour et al.(1995) 氨黏度                               */
+/* Appendix C: Fenghour et al. (1995) viscosity of ammonia                               */
 /* η(ρ,T) = η0(T) + Δη(ρ,T) [μPa s]; ρ: mol/l                        */
 /* ------------------------------------------------------------------ */
 static const double F_AETA[5] = {4.99318220, -0.61122364, 0.0,
@@ -208,7 +208,7 @@ static double fenghour_eta_nh3(double T, double rho_kg_m3)
 }
 
 /* ------------------------------------------------------------------ */
-/* §10 纯组分饱和液体/气体密度                                        */
+/* §10 Pure-component saturated liquid/vapour densities                                        */
 /* ------------------------------------------------------------------ */
 static const double RHOL_A_H2O[7] = {1.0, 1.9937718430, 1.0985211604,
     -0.5094492996, -1.7619124270, -44.9005480267, -723692.2618632};
@@ -216,7 +216,7 @@ static const double RHOL_A_NH3[7] = {1.0, 2.02491283, 0.84049667,
     0.30155852, -0.20926619, -74.60250177, 4089.79277506};
 static const double RHOL_B[7] = {0.0, 1.0/3.0, 2.0/3.0, 5.0/3.0,
     16.0/3.0, 43.0/3.0, 110.0/3.0};
-static const double RHOL_B_NH3_6 = 70.0/3.0; /* NH3 第6项指数为70/3 */
+static const double RHOL_B_NH3_6 = 70.0/3.0; /* the 6th exponent for NH3 is 70/3 */
 
 static double rho_liq_pure(double T, int is_nh3)
 {
@@ -233,12 +233,12 @@ static double rho_liq_pure(double T, int is_nh3)
     return rhoc * s;
 }
 
-/* 纯组分饱和气体密度: 待实现(§10后半) - 暂用占位 */
-/* 实际应按书中公式实现,这里先声明 */
+/* Pure-component saturated-vapour density: to be implemented (second half of §10) - placeholder for now */
+/* Should be implemented per the book's formulas; declared here first */
 static double rho_vap_pure(double T, int is_nh3);
 
 /* ------------------------------------------------------------------ */
-/* §6 饱和液相比热 [kJ/(kg K)]                                        */
+/* §6 Saturated-liquid specific heat [kJ/(kg K)]                                        */
 /* ------------------------------------------------------------------ */
 static const double CP_A[2] = {3.875648, 3.665785};   /* NH3, H2O */
 static const double CP_B[2] = {0.242125, 0.236312};
@@ -260,7 +260,7 @@ double cp_liq(double T, double x)
 }
 
 /* ------------------------------------------------------------------ */
-/* §7 液相导热 [W/(m K)]                                               */
+/* §7 Liquid-phase thermal conductivity [W/(m K)]                                               */
 /* ------------------------------------------------------------------ */
 static const double LAM_L_NH3[4] = {8.902275e2, -0.69235, -2.4010e-3, 0.0};
 
@@ -277,7 +277,7 @@ double lambda_liq(double T, double x)
 }
 
 /* ------------------------------------------------------------------ */
-/* §8 液相动力黏度 [Pa s]                                              */
+/* §8 Liquid-phase dynamic viscosity [Pa s]                                              */
 /* ------------------------------------------------------------------ */
 double eta_liq(double T, double x)
 {
@@ -296,7 +296,7 @@ double eta_liq(double T, double x)
 }
 
 /* ------------------------------------------------------------------ */
-/* §9 表面张力 [N/m]                                                   */
+/* §9 Surface tension [N/m]                                                   */
 /* ------------------------------------------------------------------ */
 static const double SIG_P[2][3] = {
     {91.2, 1.1028, 0.0},     /* NH3: s0, mu, b */
@@ -324,7 +324,7 @@ double sigma(double T, double x)
 }
 
 /* ------------------------------------------------------------------ */
-/* §10 液相密度 [kg/m^3]                                               */
+/* §10 Liquid-phase density [kg/m^3]                                               */
 /* ------------------------------------------------------------------ */
 static const double RHO_A1[3] = {-2.410, 8.310, -6.924};
 static const double RHO_A2[3] = {2.118, -4.050, 4.443};
@@ -348,7 +348,7 @@ double rho_liq(double T, double x)
 }
 
 /* ------------------------------------------------------------------ */
-/* §11 质扩散系数 [m^2/s] (修正 Wilke-Chang)                          */
+/* §11 Mass diffusivity [m^2/s] (modified Wilke-Chang)                          */
 /* ------------------------------------------------------------------ */
 double diffusivity(double T, double x)
 {
@@ -361,7 +361,7 @@ double diffusivity(double T, double x)
 }
 
 /* ------------------------------------------------------------------ */
-/* §12/§13 混合规则用 φ                                               */
+/* §12/§13 φ shared by the mixing rules                                               */
 /* ------------------------------------------------------------------ */
 static double phi12(double eta1, double eta2)
 {
@@ -371,7 +371,7 @@ static double phi12(double eta1, double eta2)
 }
 
 /* ------------------------------------------------------------------ */
-/* §12 气相导热 [W/(m K)] (Wassiljewa-Mason-Saxena)                    */
+/* §12 Vapour-phase thermal conductivity [W/(m K)] (Wassiljewa-Mason-Saxena)                    */
 /* ------------------------------------------------------------------ */
 static const double LAM_V_NH3[4] = {-0.48173, 20.04383, 0.0, 0.0};
 
@@ -393,7 +393,7 @@ double lambda_vap(double T, double y)
 }
 
 /* ------------------------------------------------------------------ */
-/* §13 气相动力黏度 [Pa s] (Wilke)                                     */
+/* §13 Vapour-phase dynamic viscosity [Pa s] (Wilke)                                     */
 /* ------------------------------------------------------------------ */
 double eta_vap(double T, double y)
 {
@@ -406,7 +406,7 @@ double eta_vap(double T, double y)
 }
 
 /* ------------------------------------------------------------------ */
-/* §14 气相密度 [kg/m^3]                                               */
+/* §14 Vapour-phase density [kg/m^3]                                               */
 /* ------------------------------------------------------------------ */
 double rho_vap(double T, double y)
 {
@@ -422,7 +422,7 @@ double rho_vap(double T, double y)
 }
 
 /* ------------------------------------------------------------------ */
-/* §15 气相比热 [kJ/(kg K)]                                            */
+/* §15 Vapour-phase specific heat [kJ/(kg K)]                                            */
 /* ------------------------------------------------------------------ */
 static const double CPV_NH3[5] = {-1.199197086, 1.240129495, 0.924818752,
                                   0.018199633, -0.245034e-3};
@@ -446,7 +446,7 @@ double cp_vap(double T, double y)
     return cp;
 }
 
-/* §10 纯组分饱和气体密度: ρV/ρc = exp(Σ A_i τ^{b_i}) */
+/* §10 Pure-component saturated-vapour density: ρV/ρc = exp(Σ A_i τ^{b_i}) */
 static const double RHOV_A_H2O[6] = {-2.025450113, -2.701314216,
     -5.359161836, -17.343964539, -44.618326953, -64.869052901};
 static const double RHOV_A_NH3[6] = {-1.43097426, -3.31273638,

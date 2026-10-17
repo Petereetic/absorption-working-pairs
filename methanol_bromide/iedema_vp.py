@@ -1,47 +1,47 @@
 # -*- coding: utf-8 -*-
 """
-iedema_vp.py — Iedema 1984 蒸气压简化关联式（校验版，不并入正式库）
+iedema_vp.py - Iedema 1984 simplified vapour-pressure correlation (checked version; not merged into the formal library)
 
-来源：P. D. Iedema 博士论文《The Absorption Heat Pump with Lithium
-Bromide/Zinc Bromide/Methanol》，TU Delft，1984。
-  - 关联式与系数：表 2.6.4.2（论文 p.97，PDF p.119，300 dpi 读图逐字核对）
-  - 混合盐比例：§2.4.1、§2.4.2（论文 p.65，PDF p.87）明文 "LiBr/ZnBr2/
-    CH3OH (2 : 1)" —— 摩尔比 LiBr:ZnBr2 = 2:1，与 El-Shamarka 相同；
-    附录 1（论文 p.297）以参数 y 表示（1 mol 混合盐 = y mol LiBr +
-    (1-y) mol ZnBr2），2:1 即 y = 2/3。本关联式直接以质量分数 w 给出，
-    不需要 molality 换算。
-  - 实测数据：表 2.4.2（论文 p.66，PDF p.88），4 组成共 44 点
-    （点数与表 2.6.2.1 的 N=9/14/7/14 一致）；样品含水 w_H 约 0.007，
-    测量精度作者估计为压力的 2%（§2.4.2）。
+Source: P. D. Iedema, doctoral thesis "The Absorption Heat Pump with Lithium
+Bromide/Zinc Bromide/Methanol", TU Delft, 1984.
+  - Correlation and coefficients: Table 2.6.4.2 (thesis p.97, PDF p.119, read character by character from the 300 dpi rendering)
+  - Mixed-salt ratio: sections 2.4.1 and 2.4.2 (thesis p.65, PDF p.87) state explicitly "LiBr/ZnBr2/
+    CH3OH (2 : 1)" - molar ratio LiBr:ZnBr2 = 2:1, the same as El-Shamarka;
+    Appendix 1 (thesis p.297) expresses it with parameter y (1 mol of mixed salt = y mol LiBr +
+    (1-y) mol ZnBr2); 2:1 means y = 2/3. This correlation is stated directly in mass fraction w,
+    so no molality conversion is needed.
+  - Measured data: Table 2.4.2 (thesis p.66, PDF p.88), 44 points over 4 compositions
+    (the counts agree with Table 2.6.2.1's N=9/14/7/14); the samples contain water w_H approx. 0.007,
+    and the author estimates the measurement accuracy at 2% of the pressure (§2.4.2).
 
-公式（原表照印，p 以 mbar 计、T 以 K 计）：
+Formula (as printed in the original table; p in mbar, T in K):
 
     ln{ p0(T) / p(w,T) } = a(w)/T + b(w)
     p0(T) = p1 + p2/T + p3/T^2
     a(w)  = a1 + a2 w + a3 w^2 + a4 w^3 + a5 w^4
     b(w)  = b1 + b2 w + b3 w^2 + b4 w^3 + b5 w^4
 
-注意（实现约定）：按印刷值数值核验，p0(T) 的计算结果等于纯甲醇蒸气压
-（mbar）的自然对数：T=313.15 K 时 p0=5.871，exp=354 mbar，与纯甲醇
-40°C 蒸气压 354 mbar 吻合；T=338.15 K 时 exp(p0)=1028 mbar vs 沸点
-1013 mbar（+1.5%）。故实现为 ln p(w,T) = p0(T) - a(w)/T - b(w)，
-p 单位 mbar，最后换算为 bar 返回，与现有库口径一致。
+Note (implementation convention): checked numerically against the printed values; the computed p0(T) equals the pure-methanol vapour pressure's
+natural logarithm (p in mbar): at T=313.15 K, p0=5.871, exp = 354 mbar, matching the pure-methanol
+vapour pressure of 354 mbar at 40°C; at T=338.15 K, exp(p0)=1028 mbar vs. the boiling-point
+1013 mbar (+1.5%). The implementation is therefore ln p(w,T) = p0(T) - a(w)/T - b(w),
+p in mbar, converted to bar on return, consistent with the existing library convention.
 
-适用范围（原表）：w = 0.30-0.45，t = -20-140°C。
-该关联式系作者由其状态方程（表 2.6.3，64 个 b_ij 系数）的计算结果拟合
-而来（论文 p.96 明文），并非直接拟合实测；作者未对简化式单独给出偏差。
-状态方程对自家 44 点实测（表 2.6.2.1，论文 p.76）蒸气压平均相对偏差
-按组成分别为 5.0% / 2.6% / 3.4% / 2.3%。
+Valid range (original table): w = 0.30-0.45, t = -20-140°C.
+This correlation was fitted by the author to values computed from his equation of state (Table 2.6.3, 64 b_ij coefficients),
+as stated explicitly in the thesis (p.96); it is not fitted directly to measurements, and the author gives no separate deviation for the simplified correlation.
+The equation of state itself, against his own 44 measured points (Table 2.6.2.1, thesis p.76), has mean relative vapour-pressure deviations
+by composition of 5.0% / 2.6% / 3.4% / 2.3%.
 """
 
 import math
 
-# ---- 表 2.6.4.2 系数（300 dpi 读图核对） ----
+# ---- Table 2.6.4.2 coefficients (checked character by character against the 300 dpi rendering) ----
 _P = (1.874037e1, -3.498560e3, -1.663928e5)
 _A = (-1.959784e5, 1.989094e6, -7.373894e6, 1.194267e7, -7.162617e6)
 _B = (5.416153e2, -5.414318e3, 1.996754e4, -3.231367e4, 1.940737e4)
 
-W_MIN, W_MAX = 0.30, 0.45          # 原表适用范围
+W_MIN, W_MAX = 0.30, 0.45          # valid range of the original table
 T_MIN, T_MAX = 253.15, 413.15      # -20 ~ 140 °C
 
 
@@ -50,7 +50,7 @@ def _poly5(c, w):
 
 
 def ln_p0_meoh(T_K):
-    """p0(T) = p1 + p2/T + p3/T^2；数值上等于纯甲醇蒸气压 [mbar] 的 ln。"""
+    """p0(T) = p1 + p2/T + p3/T^2; numerically the natural logarithm of the pure-methanol vapour pressure [mbar]."""
     return _P[0] + _P[1] / T_K + _P[2] / T_K ** 2
 
 
@@ -63,12 +63,12 @@ def b_of_w(w):
 
 
 def p_bubble_iedema(T_K, w):
-    """Iedema 表 2.6.4.2 泡点压力，bar。w 为甲醇质量分数。范围外不报错、仅外推。"""
+    """Bubble-point pressure from Iedema Table 2.6.4.2, bar. w is the methanol mass fraction. Out-of-range inputs do not raise; they are extrapolated."""
     ln_p_mbar = ln_p0_meoh(T_K) - a_of_w(w) / T_K - b_of_w(w)
     return math.exp(ln_p_mbar) / 1000.0
 
 
-# ---- 表 2.4.2 实测数据（论文 p.66）：(w_m, w_H, [(t_C, p_kPa), ...]) ----
+# ---- Table 2.4.2 measured data (thesis p.66): (w_m, w_H, [(t_C, p_kPa), ...]) ----
 TABLE_242 = (
     (0.2849, 0.0070, ((36.57, 0.3539), (41.81, 0.4973), (46.82, 0.6786),
                       (52.42, 0.9611), (64.76, 2.021), (72.17, 3.040),

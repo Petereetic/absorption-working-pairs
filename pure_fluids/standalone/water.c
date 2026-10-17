@@ -1,8 +1,8 @@
-/* H2O 纯物质饱和性质（单独计算文件，与合并模块 pure_fluids.c 系数逐字同源）
- * 源：NIST WebBook 饱和表紧凑拟合（笔记见 ../fit-notes/水饱和性质拟合-NIST表.md）；饱和压 lnP-t 7 次式，对表全程最大 0.0291%、常用带（5~300°C）0.0128%；焓已由表基准平移 +93.351889719 至统一基准。水的权威标准为 IAPWS 公式，本式为可移植紧凑式。
- * 函数：Pref(MPa) / Tsat(°C，二分反解，超界返回 NAN) / hliq / hgas / hlat（kJ/kg）。
- * 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。
- * 编译：gcc -O2 -Wall -DSTANDALONE_MAIN -o test_water water.c -lm */
+/* H2O pure-substance saturation properties (standalone calculation file; coefficients verbatim identical to the merged module pure_fluids.c)
+ * Source: compact fit to the NIST WebBook saturation table (see fit notes in ../fit-notes/, "water saturation-property fit - NIST table"); saturation pressure as a degree-7 lnP-t polynomial, max deviation vs. table 0.0291% over the full range and 0.0128% in the usual band (5~300°C); enthalpy shifted from the table datum by +93.351889719 to the uniform reference. The authoritative standard for water is the IAPWS formulation; this is a portable compact fit.
+ * Functions: Pref (MPa) / Tsat (°C, inverse by bisection, returns NAN when out of range) / hliq / hgas / hlat (kJ/kg).
+ * Reference state: saturated-liquid enthalpy at 0°C = 100 kJ/kg (uniform module reference).
+ * Build: gcc -O2 -Wall -DSTANDALONE_MAIN -o test_water water.c -lm */
 #include <stdio.h>
 #include <math.h>
 

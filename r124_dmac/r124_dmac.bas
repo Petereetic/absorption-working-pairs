@@ -148,19 +148,19 @@ Public Function XiByTsolTdew_R124DMAC(Tsol_C As Double, Tdew_C As Double) As Var
 End Function
 
 
-' ---------- 露点温度（溶液）[°C]：全库 TdewByTsolXi 约定 ----------
-' Tdew = DewT_R124DMAC(Psol_R124DMAC(T_C, xi))：以本模块纯 R124
-' 线（NIST 表 Wagner 拟合，2026-10-12 换源；此前为 Borde 式(15)）
-' 评价溶液表面压力 Psol 所对应的饱和温度。
-' DMAC 视为不挥发。压力超出 DewT 二分跨度时返回 Empty。
+' ---------- Dew-point temperature (solution) [°C]: library-wide TdewByTsolXi convention ----------
+' Tdew = DewT_R124DMAC(Psol_R124DMAC(T_C, xi)): with this module's pure-R124
+' line (NIST-table Wagner fit, source changed 2026-10-12; previously Borde Eq. (15))
+' evaluate the saturation temperature corresponding to the solution surface pressure Psol.
+' DMAC is treated as non-volatile. Returns Empty when the pressure lies outside the DewT bisection span.
 Public Function TdewByTsolXi_R124DMAC(T_C As Double, xi As Double) As Variant
     TdewByTsolXi_R124DMAC = DewTNative_R124DMAC(PsolNative_R124DMAC(T_C, xi))
 End Function
 
-' ---------- 由溶液比焓反解溶液温度 [°C] ----------
-' hsol_R124DMAC 在固定 xi 下随 T 单调增，二分 100 次反解，
-' 求解括号 T ∈ [-40, 150] °C。h 超出该 xi 下 hsol 值域返回 Empty。
-' 与 C/Python 同算法；本函数未在真实 Excel 中编译运行。
+' ---------- Solution temperature from solution specific enthalpy [°C] ----------
+' hsol_R124DMAC increases monotonically with T at fixed xi; inverted by 100 bisection steps,
+' solution bracket T in [-40, 150] °C. Returns Empty when h lies outside the range of hsol at that xi.
+' Same algorithm as the C/Python versions; this function has not been compiled or run in real Excel.
 Public Function TsolByHsol_R124DMAC(h As Double, xi As Double) As Variant
     Dim lo As Double, hi As Double, mid As Double, k As Long
     lo = -40#: hi = 150#

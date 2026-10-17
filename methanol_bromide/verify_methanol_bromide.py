@@ -1,5 +1,5 @@
-# 验证：C 与 Python 逐点一致性 + 对论文自身数据的抽查
-# 运行：python3 verify_methanol_bromide.py（需 gcc、scipy 仅用于 PCHIP 对照）
+# Verification: pointwise consistency of C vs. Python + spot checks against the thesis's own data
+# Run: python3 verify_methanol_bromide.py (requires gcc; scipy only for the PCHIP comparison)
 import math
 import subprocess
 import sys
@@ -25,7 +25,7 @@ for line in out.strip().splitlines():
         maxdev = max(maxdev, abs(float(f[3]) - mb.T_bubble_PW(P, w)))
 print("C vs Python  最大偏差: %.3g" % maxdev)
 
-# PCHIP 与 scipy 对照（仅核对自研实现与标准算法一致）
+# PCHIP vs. scipy comparison (only checks that the in-house implementation agrees with the standard algorithm)
 try:
     from scipy.interpolate import PchipInterpolator
     p1 = PchipInterpolator(mb._W_NODES, mb._C1_NODES)
@@ -38,21 +38,21 @@ try:
 except ImportError:
     print("scipy 不可用，跳过 PCHIP 对照")
 
-# 论文附录 A 等压温度表：P = 300 mmHg 时的泡点温度
-# （2026-10-14 单位改定：模块入参已改 MPa，300 mmHg = 0.039997 MPa，原 bar 口径为 0.39997）
+# Isobaric temperature table of Appendix A of the thesis: bubble-point temperatures at P = 300 mmHg
+# (Unit ruling of 2026-10-14: the module inputs are now MPa; 300 mmHg = 0.039997 MPa; the former bar convention was 0.39997)
 print("\n泡点温度抽查（附录 A，300 mmHg）:")
 for w, tref in [(0.250, 419.0), (0.262, 411.7), (0.301, 391.4), (0.356, 380.3)]:
     t = mb.T_bubble_PW(0.039997, w)
     print("  w=%.3f  计算 %7.2f K  论文 %6.1f K  偏差 %+.2f K" % (w, t, tref, t - tref))
 
-# 论文附录 A 汽化焓表
+# Enthalpy-of-vaporisation table of Appendix A of the thesis
 print("\nH' 抽查（附录 A 表，p.196）:")
 for T, w, href in [(283.15, 0.25, 1940.0), (283.15, 0.356, 1601.0), (373.15, 0.25, 1645.0)]:
     hv = mb.h_prime(T, w)
     print("  T=%.0fC w=%.3f  计算 %7.1f  论文 %6.0f  偏差 %+.2f%%"
           % (T - 273.15, w, hv, href, 100.0 * (hv - href) / href))
 
-# 论文表 3.7 实测比热（兼作式(3.4) B 末项符号的裁决证据：取 "-"）
+# Measured specific heats of Table 3.7 of the thesis (also the ruling evidence for the sign of the last term of B in Eq. (3.4): take "-")
 print("\nCp 抽查（表 3.7 实测）:")
 for tc, w, cref in [(51.3, 0.403, 1.27), (69.9, 0.403, 1.30),
                     (40.0, 0.311, 1.19), (80.6, 0.311, 1.26)]:
@@ -60,7 +60,7 @@ for tc, w, cref in [(51.3, 0.403, 1.27), (69.9, 0.403, 1.30),
     print("  t=%.1fC w=%.3f  计算 %.3f  实测 %.2f  偏差 %+.2f%%"
           % (tc, w, cv, cref, 100.0 * (cv - cref) / cref))
 
-# 纯甲醇 Antoine 拟合误差（附录 A 的 7 个数据点）
+# Pure-methanol Antoine fit errors (the 7 data points of Appendix A)
 print("\n纯甲醇 Antoine 拟合（附录 A 数据点）:")
 for mmhg, tk in [(300, 316.7), (500, 328.3), (600, 332.6), (700, 336.4),
                  (800, 339.7), (900, 342.7), (1000, 345.4)]:

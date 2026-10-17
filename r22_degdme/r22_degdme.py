@@ -1,33 +1,33 @@
-# R22-DEGDME 热力学关联式（参考实现）
-# 来源：E. Ando, I. Takeshita,
+# Thermodynamic correlations for R22-DEGDME (reference implementation)
+# Source: E. Ando, I. Takeshita,
 #   "Residential gas-fired absorption heat pump based on R22-DEGDME pair.
 #    Part I Thermodynamic properties of the R22-DEGDME pair",
 #   Int. J. Refrigeration, Vol.7, No.3, pp.181-186, 1984.
 #
-# 三个关联式全部可算，常数直接取自论文表2、表3及式(7)：
-#   式(1) 泡点压力 Rankine 方程   lnP = ΣAnX^n + (1/T)ΣBnX^n + lnT·ΣCnX^n
-#         P: kg/cm2, T: K, X: R22 摩尔分数；适用 X=0.1~1.0, P=0.1~30 kg/cm2,
-#         T=-20~190°C；151点，平均相对偏差 0.79%
-#   式(6) 摩尔热容多项式        C = ΣAnX^n + t·ΣBnX^n + t^2·ΣCnX^n
-#         C: J/mol/°C, t: °C；全浓度，t=-30~110°C；193点，平均相对偏差 0.83%
-#   式(7) 混合热 Redlich-Kister  ΔHm = X(1-X)·Σ Gi·(1-2X)^(i-1), i=1..4
-#         ΔHm: J/mol, 测于 10°C；11点，平均相对偏差 0.72%
-#   式(9) 溶液焓组装            H(T,X) = (1-X)H1 + X·H2 + ΔHm + ∫(Tm→T) Cp dτ
+# All three correlations are computable; the constants are taken directly from Table 2, Table 3 and Eq. (7) of the paper:
+#   Eq. (1) Bubble-point pressure, Rankine equation   lnP = ΣAnX^n + (1/T)ΣBnX^n + lnT·ΣCnX^n
+#         P: kg/cm2, T: K, X: R22 mole fraction; valid X=0.1~1.0, P=0.1~30 kg/cm2,
+#         T=-20~190°C; 151 points, mean relative deviation 0.79%
+#   Eq. (6) Molar heat-capacity polynomial        C = ΣAnX^n + t·ΣBnX^n + t^2·ΣCnX^n
+#         C: J/mol/°C, t: °C; all concentrations, t=-30~110°C; 193 points, mean relative deviation 0.83%
+#   Eq. (7) Heat of mixing, Redlich-Kister  ΔHm = X(1-X)·Σ Gi·(1-2X)^(i-1), i=1..4
+#         ΔHm: J/mol, measured at 10°C; 11 points, mean relative deviation 0.72%
+#   Eq. (9) Solution-enthalpy assembly            H(T,X) = (1-X)H1 + X·H2 + ΔHm + integral(Tm->T) Cp dτ
 #
-# 参考态（本文档自行约定，论文 Part I 未固定绝对焓值）：
-#   纯组分液体在 Tm=10°C 时焓为 0；
-#   则 H(T,X) = ΔHm(X) + ∫(10°C→t) Cp(X,τ) dτ   [J/mol]，再换算为 kJ/kg。
-# 注意 X 是 R22 摩尔分数（论文体系），不是质量分数。
+# Reference state (a convention of this document; Part I of the paper fixes no absolute enthalpy value):
+#   The pure-component liquids have enthalpy 0 at Tm=10°C;
+#   then H(T,X) = ΔHm(X) + integral(10°C->t) Cp(X,τ) dτ   [J/mol], converted to kJ/kg.
+# Note: X is the R22 mole fraction (the paper's system), not a mass fraction.
 
 import math
 
-# ---- 常数 ----
+# ---- Constants ----
 _M_R22 = 86.47      # g/mol, CHClF2
 _M_DEGDME = 134.17  # g/mol, C6H14O3 (bis(2-methoxyethyl)ether)
-_TM_C = 10.0        # 混合热测定温度 / 焓参考温度，°C
-_KGCM2_TO_MPA = 0.0980665  # 1 kg/cm2 = 0.0980665 MPa（精确定义）
+_TM_C = 10.0        # heat-of-mixing measurement temperature / enthalpy reference temperature, °C
+_KGCM2_TO_MPA = 0.0980665  # 1 kg/cm2 = 0.0980665 MPa (exact definition)
 
-# 表2：式(1) n=0..5 的 (A, B, C)
+# Table 2: (A, B, C) of Eq. (1) for n=0..5
 _T2 = [
     ( 5.2167e1, -5.5828e3, -6.3489e0),
     ( 1.2753e1,  3.3999e3, -1.4386e0),
@@ -37,7 +37,7 @@ _T2 = [
     ( 5.4717e2, -1.9049e4, -8.1999e1),
 ]
 
-# 表3：式(6) n=0..3 的 (A, B, C)
+# Table 3: (A, B, C) of Eq. (6) for n=0..3
 _T3 = [
     ( 2.7974e2, -4.2015e-2,  2.3114e-3),
     (-1.5075e2,  5.9865e-1, -5.9745e-3),
@@ -45,7 +45,7 @@ _T3 = [
     (-1.2802e2,  1.0167e0,   1.0571e-3),
 ]
 
-# 式(7)：G1..G4
+# Eq. (7): G1..G4
 _G = (-1.9061e4, 8.7280e3, -1.3948e3, -6.4218e2)
 
 
@@ -57,7 +57,7 @@ def _poly(coefs, X):
 
 
 def psol_kgcm2(X, T_K):
-    """式(1)：泡点压力，kg/cm2。X=R22摩尔分数，T_K=开尔文。"""
+    """Eq. (1): bubble-point pressure, kg/cm2. X = R22 mole fraction, T_K in kelvin."""
     sA = _poly([r[0] for r in _T2], X)
     sB = _poly([r[1] for r in _T2], X)
     sC = _poly([r[2] for r in _T2], X)
@@ -65,23 +65,23 @@ def psol_kgcm2(X, T_K):
 
 
 def psol_bar(X, t_C):
-    """式(1)：泡点压力，MPa。
+    """Eq. (1): bubble-point pressure, MPa.
 
-    【注意：函数名 psol_bar 为原名保留（改名待裁），返回值单位已由
-    bar 改为 MPa】＝原生 kg/cm2 值 ×0.0980665。t_C=摄氏度。"""
+    [Note: the function name psol_bar is the retained original name (renaming pending a ruling); the return unit has been
+    changed from bar to MPa] = native kg/cm2 value x0.0980665. t_C in °C."""
     return psol_kgcm2(X, t_C + 273.15) * _KGCM2_TO_MPA
 
 
 def xi_by_tsol_tdew(Tsol_C, Tdew_C):
-    """由露点温度与溶液温度反解浓度 X（R22 摩尔分数），二分 80 次。
+    """Solve the concentration X (R22 mole fraction) back from the dew-point temperature and the solution temperature, by 80 bisection steps.
 
-    露点定压 P = psol_kgcm2(1.0, Tdew_C+273.15) [kg/cm2 原生]：
-    式(1) 在 X=1 端即本模块的纯 R22 饱和压力（DEGDME 视为不挥
-    发）；再二分求 psol_kgcm2(X, Tsol_C+273.15) = P，括号取式(1)
-    有效浓度域 X ∈ [0.1, 1.0]。内部一律走原生 kg/cm2 函数（不经
-    MPa 导出线），保证温度/浓度输出逐位不变。
-    无根时返回 None（如 Tsol 明显低于 Tdew，P 超出 Tsol 下的泡点
-    压力区间）。
+    The dew point fixes the pressure P = psol_kgcm2(1.0, Tdew_C+273.15) [native kg/cm2]:
+    at the X=1 end, Eq. (1) is this module's pure-R22 saturation pressure (DEGDME treated as
+    non-volatile); then bisection solves psol_kgcm2(X, Tsol_C+273.15) = P, with the bracket taken as the valid concentration domain of
+    Eq. (1), X in [0.1, 1.0]. Internally the native kg/cm2 functions are used throughout (not via the
+    MPa export line), so the temperature/concentration outputs are bit-for-bit unchanged.
+    Returns None when there is no root (e.g. Tsol clearly below Tdew, with P outside the bubble-point
+    pressure interval under Tsol).
     """
     P = psol_kgcm2(1.0, Tdew_C + 273.15)
     Plo, Phi = psol_kgcm2(0.1, Tsol_C + 273.15), psol_kgcm2(1.0, Tsol_C + 273.15)
@@ -99,16 +99,16 @@ def xi_by_tsol_tdew(Tsol_C, Tdew_C):
 
 
 def tdew_by_tsol_xi(X, t_C):
-    """溶液在 (X, t_C) 的露点温度 [°C]（全库 TdewByTsolXi 约定）：
-    Tdew 为本模块自有纯 R22 线（式(1) 的 X=1 端）满足
+    """Dew-point temperature [°C] of the solution at (X, t_C) (library-wide TdewByTsolXi convention):
+    Tdew is the temperature at which this module's own pure-R22 line (the X=1 end of Eq. (1)) satisfies
     psol_kgcm2(1.0, Tdew+273.15) = psol_kgcm2(X, t_C+273.15)
-    [kg/cm2 原生] 的温度，二分 80 次反解，求解括号
-    t ∈ [-50, 190] °C。内部一律走原生 kg/cm2 函数（不经 MPa
-    导出线），保证温度输出逐位不变。注意：式(1) 标称温度辖
-    区为 -20~190 °C，Tdew < -20 °C 的结果用到纯端在辖区外的
-    外推（Rankine 型方程形式外推），引用时须连同此标注。
-    DEGDME 视为不挥发。P 超出纯端在括号内的压力跨度时返回 None。
-    （本模块函数惯例为 (X, T) 参数序，本函数从之。）"""
+    [native kg/cm2], inverted by 80 bisection steps, with the solution bracket
+    t in [-50, 190] °C. Internally the native kg/cm2 functions are used throughout (not via the MPa
+    export line), so the temperature output is bit-for-bit unchanged. Note: the nominal temperature domain of
+    Eq. (1) is -20~190 °C; results with Tdew < -20 °C use an extrapolation of the pure end outside its domain
+    (an extrapolation of the Rankine-type equation form); this note must accompany any citation.
+    DEGDME is treated as non-volatile. Returns None when P lies outside the pressure span of the pure end within the bracket.
+    (This module's function convention is the (X, T) parameter order; this function follows it.)"""
     P = psol_kgcm2(X, t_C + 273.15)
     lo, hi = -50.0, 190.0
     if not (psol_kgcm2(1.0, lo + 273.15) <= P <= psol_kgcm2(1.0, hi + 273.15)):
@@ -123,10 +123,10 @@ def tdew_by_tsol_xi(X, t_C):
 
 
 def tsol_by_hsol(h, X):
-    """由溶液比焓 h [kJ/kg] 与 R22 摩尔分数 X 反解溶液温度 [°C]：
-    hsol 在固定 X 下随 t 单调增（式(6) 比热在辖区内为正），
-    二分 100 次反解，求解括号 t ∈ [-30, 110] °C（式(6) 辖区）。
-    h 超出该 X 下 hsol 值域时返回 None。"""
+    """Solve the solution temperature [°C] back from the solution specific enthalpy h [kJ/kg] and R22 mole fraction X:
+    hsol increases monotonically with t at fixed X (the specific heat of Eq. (6) is positive within its domain);
+    inverted by 100 bisection steps, with the solution bracket t in [-30, 110] °C (the domain of Eq. (6)).
+    Returns None when h lies outside the range of hsol at that X."""
     lo, hi = -30.0, 110.0
     hlo, hhi = hsol(X, lo), hsol(X, hi)
     if not (hlo <= h <= hhi):
@@ -141,7 +141,7 @@ def tsol_by_hsol(h, X):
 
 
 def cp_molar(X, t_C):
-    """式(6)：混合物摩尔定压热容，J/mol/°C。"""
+    """Eq. (6): molar heat capacity of the mixture at constant pressure, J/mol/°C."""
     sA = _poly([r[0] for r in _T3], X)
     sB = _poly([r[1] for r in _T3], X)
     sC = _poly([r[2] for r in _T3], X)
@@ -149,13 +149,13 @@ def cp_molar(X, t_C):
 
 
 def heat_of_mixing(X):
-    """式(7)：摩尔混合热（10°C 下测定），J/mol。放热为负。"""
+    """Eq. (7): molar heat of mixing (measured at 10°C), J/mol. Negative when exothermic."""
     return X * (1.0 - X) * sum(g * (1.0 - 2.0 * X) ** i for i, g in enumerate(_G))
 
 
 def hsol(X, t_C):
-    """式(9)：溶液比焓，kJ/kg。
-    参考态：纯组分液体在 10°C 时焓为 0（本文档约定）。"""
+    """Eq. (9): solution specific enthalpy, kJ/kg.
+    Reference state: the pure-component liquids have enthalpy 0 at 10°C (a convention of this document)."""
     sA = _poly([r[0] for r in _T3], X)
     sB = _poly([r[1] for r in _T3], X)
     sC = _poly([r[2] for r in _T3], X)
@@ -169,7 +169,7 @@ def hsol(X, t_C):
 
 
 if __name__ == "__main__":
-    # 自检：与论文图6（ΔHm 最低点约 -5000 J/mol）及物理量级对照
+    # Self-check: comparison against Fig. 6 of the paper (the minimum of ΔHm is about -5000 J/mol) and physical orders of magnitude
     print("Psol(X=1.0, 10°C)  = %.3f kg/cm2" % psol_kgcm2(1.0, 283.15))
     print("Psol(X=0.5, 10°C)  = %.4f MPa" % psol_bar(0.5, 10.0))
     print("Psol(X=0.5, 80°C)  = %.4f MPa" % psol_bar(0.5, 80.0))

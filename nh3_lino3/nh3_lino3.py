@@ -1,93 +1,93 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-nh3_lino3.py -- 氨-硝酸锂 (NH3/LiNO3) 溶液物性参考实现
+nh3_lino3.py -- Reference implementation of the properties of ammonia-lithium nitrate (NH3/LiNO3) solutions
 ================================================================
-来源: Amaris Castilla, C.F. (2014) 博士论文
+Source: Amaris Castilla, C.F. (2014), doctoral thesis,
 "Intensification of NH3 Bubble Absorption Process Using Advanced
 Surfaces and Carbon Nanotubes for NH3/LiNO3 Absorption Chillers",
-Universitat Rovira i Virgili, 附录 B (pp. A-6 ~ A-8) 转录的关联式:
+Universitat Rovira i Virgili, correlations transcribed in Appendix B (pp. A-6 ~ A-8):
 
-  泡点压力   Libotean et al. (2007), J. Chem. Eng. Data 52, 1050-1055
-             ln P[kPa] = pa(x) + pb(x)/T[K], pa/pb 为 x 的三次多项式
-             (上行 ln P[kPa] 为论文源式口径; 本模块内部算术沿用 kPa,
-             公开函数边界压力一律 MPa, 见下"约定")
-  液体焓     Valles & Salavera (2011, 内部报告), Haltenberger (1939) 法
+  Bubble-point pressure   Libotean et al. (2007), J. Chem. Eng. Data 52, 1050-1055
+             ln P[kPa] = pa(x) + pb(x)/T[K]; pa/pb are cubic polynomials in x
+             (the ln P[kPa] above follows the paper's source-formula convention; this module's internal arithmetic keeps kPa,
+             and pressures at public-function boundaries are always MPa; see "Conventions" below)
+  Liquid enthalpy     Valles & Salavera (2011, internal report), Haltenberger (1939) method
              H[kJ/kg] = ha(x) + hb(x) T + hc(x) T^2
-  比热       Libotean et al. (2008): Cp = cpa(x) + cpb(x) T
-  密度       Libotean et al. (2008): rho = 1000 (da(x) + db(x) T)
-  导热       Cuenca et al. (2013a): k = ka1 + ka2 T + ka3 T^2 + ka4 x
-  结晶界限   Infante Ferreira et al. (1984): XCRIS 十分段多项式
-  黏度       Libotean et al. (2008) -- 论文排版残损, 重构式未核实,
-             仅 Python 提供并标记 EXPERIMENTAL, C/VBA 不实现
+  Specific heat       Libotean et al. (2008): Cp = cpa(x) + cpb(x) T
+  Density       Libotean et al. (2008): rho = 1000 (da(x) + db(x) T)
+  Thermal conductivity       Cuenca et al. (2013a): k = ka1 + ka2 T + ka3 T^2 + ka4 x
+  Crystallisation limit   Infante Ferreira et al. (1984): XCRIS ten-segment polynomial
+  Viscosity       Libotean et al. (2008) -- the typesetting in the thesis is damaged and the reconstructed form is unverified;
+             provided in Python only and marked EXPERIMENTAL; not implemented in C/VBA
 
-约定
+Conventions
 ----
-* x : 氨质量分数 (小数, 如 0.5), 不是百分数
-* T : K (结晶函数 x_cris 的 T 用 °C, 与原文一致)
-* p : MPa (公开函数边界; 内部算术与源式仍为 kPa, 公开函数只在
-  边界作 MPa <-> kPa 换算), h : kJ/kg, cp : kJ/(kg K),
+* x : ammonia mass fraction (a fraction, e.g. 0.5), not a percentage
+* T : K (the T of the crystallisation function x_cris is in °C, as in the original)
+* p : MPa (at public-function boundaries; internal arithmetic and the source formulas remain in kPa; public functions convert
+  MPa <-> kPa only at the boundary), h : kJ/kg, cp : kJ/(kg K),
   rho : kg/m^3, k : W/(m K)
 
-参考态 (焓, 按来源原文)
+Reference state (enthalpy, as in the source)
 ------------------------
-氨的焓以 0 °C 时 0 kJ/kg 为零点; 混合物参考态为 0 °C、氨质量分数 0.5
-时 H = 0 kJ/kg。本模块保留来源参考态, 不与本库其他工质对统一。
+The ammonia enthalpy takes 0 kJ/kg at 0 °C as its zero; the mixture reference state is 0 °C and ammonia mass fraction 0.5,
+where H = 0 kJ/kg. This module keeps the source reference state; it is not unified with the other pairs in this library.
 
-有效范围 (超出 raise ValueError, 不静默外推)
+Valid ranges (outside them a ValueError is raised; no silent extrapolation)
 --------------------------------------------
   psol_TX / T_bubble_PX : T 293.15-353.15 K, x 0.35-0.65
   hsol                     : T 273.15-353.15 K, x 0.35-0.65
-                              (下限为参考态温度: 焓式由 Haltenberger 法自
-                              273.15 K 积分构造, 参考点按定义精确成立;
-                              VLE 数据支撑区间为 293.15-353.15 K)
+                              (the lower bound is the reference-state temperature: the enthalpy formula is constructed by the Haltenberger method,
+                              integrating from 273.15 K, and the reference point holds exactly by definition;
+                              the VLE data support interval is 293.15-353.15 K)
   cp, rho                   : T 293.15-353.15 K, x 0.35-0.65
   k_therm                   : T 303.15-353.15 K, x 0.35-0.60
-  x_cris                    : x 0-1 (原伪代码分支域), T 为 °C
+  x_cris                    : x 0-1 (branch domain of the original pseudocode), T in °C
 
-注记
+Notes
 ----
-* 导热: 论文附录 B 印作 k = ka1 + ka2 T + ka3 T^2 x + ka4 x (ka3 项带 x)。
-  本模块按不带额外 x 的读法实现 (ka3 T^2), 两读法在 300 K/x=0.4 处差
-  约 3%。详见 公式说明.md。
-* x_cris: 原文伪代码 XCRIS = f(TSol[°C], xSol), 以 xSol 分支。本函数
-  签名 x_cris(T_C, x); 分支端点归入下限所在段 (原文为严格不等式)。
+* Thermal conductivity: Appendix B of the thesis prints k = ka1 + ka2 T + ka3 T^2 x + ka4 x (the ka3 term carries an x).
+  This module implements the reading without the extra x (ka3 T^2); the two readings differ at 300 K/x=0.4
+  by about 3%. See the formula notes file.
+* x_cris: the original pseudocode is XCRIS = f(TSol[°C], xSol), branching on xSol. This function's
+  signature is x_cris(T_C, x); branch endpoints belong to the segment of the lower bound (the original uses strict inequalities).
 """
 
 import math
 
 # ---------------------------------------------------------------------------
-# 系数 (逐字转录自论文附录 B; 2026-10-03 pdftotext 提取复核)
+# Coefficients (transcribed verbatim from Appendix B of the thesis; re-checked against the pdftotext extraction on 2026-10-03)
 # ---------------------------------------------------------------------------
 
-# 泡点压力 Libotean et al. (2007): pa/pb 三次多项式系数 (常数项在前)
+# Bubble-point pressure, Libotean et al. (2007): cubic-polynomial coefficients for pa/pb (constant term first)
 _PA = (4.99470524658178, 88.5490906185871, -197.698944465798, 134.938665891525)
 _PB = (-1793.21854659273, -22317.1158016582, 61289.3128925447, -45238.5915843719)
 
-# 液体焓 Valles & Salavera (2011): ha/hb/hc 三次多项式系数
+# Liquid enthalpy, Valles & Salavera (2011): cubic-polynomial coefficients for ha/hb/hc
 _HA = (249.1567745, -1628.297463, -464.3464344, -105.6321057)
 _HB = (2.481273559, -5.184392344, -0.775202139, 18.98142102)
 _HC = (-0.004240786, 0.025111292, -0.013342843, -0.025956064)
 
-# 比热 Libotean et al. (2008): cpa/cpb 为 x 的一次式 (截距, 斜率)
-_CPA = (0.559273057, 3.241167393)      # J/(g K) 基准项
+# Specific heat, Libotean et al. (2008): cpa/cpb are linear in x (intercept, slope)
+_CPA = (0.559273057, 3.241167393)      # J/(g K) datum term
 _CPB = (0.00207796, 0.001846907)       # J/(g K^2)
 
-# 密度 Libotean et al. (2008): da/db 为 x 的一次式
+# Density, Libotean et al. (2008): da/db are linear in x
 _DA = (1.521, -0.4528)
 _DB = (-0.00001961, -0.001726)
 
-# 导热 Cuenca et al. (2013a)
+# Thermal conductivity, Cuenca et al. (2013a)
 _KA1, _KA2, _KA3, _KA4 = 0.446088003, -0.000350326, 2.13849e-07, 0.006538043
 
-# 黏度重构系数 (未核实, 见 mu_visc docstring)
+# Viscosity reconstruction coefficients (unverified; see the mu_visc docstring)
 _VA = (1.918, 10.094, -18.394)
 _VB = (-1.205, -35.627, 51.529)
 
-# 有效范围
-_T_VLE = (293.15, 353.15)   # K (泡点/cp/密度)
-_T_H = (273.15, 353.15)     # K (焓: 下限为参考态温度, 见模块头注)
-_T_KTH = (303.15, 353.15)   # K (导热)
+# Valid ranges
+_T_VLE = (293.15, 353.15)   # K (bubble point / cp / density)
+_T_H = (273.15, 353.15)     # K (enthalpy: the lower bound is the reference-state temperature; see the module header note)
+_T_KTH = (303.15, 353.15)   # K (thermal conductivity)
 _X_VLE = (0.35, 0.65)
 _X_KTH = (0.35, 0.60)
 
@@ -108,7 +108,7 @@ def _check(T_K, x, t_rng, x_rng, name):
 
 
 # ---------------------------------------------------------------------------
-# 泡点压力与泡点温度
+# Bubble-point pressure and bubble-point temperature
 # ---------------------------------------------------------------------------
 
 def _pa_pb(x):
@@ -116,9 +116,9 @@ def _pa_pb(x):
 
 
 def _psol_TX_kPa(T_K, x):
-    """(私有, 内部原生值) 泡点压力 [kPa]: 温度 T_K [K], 氨质量分数 x。
+    """(private, internal native value) Bubble-point pressure [kPa]: temperature T_K [K], ammonia mass fraction x.
 
-    ln P = pa(x) + pb(x)/T  (Libotean et al. 2007, 源式以 kPa 计)
+    ln P = pa(x) + pb(x)/T  (Libotean et al. 2007; the source formula is in kPa)
     """
     _check(T_K, x, _T_VLE, _X_VLE, "psol_TX")
     pa, pb = _pa_pb(x)
@@ -126,18 +126,18 @@ def _psol_TX_kPa(T_K, x):
 
 
 def psol_TX(T_K, x):
-    """泡点压力 [MPa]: 温度 T_K [K], 氨质量分数 x 的溶液。
+    """Bubble-point pressure [MPa]: solution at temperature T_K [K] and ammonia mass fraction x.
 
-    公开边界只作单位换算: 返回 _psol_TX_kPa(T_K, x) * 1e-3
-    (内部源式 ln P[kPa] = pa(x) + pb(x)/T, Libotean et al. 2007)。
+    The public boundary only converts units: returns _psol_TX_kPa(T_K, x) * 1e-3
+    (internal source formula ln P[kPa] = pa(x) + pb(x)/T, Libotean et al. 2007).
     """
     return _psol_TX_kPa(T_K, x) * 1e-3
 
 
 def _T_bubble_PX_kPa(P_kPa, x):
-    """(私有, 内部原生值) 泡点温度 [K]: 压力 P_kPa [kPa], 氨质量分数 x。
+    """(private, internal native value) Bubble-point temperature [K]: pressure P_kPa [kPa], ammonia mass fraction x.
 
-    解析反解: T = pb / (ln P - pa)。结果须落在 293.15-353.15 K。
+    Analytic inverse: T = pb / (ln P - pa). The result must lie within 293.15-353.15 K.
     """
     if not (_X_VLE[0] <= x <= _X_VLE[1]):
         raise ValueError(f"T_bubble_PX: x={x} outside {_X_VLE}")
@@ -155,38 +155,38 @@ def _T_bubble_PX_kPa(P_kPa, x):
 
 
 def T_bubble_PX(P_MPa, x):
-    """泡点温度 [K]: 压力 P_MPa [MPa], 氨质量分数 x 的溶液。
+    """Bubble-point temperature [K]: solution at pressure P_MPa [MPa] and ammonia mass fraction x.
 
-    公开边界只作单位换算: 入参 MPa 换回 kPa 后交内部原生函数
-    _T_bubble_PX_kPa 解析反解。结果须落在 293.15-353.15 K。
+    The public boundary only converts units: the MPa input is converted back to kPa and passed to the internal native function
+    _T_bubble_PX_kPa for analytic inversion. The result must lie within 293.15-353.15 K.
     """
     return _T_bubble_PX_kPa(P_MPa * 1e3, x)
 
 
 # ---------------------------------------------------------------------------
-# 纯氨饱和线 (露点口径, 供 x_by_tsol_tdew 用)
+# Pure-ammonia saturation line (dew-point convention, for use by x_by_tsol_tdew)
 # ---------------------------------------------------------------------------
-# LiNO3 不挥发, 气相视为纯氨。纯氨线 2026-10-12 换源 (见 公式说明.md):
-# 改用氨 NIST 饱和表紧凑拟合 -- lnP-t 7 次多项式 (源: NIST WebBook
-# 饱和表 210 点, -77~132 degC; 拟合常用带 -50~+60 degC 最大偏差
-# 0.0027%; 系数与验算见 工质对公式素材库《纯氨饱和性质拟合-NIST表》,
-# 与 pure_fluids 的氨拟合同源)。此前用氨水模块 Patek-Klomfar 式 (6)
-# 在氨摩尔分数 = 1 处的端点: 该端点 25 degC 给 1012 kPa, 较 NIST
-# 表值 1002.69 kPa 高约 0.9%, 自此只作历史口径, 与本线分账。
-# 混合物泡点式 (psol_TX) 不变。拟合辖区 t = -77~132 degC
-# (P 约 6.4~11280 kPa)。
+# LiNO3 is non-volatile; the vapour phase is treated as pure ammonia. The pure-ammonia line was re-sourced on 2026-10-12 (see the formula notes file):
+# it now uses a compact fit to the ammonia NIST saturation table -- an lnP-t degree-7 polynomial (source: NIST WebBook
+# saturation table, 210 points, -77~132 degC; the max deviation over the usual fit band -50~+60 degC
+# is 0.0027%; coefficients and verification are in the working-pair formula materials library document "Pure-ammonia saturation property fit - NIST table",
+# of the same origin as the ammonia fit in pure_fluids). Previously, the endpoint at ammonia mole fraction = 1 of the Patek-Klomfar Eq. (6)
+# of the ammonia-water module was used: at 25 degC that endpoint gives 1012 kPa, about 0.9% above the NIST
+# table value 1002.69 kPa; from now on it is kept only as a historical convention, accounted separately from this line.
+# The mixture bubble-point formula (psol_TX) is unchanged. Fit domain t = -77~132 degC
+# (P approx. 6.4~11280 kPa).
 
 _NH3_FIT = (-0.8457026848887617, 0.03739502393748032,
             -0.00015333383280607642, 6.551063627525382e-07,
             -2.4759314474490567e-09, 9.070213653911228e-12,
             -3.681466540446358e-14, 1.1501679663496297e-16)
-_NH3_TLO, _NH3_THI = -77.0, 132.0    # degC, NIST 表拟合辖区
+_NH3_TLO, _NH3_THI = -77.0, 132.0    # degC, domain of the NIST-table fit
 
 
 def _pref_NH3_pure(T_K):
-    """纯氨饱和压力 [kPa] (NIST 表 lnP-t 7 次多项式拟合, 式中 P 以 MPa 计)。
+    """Pure-ammonia saturation pressure [kPa] (NIST-table lnP-t degree-7 polynomial fit; P in the formula is in MPa).
 
-    T_K 落在拟合辖区 -77~132 degC 之外时返回 None。
+    Returns None when T_K lies outside the fit domain -77~132 degC.
     """
     t = T_K - 273.15
     if not (_NH3_TLO <= t <= _NH3_THI):
@@ -198,9 +198,9 @@ def _pref_NH3_pure(T_K):
 
 
 def _Tsat_NH3_pure(P_kPa):
-    """纯氨饱和温度 [K]: 对 _pref_NH3_pure 二分 80 次反解。
+    """Pure-ammonia saturation temperature [K]: inverted from _pref_NH3_pure by 80 bisection steps.
 
-    P_kPa 落在拟合辖区压力跨度 (约 6.4~11280 kPa) 之外时返回 None。
+    Returns None when P_kPa lies outside the pressure span of the fit domain (approx. 6.4~11280 kPa).
     """
     lo, hi = _NH3_TLO + 273.15, _NH3_THI + 273.15
     if not (_pref_NH3_pure(lo) <= P_kPa <= _pref_NH3_pure(hi)):
@@ -215,16 +215,16 @@ def _Tsat_NH3_pure(P_kPa):
 
 
 def x_by_tsol_tdew(Tsol_K, Tdew_K):
-    """由露点温度与溶液温度反解氨质量分数 x。
+    """Solve the ammonia mass fraction x back from the dew-point temperature and the solution temperature.
 
-    露点定压: P = _pref_NH3_pure(Tdew_K) (纯氨饱和压, 口径见上);
-    再二分 80 次反解 _psol_TX_kPa(Tsol_K, x) = P (全程内部 kPa,
-    不经公开 MPa 边界), 括号取泡点函数有效浓度域 x = 0.35-0.65
-    (泡点压力在该域内随 x 单调增)。
-    无根时返回 None (P 落在 Tsol 下泡点压力跨度之外, 如溶液温度
-    明显低于露点温度; 或 Tdew_K 超出纯氨 NIST 拟合辖区)。注意本函数
-    按跨工质对统一约定返回 None, 不沿用本模块其余函数的
-    raise ValueError 约定。
+    Dew-point pressure: P = _pref_NH3_pure(Tdew_K) (pure-ammonia saturation pressure; convention above);
+    then 80 bisection steps invert _psol_TX_kPa(Tsol_K, x) = P (internal kPa throughout,
+    not via the public MPa boundary); the bracket is the bubble-point function's valid concentration domain x = 0.35-0.65
+    (the bubble-point pressure increases monotonically with x in that domain).
+    Returns None when there is no root (P outside the span of bubble-point pressures under Tsol, e.g. the solution temperature
+    clearly below the dew-point temperature; or Tdew_K outside the pure-ammonia NIST fit domain). Note: this function
+    follows the cross-pair library convention of returning None; it does not use the raise ValueError convention
+    of the rest of this module.
     """
     P = _pref_NH3_pure(Tdew_K)
     if P is None:
@@ -246,14 +246,14 @@ def x_by_tsol_tdew(Tsol_K, Tdew_K):
 
 
 # ---------------------------------------------------------------------------
-# 液体焓 / 比热 / 密度 / 导热
+# Liquid enthalpy / specific heat / density / thermal conductivity
 # ---------------------------------------------------------------------------
 
 def hsol(T_K, x):
-    """溶液比焓 [kJ/kg] (Valles & Salavera 2011, Haltenberger 法)。
+    """Solution specific enthalpy [kJ/kg] (Valles & Salavera 2011, Haltenberger method).
 
-    H = ha(x) + hb(x) T + hc(x) T^2, T 为 K。
-    参考态: 0 °C、x=0.5 时 H = 0 (来源原文, 与本库其他工质对不同)。
+    H = ha(x) + hb(x) T + hc(x) T^2, with T in K.
+    Reference state: H = 0 at 0 °C and x=0.5 (per the source; differs from the other pairs in this library).
     """
     _check(T_K, x, _T_H, _X_VLE, "hsol")
     ha = _poly(_HA, x)
@@ -264,22 +264,22 @@ def hsol(T_K, x):
 
 
 def tdew_from_tsol_x(T_K, x):
-    """溶液在 (T_K, x) 的露点温度 [K]（全库 TdewByTsolXi 约定）：
-        Tdew = _Tsat_NH3_pure(_psol_TX_kPa(T_K, x))，
-    即以纯氨 NIST 拟合线（2026-10-12 换源，见 _pref_NH3_pure 上方
-    注释）评价溶液表面压力 Psol 所对应的饱和温度（全程内部 kPa，
-    不经公开 MPa 边界）。LiNO₃ 不挥发，
-    气相视为纯氨，无端点约定问题。辖区随 psol_TX（T 293.15–353.15 K，
-    x 0.35–0.65），越界时 _psol_TX_kPa 的 ValueError 照常抛出。"""
+    """Dew-point temperature [K] of the solution at (T_K, x) (library-wide TdewByTsolXi convention):
+        Tdew = _Tsat_NH3_pure(_psol_TX_kPa(T_K, x)),
+    i.e. the saturation temperature corresponding to the solution surface pressure Psol, evaluated with the pure-ammonia NIST fit line
+    (re-sourced on 2026-10-12; see the comment above _pref_NH3_pure) (internal kPa throughout,
+    not via the public MPa boundary). LiNO₃ is non-volatile,
+    the vapour phase is treated as pure ammonia, so there is no endpoint-convention issue. The domain follows psol_TX (T 293.15-353.15 K,
+    x 0.35-0.65); out of domain, the ValueError of _psol_TX_kPa propagates as usual."""
     return _Tsat_NH3_pure(_psol_TX_kPa(T_K, x))
 
 
 def tsol_by_hsol(h, x):
-    """由溶液比焓 h [kJ/kg] 与氨质量分数 x 反解溶液温度 [K]：
-    hsol 在固定 x 下随 T 单调增（cp > 0），二分 100 次反解，
-    求解括号取 hsol 辖区 T ∈ [273.15, 353.15] K（_T_H）。
-    h 超出该 x 下 hsol 值域时返回 None；x 越界时 hsol 的
-    ValueError 照常抛出。"""
+    """Solve the solution temperature [K] back from the solution specific enthalpy h [kJ/kg] and ammonia mass fraction x:
+    hsol increases monotonically with T at fixed x (cp > 0); inverted by 100 bisection steps,
+    with the solution bracket taken as the hsol domain T in [273.15, 353.15] K (_T_H).
+    Returns None when h lies outside the range of hsol at that x; when x is out of domain, the ValueError of hsol
+    propagates as usual."""
     lo, hi = 273.15, 353.15
     hlo, hhi = hsol(lo, x), hsol(hi, x)
     if not (hlo <= h <= hhi):
@@ -294,9 +294,9 @@ def tsol_by_hsol(h, x):
 
 
 def cp(T_K, x):
-    """溶液比热 [kJ/(kg K)] (Libotean et al. 2008)。
+    """Solution specific heat [kJ/(kg K)] (Libotean et al. 2008).
 
-    原文 Cp 单位 J/(g K): Cp = cpa(x) + cpb(x) T; 数值与 kJ/(kg K) 相同。
+    The Cp of the original is in J/(g K): Cp = cpa(x) + cpb(x) T; the numerical value is the same as in kJ/(kg K).
     """
     _check(T_K, x, _T_VLE, _X_VLE, "cp")
     cpa = _CPA[0] + _CPA[1] * x
@@ -305,9 +305,9 @@ def cp(T_K, x):
 
 
 def rho(T_K, x):
-    """溶液密度 [kg/m^3] (Libotean et al. 2008)。
+    """Solution density [kg/m^3] (Libotean et al. 2008).
 
-    rho = 1000 * (da(x) + db(x) T), T 为 K。
+    rho = 1000 * (da(x) + db(x) T), with T in K.
     """
     _check(T_K, x, _T_VLE, _X_VLE, "rho")
     da = _DA[0] + _DA[1] * x
@@ -316,28 +316,28 @@ def rho(T_K, x):
 
 
 def k_therm(T_K, x):
-    """溶液导热系数 [W/(m K)] (Cuenca et al. 2013a)。
+    """Solution thermal conductivity [W/(m K)] (Cuenca et al. 2013a).
 
-    k = ka1 + ka2 T + ka3 T^2 + ka4 x。
-    注: 论文附录 B 印作 ka3 T^2 x (ka3 项带 x); 本实现按不带额外 x
-    的读法, 两读法差约 3%, 详见 公式说明.md。
+    k = ka1 + ka2 T + ka3 T^2 + ka4 x.
+    Note: Appendix B of the thesis prints ka3 T^2 x (the ka3 term carries an x); this implementation follows the reading without the extra x;
+    the two readings differ by about 3%; see the formula notes file.
     """
     _check(T_K, x, _T_KTH, _X_KTH, "k_therm")
     return _KA1 + _KA2 * T_K + _KA3 * T_K * T_K + _KA4 * x
 
 
 # ---------------------------------------------------------------------------
-# 结晶界限 (Infante Ferreira et al. 1984, 附录 B 伪代码逐字转录)
+# Crystallisation limit (Infante Ferreira et al. 1984; the Appendix B pseudocode transcribed verbatim)
 # ---------------------------------------------------------------------------
 
 def x_cris(T_C, x):
-    """结晶界限量 XCRIS (Infante Ferreira et al. 1984)。
+    """Crystallisation-limit quantity XCRIS (Infante Ferreira et al. 1984).
 
-    原文伪代码: XCRIS = f(TSol[°C], xSol), 以溶液氨质量分数 xSol 分支,
-    每段为 T[°C] 的多项式。本函数逐字转录十分段; 分支端点归入下限
-    所在段 (原文为严格不等式)。x 须在 [0, 1] 内。
-    XCRIS 的物理量纲按原文伪代码照录, 使用时与状态点比较的方法
-    参见 Infante Ferreira et al. (1984) 原始报告。
+    Original pseudocode: XCRIS = f(TSol[°C], xSol), branching on the solution ammonia mass fraction xSol;
+    each segment is a polynomial in T[°C]. This function transcribes all ten segments verbatim; branch endpoints belong to the segment of
+    the lower bound (the original uses strict inequalities). x must lie within [0, 1].
+    The physical dimension of XCRIS is recorded as printed in the original pseudocode; for how to compare it against state points in use,
+    see the original report of Infante Ferreira et al. (1984).
     """
     T = T_C
     if x < 0.2911:
@@ -364,20 +364,20 @@ def x_cris(T_C, x):
 
 
 # ---------------------------------------------------------------------------
-# 黏度 (EXPERIMENTAL / UNVERIFIED -- 仅 Python, C/VBA 不实现)
+# Viscosity (EXPERIMENTAL / UNVERIFIED -- Python only; not implemented in C/VBA)
 # ---------------------------------------------------------------------------
 
 def mu_visc(T_K, x):
-    """动力黏度 [mPa s] -- **实验性重构, 未核实, 勿用于工程计算**。
+    """Dynamic viscosity [mPa s] -- **experimental reconstruction, unverified; do not use for engineering calculations**.
 
-    论文附录 B 的黏度式排版残损 (原文呈 "Sol = e^(1000 va / vb / T)"
-    的堆叠形式, 算符丢失)。本函数按数值合理性重构为
+    The viscosity formula in Appendix B of the thesis is typeset in damaged form (the original shows it in a stacked form,
+    "Sol = e^(1000 va / vb / T)", with operators lost). This function reconstructs it, on grounds of numerical plausibility, as
         mu = exp(va(x) * 1000 / T + vb(x)),
         va = 1.918 + 10.094 x - 18.394 x^2,
         vb = -1.205 - 35.627 x + 51.529 x^2,
-    抽检: x=0.45 时 313.15 K -> 约 6.9 mPa s, 293.15 K -> 约 12.6 mPa s
-    (量级合理)。入库前必须对照 Libotean et al. (2008),
-    J. Chem. Eng. Data 53, 2383-2388 原文核实。
+    Spot checks: at x=0.45, 313.15 K -> approx. 6.9 mPa s; 293.15 K -> approx. 12.6 mPa s
+    (plausible orders of magnitude). Before admission to the library it must be checked against the original of Libotean et al. (2008),
+    J. Chem. Eng. Data 53, 2383-2388.
     """
     va = _poly(_VA, x)
     vb = _poly(_VB, x)

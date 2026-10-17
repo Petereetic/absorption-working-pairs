@@ -159,11 +159,11 @@ Public Function XiByTsolTdew_R124DMF(Tsol_C As Double, Tdew_C As Double) As Vari
 End Function
 
 
-' ---------- 露点温度（溶液）[°C]：全库 TdewByTsolXi 约定 ----------
-' Tdew = DewT_R124DMF(Psol_R124DMF(T_C, xi))（公开边界）；内部以原生
-' bar 计算：DewT_R124DMF_bar(Psol_R124DMF_bar(T_C, xi))，结果不变：
-' 以本模块自有纯 R124 Antoine 线评价溶液表面压力 Psol 所对应的
-' 饱和温度。吸收剂视为不挥发。Psol 无解（Empty）时返回 Empty。
+' ---------- Dew-point temperature (solution) [°C]: library-wide TdewByTsolXi convention ----------
+' Tdew = DewT_R124DMF(Psol_R124DMF(T_C, xi)) (public boundary); internally computed in native
+' bar: DewT_R124DMF_bar(Psol_R124DMF_bar(T_C, xi)), result unchanged:
+' evaluate, with this module's own pure-R124 Antoine line, the saturation temperature
+' corresponding to the solution surface pressure Psol. The absorbent is treated as non-volatile. Returns Empty when Psol has no solution (Empty).
 Public Function TdewByTsolXi_R124DMF(T_C As Double, xi As Double) As Variant
     Dim Pv As Variant
     Pv = Psol_R124DMF_bar(T_C, xi)

@@ -1,8 +1,8 @@
-/* R22 纯物质饱和性质（单独计算文件，与合并模块 pure_fluids.c 系数逐字同源）
- * 源：CoolProp 参考状态方程拟合，与合并模块 pure_fluids 系数逐字相同；Wagner 饱和压最大偏差 0.0065%，焓偏差 0.42/0.59 kJ/kg；参考态 0°C 饱和液体 = 100 kJ/kg。
- * 函数：Pref(MPa) / Tsat(°C，入参 MPa，二分反解，超界返回 NAN) / hliq / hgas / hlat（kJ/kg）。Wagner 拟合内部以 bar 计，公开边界换算。
- * 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。
- * 编译：gcc -O2 -Wall -DSTANDALONE_MAIN -o test_r22 r22.c -lm */
+/* R22 pure-substance saturation properties (standalone calculation file; coefficients verbatim identical to the merged module pure_fluids.c)
+ * Source: fit to the CoolProp reference equation of state, coefficients verbatim identical to the merged module pure_fluids; Wagner saturation pressure max deviation 0.0065%, enthalpy deviations 0.42/0.59 kJ/kg; reference state: saturated liquid at 0°C = 100 kJ/kg.
+ * Functions: Pref (MPa) / Tsat (°C, input in MPa, inverse by bisection, returns NAN when out of range) / hliq / hgas / hlat (kJ/kg). The Wagner fit works internally in bar, with conversion at the public boundary.
+ * Reference state: saturated-liquid enthalpy at 0°C = 100 kJ/kg (uniform module reference).
+ * Build: gcc -O2 -Wall -DSTANDALONE_MAIN -o test_r22 r22.c -lm */
 #include <stdio.h>
 #include <math.h>
 

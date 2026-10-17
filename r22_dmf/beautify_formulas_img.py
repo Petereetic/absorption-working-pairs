@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""把 R22-DMF docx 里的纯文本公式替换为 matplotlib 渲染的高清公式图片。
-用法: python3 beautify_formulas_img.py <docx文件>
-会原地修改, 先备份为 .bak。
+"""Replace the plain-text formulas in the R22-DMF docx with high-definition formula images rendered by matplotlib.
+Usage: python3 beautify_formulas_img.py <docx file>
+Modifies the file in place; first backed up as .bak.
 """
 import sys
 import os
@@ -17,7 +17,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 IMG_DIR = '/tmp/formula_imgs'
 os.makedirs(IMG_DIR, exist_ok=True)
 
-# (key, mathtext, mode)  mode: display=独立行居中, inline=行内
+# (key, mathtext, mode)  mode: display = standalone centred line, inline = inline
 FORMULAS = [
     ('antoine', r'$\ln(P/\mathrm{bar}) = A + \dfrac{B}{T} + C\cdot\ln T$', 'inline'),
     ('hs', r'$h_s(T,\xi) = \xi\cdot h_{L,R22}(T) + (1-\xi)\cdot h_{DMF}(T) + h_{\mathrm{mix}}(T,\xi)$', 'display'),
@@ -35,28 +35,28 @@ FORMULAS = [
 ]
 
 def render_formula(key, mathtext, fontsize=13):
-    """渲染单个公式为 PNG, 返回路径。"""
+    """Render a single formula to PNG; returns the path."""
     path = os.path.join(IMG_DIR, f'{key}.png')
     fig = plt.figure(figsize=(0.1, 0.1), dpi=300)
     fig.patch.set_alpha(0.0)
     txt = fig.text(0.5, 0.5, mathtext, fontsize=fontsize,
                    ha='center', va='center')
-    # 先 draw 一次以计算 bbox
+    # Draw once first to compute the bbox
     fig.canvas.draw()
     bbox = txt.get_window_extent(renderer=fig.canvas.get_renderer())
-    # 加 padding (像素)
+    # Add padding (pixels)
     pad = 12
     w_in = (bbox.width + 2*pad) / 300
     h_in = (bbox.height + 2*pad) / 300
     fig.set_size_inches(w_in, h_in)
-    # 重新定位到中心
+    # Re-position to the centre
     txt.set_position((0.5, 0.5))
     fig.savefig(path, dpi=300, transparent=True,
                 bbox_inches='tight', pad_inches=0.05)
     plt.close(fig)
     return path
 
-# 段落匹配规则: (正则, 公式key)
+# Paragraph matching rules: (regex, formula key)
 RULES = [
     (re.compile(r'ln\(P/bar\) = A \+ B/T \+ C·lnT'), 'antoine'),
     (re.compile(r'^h_s\(T,ξ\) = ξ·h_L,R22\(T\) \+ \(1−ξ\)·h_DMF\(T\) \+ h_mix\(T,ξ\)$'), 'hs'),
@@ -96,14 +96,14 @@ def process_docx(path, img_paths, modes):
             after = t[m.end():]
             clear_paragraph(p)
             if mode == 'display':
-                # 独立行: 居中图片
+                # Standalone line: centred image
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 p.add_run().add_picture(img_paths[key])
             elif mode == 'display-after':
-                # "其中/where" 保留在本段, 公式另起居中行
+                # Keep the lead-in word (the "where" connector) in this paragraph; the formula goes on its own centred line
                 if before.strip():
                     p.add_run(before.strip())
-                # 在当前段落后插入公式段落
+                # Insert a formula paragraph after the current paragraph
                 from docx.oxml import OxmlElement
                 new_p = OxmlElement('w:p')
                 p._p.addnext(new_p)
@@ -112,16 +112,16 @@ def process_docx(path, img_paths, modes):
                 fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 fp.add_run().add_picture(img_paths[key])
                 if after.strip():
-                    # 罕见情况: 公式后还有文字, 另起一段
+                    # Rare case: text still follows the formula; start a new paragraph
                     new_p2 = OxmlElement('w:p')
                     new_p.addnext(new_p2)
                     Paragraph(new_p2, p._parent).add_run(after.strip())
             else:
-                # 行内: 文字 + 图片 + 文字
+                # Inline: text + image + text
                 if before:
                     p.add_run(before)
                 run = p.add_run()
-                # 行内公式高度约 1.2 倍行高, 用固定高度
+                # Inline formula height is about 1.2x the line height; use a fixed height
                 run.add_picture(img_paths[key], height=Pt(16))
                 if after:
                     p.add_run(after)

@@ -1,25 +1,25 @@
-/* 九工质纯物质饱和性质（C 实现，与 pure_fluids.py 逐点一致）：
+/* Pure-substance saturation properties of nine fluids (C implementation, pointwise identical to pure_fluids.py):
  * R134a / R22 / R124 / H2O / NH3 / CH3OH / R32 / R218 / CO2
- * 基准：CoolProp 内置参考状态方程（R134a: Tillner-Roth & Baehr 1994）
- * 参考态：0°C 饱和液体焓 = 100 kJ/kg
- * 压力公开单位 MPa：Wagner 拟合内部以 bar 计（Pc 为 bar 系数），
- *   Pref ×0.1 返回 MPa、Tsat 入参 MPa ×10 回 bar 二分；lnP 六工质原生 MPa。
- *   Psat: Wagner 方程 ln(P/Pc)=(Tc/T)(a1 τ+a2 τ^1.5+a3 τ^2.5+a4 τ^5), τ=1-T/Tc
- *     R134a: Tc=374.21K Pc=40.59bar, -50~95°C, 偏差 0.031%
- *     R22:   Tc=369.30K Pc=49.90bar, -50~90°C, 偏差 0.0065%
- *   hL/hV: 6 次多项式（t 为 °C），偏差 <0.61 kJ/kg
- *   R124: NIST WebBook 饱和表拟合；Wagner 变体（指数 1, 1.5, 3, 6）,
- *     Tc=395.428K Pc=36.245bar, -40~110°C, Psat 偏差 0.111%,
- *     hL/hV 偏差 <1.63 kJ/kg；焓由表基准（0°C 液体 = 200）平移 -100
- * 2026-10-13 增补六工质：NIST WebBook 饱和表拟合（笔记见 fit-notes/）；
- *   饱和压 lnP-t 7 次多项式（ln(P/MPa)，直接以 MPa 返回），对表最大偏差
- *   全程/常用带：H2O 0.0291%/0.0128%（1~373°C）、NH3 0.0272%/0.0027%
- *   （-77~132°C）、CH3OH 0.1064%/0.0321%（-90~239°C）、R32 0.0609%/0.0147%
- *   （-136~78°C）、R218 0.1495%/0.0396%（-147~71°C）、CO2 0.0099%/0.0059%
- *   （-56~30°C）；焓 6 次多项式，已平移到统一基准，平移量（kJ/kg）：
- *   H2O +93.351889719、NH3 -244.768062686、CH3OH +266.341441575、
- *   R32 -100.673431938、R218 -100.177980782、CO2 -100.255791821。
- * 编译：gcc -O2 -Wall -o pure_fluids pure_fluids.c -lm
+ * Datum: CoolProp's built-in reference equations of state (R134a: Tillner-Roth & Baehr 1994)
+ * Reference state: saturated-liquid enthalpy at 0°C = 100 kJ/kg
+ * Public pressure unit MPa: the Wagner fits work internally in bar (Pc coefficients in bar),
+ *   Pref returns MPa after x0.1; Tsat takes MPa, converts x10 back to bar for the bisection; the six lnP fluids are natively in MPa.
+ *   Psat: Wagner equation ln(P/Pc)=(Tc/T)(a1 τ+a2 τ^1.5+a3 τ^2.5+a4 τ^5), τ=1-T/Tc
+ *     R134a: Tc=374.21K Pc=40.59bar, -50~95°C, deviation 0.031%
+ *     R22:   Tc=369.30K Pc=49.90bar, -50~90°C, deviation 0.0065%
+ *   hL/hV: degree-6 polynomials (t in °C), deviation <0.61 kJ/kg
+ *   R124: fit to the NIST WebBook saturation table; Wagner variant (exponents 1, 1.5, 3, 6),
+ *     Tc=395.428K Pc=36.245bar, -40~110°C, Psat deviation 0.111%,
+ *     hL/hV deviation <1.63 kJ/kg; enthalpy shifted by -100 from the table datum (saturated liquid at 0°C = 200)
+ * Six fluids added 2026-10-13: fits to the NIST WebBook saturation tables (notes in fit-notes/);
+ *   saturation pressure as an lnP-t degree-7 polynomial (ln(P/MPa), returned directly in MPa); max deviation vs. table,
+ *   full range / usual band: H2O 0.0291%/0.0128% (1~373°C), NH3 0.0272%/0.0027%
+ *   (-77~132°C), CH3OH 0.1064%/0.0321%(-90~239°C), R32 0.0609%/0.0147%
+ *   (-136~78°C), R218 0.1495%/0.0396%(-147~71°C), CO2 0.0099%/0.0059%
+ *   (-56~30°C); enthalpy as degree-6 polynomials, shifted to the uniform datum; shifts (kJ/kg):
+ *   H2O +93.351889719, NH3 -244.768062686, CH3OH +266.341441575,
+ *   R32 -100.673431938, R218 -100.177980782, CO2 -100.255791821.
+ * Build: gcc -O2 -Wall -o pure_fluids pure_fluids.c -lm
  */
 #include <stdio.h>
 #include <math.h>
@@ -42,7 +42,7 @@ static const double R22_HV[7] = {-6.5412360e-11, 3.1584987e-09, 1.6628519e-07,
     -2.1606737e-05, -1.9128189e-03, 3.7574587e-01, 3.0508640e+02};
 static const double R22_TLO = -50.0, R22_THI = 90.0;
 
-/* ---- R124（NIST 表拟合；焓已平移 -100 至本模块统一基准） ---- */
+/* ---- R124 (NIST-table fit; enthalpy shifted by -100 to this module's uniform datum) ---- */
 static const double R124_TC = 395.428, R124_PC = 36.245;
 static const double R124_W[4] = {-7.401179377235425, 1.4613603991162563,
     -3.476435267708954, -1.772232810745864};
@@ -77,7 +77,7 @@ typedef double (*pref_fn)(double);
 
 static double tsat_bisect(pref_fn f, double P, double t_lo, double t_hi)
 {
-    /* P 的单位与 f 的返回单位一致（由调用方负责换算）；超出范围返回 NAN */
+    /* The unit of P is the same as the return unit of f (the caller is responsible for conversion); returns NAN when out of range */
     if (P < f(t_lo) || P > f(t_hi)) return NAN;
     double lo = t_lo, hi = t_hi;
     for (int i = 0; i < 60; i++) {
@@ -109,12 +109,12 @@ double R124_hgas(double t_C) { return poly6(R124_HV, t_C); }
 double R124_hlat(double t_C) { return R124_hgas(t_C) - R124_hliq(t_C); }
 
 
-/* ===== NIST WebBook 表拟合六工质（2026-10-13 增补） ===== */
-/* 饱和压：lnP-t 7 次多项式（笔记取定式，ln(P/MPa)；此处直接以 MPa 返回）；
- * 焓：6 次多项式，常数项已由各表自带基准平移到统一基准（0°C 液体 = 100），
- * 平移量见各工质注（潜热不变）。系数数组均为降幂序。 */
+/* ===== Six fluids fitted to the NIST WebBook tables (added 2026-10-13) ===== */
+/* Saturation pressure: lnP-t degree-7 polynomial (the notes' adopted form, ln(P/MPa); returned directly in MPa here);
+ * Enthalpy: degree-6 polynomial; the constant term has been shifted from each table's own datum to the uniform datum (saturated liquid at 0°C = 100),
+ * see each fluid's note for the shift (latent heats unchanged). All coefficient arrays are in descending-power order. */
 
-/* ---- H2O（平移 +93.351889719 kJ/kg） ---- */
+/* ---- H2O (shift +93.351889719 kJ/kg) ---- */
 static const double H2O_LNP[8] = {5.54627791673895e-18, -8.99249875691861e-15,
     6.660700555390007e-12, -3.088083641876246e-09, 1.056735995405781e-06, -0.0002954387998568004, 0.07259423527358563, -7.399704960820133};
 static const double H2O_HL[7] = {4.9253814056437e-12, -4.8364685293173926e-09, 1.8115766448129802e-06,
@@ -123,7 +123,7 @@ static const double H2O_HV[7] = {-8.083632440447619e-12, 7.910908004577575e-09, 
     0.0005046392594921277, -0.04153882947643235, 3.1701433360694287, 2583.8464687067276};
 static const double H2O_TLO = 1.0, H2O_THI = 373.0;
 
-/* ---- NH3（平移 -244.76806269 kJ/kg） ---- */
+/* ---- NH3 (shift -244.76806269 kJ/kg) ---- */
 static const double NH3_LNP[8] = {1.1501679663496297e-16, -3.681466540446358e-14,
     9.070213653911228e-12, -2.4759314474490567e-09, 6.551063627525382e-07, -0.00015333383280607642, 0.03739502393748032, -0.8457026848887617};
 static const double NH3_HL[7] = {1.0230389195910096e-10, -9.01173619674778e-09, -7.693180171285098e-07,
@@ -132,7 +132,7 @@ static const double NH3_HV[7] = {-1.5323246964436346e-10, 1.341154075047321e-08,
     -0.000132743256804236, -0.01090080493286388, 1.2129121114680004, 1364.0392422964662};
 static const double NH3_TLO = -77.0, NH3_THI = 132.0;
 
-/* ---- CH3OH（平移 +266.34144157 kJ/kg） ---- */
+/* ---- CH3OH (shift +266.34144157 kJ/kg) ---- */
 static const double CH3OH_LNP[8] = {6.071697789417314e-17, -4.474383382147671e-14,
     1.4922332158687438e-11, -3.713389940921318e-09, 9.643627950530163e-07, -0.00025454685882528256, 0.06310145783702696, -5.507805919357708};
 static const double CH3OH_HL[7] = {5.573934158642428e-12, -1.8104866695124476e-09, 8.709794689054448e-08,
@@ -141,7 +141,7 @@ static const double CH3OH_HV[7] = {-1.228628960059207e-11, 4.469399531774273e-09
     -4.548213600653677e-05, 0.002018557942790822, 1.156097552141014, 1301.565002270651};
 static const double CH3OH_TLO = -90.0, CH3OH_THI = 239.0;
 
-/* ---- R32（平移 -100.67343194 kJ/kg） ---- */
+/* ---- R32 (shift -100.67343194 kJ/kg) ---- */
 static const double R32_LNP[8] = {4.985734545925537e-16, 8.088993550316065e-15,
     7.23916818285453e-12, -2.4123562470111985e-09, 5.690865248769261e-07, -0.00012346886007261548, 0.032029536226752524, -0.20703267077542895};
 static const double R32_HL[7] = {3.052117712232615e-11, 7.669342242883148e-09, 4.426168044128746e-07,
@@ -150,7 +150,7 @@ static const double R32_HV[7] = {-4.488337246373621e-11, -1.1379788910261148e-08
     7.561508556936408e-06, -0.0024175577393345023, 0.1589860001017608, 413.6297944744754};
 static const double R32_TLO = -136.0, R32_THI = 78.0;
 
-/* ---- R218（平移 -100.17798078 kJ/kg） ---- */
+/* ---- R218 (shift -100.17798078 kJ/kg) ---- */
 static const double R218_LNP[8] = {8.255415504414131e-16, 7.344897883851216e-14,
     1.093452574911193e-11, -2.800385114611927e-09, 6.13844960232108e-07, -0.00013063706572324828, 0.03248293004447796, -0.8809937809605295};
 static const double R218_HL[7] = {7.040720312389206e-12, 2.1911253182755153e-09, 1.9931060577128075e-07,
@@ -159,7 +159,7 @@ static const double R218_HV[7] = {-1.0731550245287959e-11, -3.374732945181214e-0
     -8.835005867404636e-06, -2.3183839296438865e-05, 0.596775089781136, 189.38572453841817};
 static const double R218_TLO = -147.0, R218_THI = 71.0;
 
-/* ---- CO2（平移 -100.25579182 kJ/kg） ---- */
+/* ---- CO2 (shift -100.25579182 kJ/kg) ---- */
 static const double CO2_LNP[8] = {7.349267422320306e-15, 9.714937274844203e-13,
     5.722737962459257e-11, -5.000472245728414e-10, 5.236317080887681e-07, -9.20196795346934e-05, 0.02647312340946483, 1.2485141855617028};
 static const double CO2_HL[7] = {2.948691221375449e-09, 3.3584601264848553e-07, 1.0969134467517922e-05,

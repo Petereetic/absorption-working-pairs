@@ -10,7 +10,7 @@
  * functions only scale by 0.1 (outputs) or 10 (inputs).
  *
  * Two printed values are corrected on documented evidence (see
- * Borde1997与硕士论文_核验.md): Table 9 rho_00 exponent (E+01 -> E+00)
+ * the verification notes on Borde 1997 and the master's thesis): Table 9 rho_00 exponent (E+01 -> E+00)
  * and Table 8 DMAC eta0/eta1 (x10 too large as printed).
  * NOTE: Eq. (16) runs +13..+23 % above Eq. (15) at xi = 1 (property of
  * the printed fit); use R124DMAC_PrefR124 near xi = 1.

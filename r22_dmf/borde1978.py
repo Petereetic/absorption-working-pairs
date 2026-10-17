@@ -1,60 +1,60 @@
 """
-Borde 1978 重建：R22-DMF 焓-浓度图论文的公式转录与核验
+Borde 1978 reconstruction: transcription and verification of the formulas from the R22-DMF enthalpy-concentration diagram paper
 
-论文身份（已由全文首页核实）：
+Identity of the paper (verified from the first page of the full text):
     M. Jelinek, I. Borde, I. Yaron,
     "Enthalpy-Concentration Diagram of the System R22-Dimethyl Formamide
      and Performance Characteristics of Refrigeration Cycle Operating
      with this System",
     ASHRAE Transactions, 84(2), 60-67, 1978. (ASHRAE No. 2493)
-    首页作者栏印为 "IRENE BORDE"。
+    The author line on the first page is printed as "IRENE BORDE".
 
-转录说明：
-    式(1)-(8) 逐字转录自论文印刷版（200 dpi 公式页图像已逐项核对）。
-    式(3)(4) 分段点为 t_o < 154°F 用式(4)，154 < t_o < 204.8°F 用式(5)。
-    式(8) 按印刷给出 kcal/kg（式中已除以平均分子量）；
-    式(8) 下方文字写 "kcal/kmole" 与式(2) 的 kcal/kg 要求矛盾，
-    以公式本身（含 /Mbar）为准，即 kcal/kg。
+Transcription notes:
+    Eqs. (1)-(8) transcribed verbatim from the printed paper (the formula-page images at 200 dpi were checked item by item).
+    The breakpoint of Eqs. (3)(4): for t_o < 154°F use Eq. (4); for 154 < t_o < 204.8°F use Eq. (5).
+    Eq. (8) gives kcal/kg as printed (the formula already divides by the mean molecular weight);
+    the text below Eq. (8) says "kcal/kmole", contradicting the kcal/kg required by Eq. (2);
+    the formula itself (with /Mbar) governs, i.e. kcal/kg.
 
 ================================================================
-重要：印刷版式(1)、式(8) 常数已损坏，不可用于计算
+Important: the constants of Eqs. (1) and (8) in the printed version are corrupted and must not be used for computation
 ================================================================
-数值核验结论（2026-10-01，见 Borde1978_重建与核验.md）：
+Numerical verification conclusions (2026-10-01; see the Borde 1978 reconstruction and verification notes file):
 
-1. 式(1) 按印刷常数计算，在全部合理组成/温度下给出非物理压力
-   （如 X=0.5, 20°C 得 P = e^-39.3 psi，且 dP/dX 趋势为负）。
-   逐项核对印刷：g2 = -7367276 确为负号（非 OCR 误读），
-   损坏不是单个符号能解释的（纯 R22 端 X=1 亦不收敛到饱和压力）。
+1. Eq. (1), computed with the printed constants, gives non-physical pressures over all reasonable compositions/temperatures
+   (e.g. at X=0.5, 20°C it gives P = e^-39.3 psi, and the dP/dX trend is negative).
+   The printing was checked item by item: g2 = -7367276 does carry the minus sign (not an OCR misread);
+   the corruption cannot be explained by a single sign (at the pure-R22 end X=1 it also fails to converge to the saturation pressure).
 
-2. 式(8) 按印刷常数计算的 hmix 与论文图 1（作者程序实际输出）
-   相差可达 3.4 倍，故式(8) 印刷常数同样不可信。
+2. The hmix computed by Eq. (8) with the printed constants differs from Fig. 1 of the paper (the actual output of the author's program)
+   by up to a factor of 3.4, so the printed constants of Eq. (8) are likewise untrustworthy.
 
-3. 可用的数值记录是图 1 本身（等温线 10-90°C，等压线 1-20 kg/cm²），
-   本模块收录图 1 数字化数据（FIG1_…），不确定度约 ξ±0.01、
-   h±1.2 kcal/kg、交叉点温度 ±5°C。
+3. The usable numerical record is Fig. 1 itself (isotherms 10-90°C, isobars 1-20 kg/cm²);
+   this module includes the digitised data of Fig. 1 (FIG1_...), with uncertainties of about ξ±0.01,
+   h±1.2 kcal/kg, and intersection temperatures ±5°C.
 
-本模块中 p_solution_borde1978() 与 hmix_borde1978() 保留为"按印刷转录"
-的原样实现，仅供核验复现，调用时触发警告；不要用于工程计算。
+In this module, p_solution_borde1978() and hmix_borde1978() are kept as implementations "transcribed as printed",
+for verification reproduction only, and raise a warning when called; do not use them for engineering computation.
 """
 
 import math
 import warnings
 
 # ------------------------------------------------------------------
-# 式(1) 常数：按印刷转录（已证实损坏）
-#   P = exp[ Σe_n X^n + (1/T)Σf_n X^n + (1/T²)Σg_n X^n ]，P in psi，T in K，
-#   X = R22 摩尔分数
+# Constants of Eq. (1): transcribed as printed (confirmed corrupted)
+#   P = exp[ Σe_n X^n + (1/T)Σf_n X^n + (1/T²)Σg_n X^n ], P in psi, T in K,
+#   X = R22 mole fraction
 # ------------------------------------------------------------------
 E = (16.17326, -42.6391, 58.78278)
 F_ = (-6504.46, 32838.19, -42259.76)
 G = (656962.9, -5650373, -7367276)
 
-# 式(7) 常数：纯 R22 饱和压力（Tyagi & Shankar）
-#   P = exp(a + b/T + c*T + d*lnT)，P in atm，T in K
+# Constants of Eq. (7): pure-R22 saturation pressure (Tyagi & Shankar)
+#   P = exp(a + b/T + c*T + d*lnT), P in atm, T in K
 A7, B7, C7, D7 = 209.72706, -7738.205251, 0.0562768, -34.79
 
-M_R22, M_DMF = 86.47, 73.09          # 式(8) 采用的分子量
-R_KCAL = 1.986                        # kcal/(kmol·K)，式(8) 给定
+M_R22, M_DMF = 86.47, 73.09          # molecular weights used by Eq. (8)
+R_KCAL = 1.986                        # kcal/(kmol·K), as given by Eq. (8)
 KCAL2KJ = 4.1868
 
 _CORRUPT_MSG = ("Borde 1978 式(1)/式(8) 印刷常数已数值证实损坏，"
@@ -66,34 +66,34 @@ def _poly(c, x):
 
 
 def p_solution_borde1978(X, T_K):
-    """式(1)：溶液平衡压力 [psi]。X=R22摩尔分数，T_K=K。已损坏，见模块 docstring。"""
+    """Eq. (1): solution equilibrium pressure [psi]. X = R22 mole fraction, T_K in K. Corrupted; see the module docstring."""
     warnings.warn(_CORRUPT_MSG, UserWarning)
     lnP = _poly(E, X) + _poly(F_, X) / T_K + _poly(G, X) / T_K ** 2
     return math.exp(lnP)
 
 
 def p_R22_sat_borde1978(T_K):
-    """式(7)：纯 R22 饱和压力 [atm]。T_K=K。"""
+    """Eq. (7): pure-R22 saturation pressure [atm]. T_K in K."""
     return math.exp(A7 + B7 / T_K + C7 * T_K + D7 * math.log(T_K))
 
 
 def h_r22_borde1978(t_C):
-    """式(3)-(5)：液态 R22 焓 [kcal/kg]。t_C=°C；参考态 273.2K=100。"""
+    """Eqs. (3)-(5): liquid-R22 enthalpy [kcal/kg]. t_C in °C; reference state 273.2K = 100."""
     t_o = t_C * 9.0 / 5.0 + 32.0  # °F
     if t_o < 154.0:
-        Fto = 10.70116 + 0.256331 * t_o + 0.000295846 * t_o ** 2      # 式(4)
+        Fto = 10.70116 + 0.256331 * t_o + 0.000295846 * t_o ** 2      # Eq. (4)
     else:
-        Fto = 133.0235 - 1.253386 * t_o + 0.00497 * t_o ** 2          # 式(5)
-    return 89.3491 + 0.556 * Fto                                      # 式(3)
+        Fto = 133.0235 - 1.253386 * t_o + 0.00497 * t_o ** 2          # Eq. (5)
+    return 89.3491 + 0.556 * Fto                                      # Eq. (3)
 
 
 def h_dmf_borde1978(t_C):
-    """式(6)：液态 DMF 焓 [kcal/kg]。t_C=°C；参考态 273.2K=100。"""
+    """Eq. (6): liquid-DMF enthalpy [kcal/kg]. t_C in °C; reference state 273.2K = 100."""
     return 100.0 + 0.482 * t_C + 0.000491 * t_C ** 2
 
 
 def hmix_borde1978(t_C, xi):
-    """式(8)：积分混合热 [kJ/kg]。xi=R22质量分数。已损坏，见模块 docstring。"""
+    """Eq. (8): integral heat of mixing [kJ/kg]. xi = R22 mass fraction. Corrupted; see the module docstring."""
     warnings.warn(_CORRUPT_MSG, UserWarning)
     T = t_C + 273.15
     n1, n2 = xi / M_R22, (1.0 - xi) / M_DMF
@@ -113,8 +113,8 @@ def hmix_borde1978(t_C, xi):
 
 
 def h_solution_borde1978(t_C, xi, use_printed_hmix=False):
-    """式(2)：溶液焓 [kJ/kg]。默认 hmix=0（因印刷式(8)已损坏）；
-    use_printed_hmix=True 则按印刷式(8)计算（触发警告，仅供核验）。"""
+    """Eq. (2): solution enthalpy [kJ/kg]. By default hmix=0 (because the printed Eq. (8) is corrupted);
+    with use_printed_hmix=True it is computed by the printed Eq. (8) (raises a warning; for verification only)."""
     h_kcal = (xi * h_r22_borde1978(t_C) + (1.0 - xi) * h_dmf_borde1978(t_C))
     if use_printed_hmix:
         h_kcal += hmix_borde1978(t_C, xi) / KCAL2KJ
@@ -122,11 +122,11 @@ def h_solution_borde1978(t_C, xi, use_printed_hmix=False):
 
 
 # ------------------------------------------------------------------
-# 图 1 数字化数据（2026-10-01 自论文扫描图提取）
-# 不确定度：ξ ±0.01，h ±1.2 kcal/kg；交叉点温度 ±5°C。
-# 等温线标签点：T 精确（标签在线上），(ξ,h) 为标签中心。
-# 等压线标签点：P 精确（标签值），(ξ,h) 为标签中心。
-# 交叉点：等压线与等温线交点，P/T 为标称值，(ξ,h) 为交点位置。
+# Digitised data of Fig. 1 (extracted 2026-10-01 from the scanned figure of the paper)
+# Uncertainties: ξ ±0.01, h ±1.2 kcal/kg; intersection temperatures ±5°C.
+# Isotherm label points: T exact (the label lies on the line); (ξ,h) is the label centre.
+# Isobar label points: P exact (the label value); (ξ,h) is the label centre.
+# Intersections: crossings of isobars and isotherms; P/T are nominal values; (ξ,h) is the intersection position.
 # ------------------------------------------------------------------
 # (T_C, xi, h_kcal_per_kg)
 FIG1_ISOTHERMS = [
@@ -175,6 +175,6 @@ FIG1_CROSSINGS = [
 
 
 def hmix_from_fig1(t_C, xi, h_fig_kcal):
-    """由图1 (T,ξ,h) 反推混合焓 [kJ/kg]：hmix = h_fig − [ξ·hR22 + (1−ξ)·hDMF]。"""
+    """Back out the heat of mixing [kJ/kg] from Fig. 1 (T,ξ,h): hmix = h_fig - [ξ*hR22 + (1-ξ)*hDMF]."""
     h_ideal = xi * h_r22_borde1978(t_C) + (1.0 - xi) * h_dmf_borde1978(t_C)
     return (h_fig_kcal - h_ideal) * KCAL2KJ

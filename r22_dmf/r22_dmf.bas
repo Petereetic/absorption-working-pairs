@@ -1,16 +1,16 @@
 Attribute VB_Name = "R22DMF"
 '==============================================================================
-' R22-DMF 泡点压力与溶液焓 —— Excel 工作表函数
-' 泡点压力: 对 Agarwal(1982) VLE 数据(经 Ardita 论文附录转录,132 点,xi>=0.10)
-'   按浓度分层拟合 Antoine 式 ln(P/bar)=A+B/T+C*ln(T) (T 为 K),
-'   再对 R22 质量分数 xi 做保单调 PCHIP 插值。AARD 2.38%, 最大 9.6%。
-'   适用: T -25~120 C, xi 0.10~1.00 (xi>0.80 且 T>65C 时为外推, 慎用)。
-' 溶液焓: Fatouh 等 1993 关联式 (Ardita 论文 2.38~2.43), kJ/kg,
-'   参考态 273.15K 饱和液体=100 kJ/kg。适用约 T -20~95C。
-' 用法: =Psol_R22DMF(40, 0.5)   -> 泡点压力 MPa
-'       =BubbleT_R22DMF(0.38, 0.5)  -> 泡点温度 C
-'       =XiByTsolTdew_R22DMF(0, 60)  -> 由露点/溶液温度反解浓度 xi
-'       =hsol_R22DMF(30, 0.5)      -> 溶液焓 kJ/kg
+' R22-DMF bubble-point pressure and solution enthalpy - Excel worksheet functions
+' Bubble-point pressure: fitted to the Agarwal (1982) VLE data (transcribed via the appendix of the Ardita thesis, 132 points, xi>=0.10),
+'   stratified by concentration, with the Antoine form ln(P/bar)=A+B/T+C*ln(T) (T in K),
+'   then shape-preserving monotone PCHIP interpolation over the R22 mass fraction xi. AARD 2.38%, maximum 9.6%.
+'   Valid: T -25~120 C, xi 0.10~1.00 (for xi>0.80 and T>65C it is an extrapolation; use with care).
+' Solution enthalpy: the correlation of Fatouh et al. 1993 (Eqs. 2.38-2.43 of the Ardita thesis), kJ/kg,
+'   reference state: saturated liquid at 273.15K = 100 kJ/kg. Valid approx. T -20~95C.
+' Usage: =Psol_R22DMF(40, 0.5)   -> bubble-point pressure MPa
+'       =BubbleT_R22DMF(0.38, 0.5)  -> bubble-point temperature C
+'       =XiByTsolTdew_R22DMF(0, 60)  -> solves the concentration xi back from the dew-point/solution temperatures
+'       =hsol_R22DMF(30, 0.5)      -> solution enthalpy kJ/kg
 '==============================================================================
 Option Explicit
 
@@ -40,7 +40,7 @@ Private Function IsoC(i As Long) As Double
     IsoC = v(i)
 End Function
 
-' 内部: 给定 T(K), 对 xi 做 PCHIP 求泡点压力
+' Internal: at a given T(K), PCHIP over xi for the bubble-point pressure
 Private Function Psol_K(T As Double, xi As Double) As Double
     Dim x(9) As Double, y(9) As Double, h(8) As Double, d(8) As Double, dk(9) As Double
     Dim i As Long, k As Long, xc As Double, lnT As Double, t As Double, t2 As Double, t3 As Double
@@ -76,11 +76,11 @@ Private Function Psol_K(T As Double, xi As Double) As Double
 End Function
 
 Public Function Psol_R22DMF(T_C As Double, xi As Double) As Double
-    ' 泡点压力 MPa; T_C 摄氏度, xi 为 R22 质量分数 (内部 Psol_K 为 bar 原生值, 出口 x0.1)
+    ' Bubble-point pressure MPa; T_C in °C, xi is the R22 mass fraction (internally Psol_K is the native value in bar; x0.1 at the exit)
     Psol_R22DMF = Psol_K(T_C + 273.15, xi) * 0.1
 End Function
 
-' 内部: 以 bar 原生压力反算泡点温度 摄氏度 (二分法); 超出范围返回 #N/A
+' Internal: back-calculate the bubble-point temperature in °C from the native pressure in bar (bisection); returns #N/A when out of range
 Private Function BubbleT_K(P_bar As Double, xi As Double) As Variant
     Dim lo As Double, hi As Double, mid As Double, i As Long
     lo = -25#: hi = 120#
@@ -95,16 +95,16 @@ Private Function BubbleT_K(P_bar As Double, xi As Double) As Variant
 End Function
 
 Public Function BubbleT_R22DMF(P_MPa As Double, xi As Double) As Variant
-    ' 泡点温度 摄氏度 (二分法反算); 入参 P_MPa 为 MPa (入口 x10 回 bar); 超出范围返回 #N/A
+    ' Bubble-point temperature in °C (back-calculated by bisection); the input P_MPa is in MPa (x10 back to bar at the entry); returns #N/A when out of range
     BubbleT_R22DMF = BubbleT_K(P_MPa * 10#, xi)
 End Function
 
 Public Function XiByTsolTdew_R22DMF(Tsol_C As Double, Tdew_C As Double) As Variant
-    ' 由露点温度与溶液温度反解浓度 xi (R22 质量分数):
-    ' 露点定压 P = 纯 R22 饱和压 (本模块 xi=1.0 等浓度线; DMF 视为不挥发),
-    ' 再二分 (80 次) 求 Psol(Tsol, xi) = P, 括号取泡点有效浓度域 0.10~1.00。
-    ' 无根 (P 超出 Tsol 处泡点压力跨度, 如溶液温度低于露点温度) 返回 Empty。
-    ' 注: 与 C/Python 同算法; 本 VBA 未经真实 Excel 编译测试。
+    ' Solve the concentration xi (R22 mass fraction) back from the dew-point temperature and the solution temperature:
+    ' the dew point fixes the pressure P = the pure-R22 saturation pressure (this module's xi=1.0 iso-concentration line; DMF treated as non-volatile),
+    ' then bisection (80 steps) solves Psol(Tsol, xi) = P, with the bracket taken as the bubble-point valid concentration domain 0.10~1.00.
+    ' Returns Empty when there is no root (P outside the span of bubble-point pressures at Tsol, e.g. the solution temperature below the dew-point temperature).
+    ' Note: same algorithm as C/Python; this VBA has not been compile-tested in real Excel.
     Dim P As Double, lo As Double, hi As Double, mid As Double, i As Long
     P = Psol_K(Tdew_C + 273.15, 1#)
     If P < Psol_K(Tsol_C + 273.15, 0.1) Or P > Psol_K(Tsol_C + 273.15, 1#) Then
@@ -119,19 +119,19 @@ Public Function XiByTsolTdew_R22DMF(Tsol_C As Double, Tdew_C As Double) As Varia
 End Function
 
 
-' ---------- 露点温度（溶液）[°C]：全库 TdewByTsolXi 约定 ----------
-' Tdew = BubbleT_K(Psol_K(T_C + 273.15, xi), 1)（内部走 bar 原生私有函数,
-' 与原 BubbleT_R22DMF(Psol_R22DMF(...)) 复合路径等价）：以本模块自有纯
-' R22 等浓度线（xi=1 端）评价溶液表面压力 Psol 所对应的饱和
-' 温度。DMF 视为不挥发。无根时随 BubbleT_K 返回 #N/A。
+' ---------- Dew-point temperature (solution) [°C]: library-wide TdewByTsolXi convention ----------
+' Tdew = BubbleT_K(Psol_K(T_C + 273.15, xi), 1) (internally via the native-bar private functions,
+' equivalent to the original composite path BubbleT_R22DMF(Psol_R22DMF(...))): the saturation temperature corresponding to the solution
+' surface pressure Psol, evaluated with this module's own pure-R22 iso-concentration line (the xi=1 end).
+' DMF is treated as non-volatile. When there is no root, it returns #N/A along with BubbleT_K.
 Public Function TdewByTsolXi_R22DMF(T_C As Double, xi As Double) As Variant
     TdewByTsolXi_R22DMF = BubbleT_K(Psol_K(T_C + 273.15, xi), 1#)
 End Function
 
-' ---------- 由溶液比焓反解溶液温度 [°C] ----------
-' hsol_R22DMF 在固定 xi 下随 T 单调增，二分 100 次反解，
-' 求解括号 T ∈ [-20, 95] °C。h 超出值域返回 Empty。
-' 与 C/Python 同算法；本函数未在真实 Excel 中编译运行。
+' ---------- Solve the solution temperature [°C] back from the solution specific enthalpy ----------
+' hsol_R22DMF increases monotonically with T at fixed xi; inverted by 100 bisection steps,
+' with the solution bracket T in [-20, 95] °C. Returns Empty when h is outside the range.
+' Same algorithm as C/Python; this function has not been compiled or run in real Excel.
 Public Function TsolByHsol_R22DMF(h As Double, xi As Double) As Variant
     Dim lo As Double, hi As Double, mid As Double, k As Long
     lo = -20#: hi = 95#
@@ -146,7 +146,7 @@ Public Function TsolByHsol_R22DMF(h As Double, xi As Double) As Variant
 End Function
 
 Private Function FPoly(F0 As Double, F1 As Double, F2 As Double, T As Double) As Double
-    FPoly = F0 + F1 * T + F2 * T * T   ' T 为 K
+    FPoly = F0 + F1 * T + F2 * T * T   ' T in K
 End Function
 
 Public Function hliq_R22_R22DMF(T_C As Double) As Double
@@ -166,7 +166,7 @@ Public Function H_DMF_R22DMF(T_C As Double) As Double
 End Function
 
 Private Function H_Fatouh(T_C As Double, xi As Double) As Double
-    ' Fatouh 原始关联式 (xi<=0.9 有效; hmix 在 xi=1 处不归零)
+    ' Original Fatouh correlation (valid for xi<=0.9; hmix does not go to zero at xi=1)
     Dim T As Double, T2 As Double, T3 As Double, omx As Double
     Dim Y0 As Double, Y1 As Double, Y2 As Double, Y3 As Double
     Dim K0 As Double, K1 As Double, K2 As Double, K3 As Double
@@ -191,7 +191,7 @@ Private Function H_Fatouh(T_C As Double, xi As Double) As Double
 End Function
 
 Public Function hsol_R22DMF(T_C As Double, xi As Double) As Double
-    ' R22-DMF 溶液焓 kJ/kg; 0.9<xi<1 时线性过渡到纯 R22 (保证 xi=1 连续)
+    ' R22-DMF solution enthalpy kJ/kg; for 0.9<xi<1, a linear transition to pure R22 (ensuring continuity at xi=1)
     Dim h09 As Double
     If xi <= 0 Then hsol_R22DMF = H_DMF_R22DMF(T_C): Exit Function
     If xi >= 1 Then hsol_R22DMF = hliq_R22_R22DMF(T_C): Exit Function

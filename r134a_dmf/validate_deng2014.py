@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""验证 Deng 2014 表1 的 8 个 R134a+DMF 装置验证点。
-1) 与 Han 2011 数据在 xexp 处插值比较 (复现论文 1.51%/2.89% 的说法)
-2) 冻结模型 (DG12=868.1, DG21=-929.1, alpha=0.3) 对这 8 点的验证
+"""Validate the 8 R134a+DMF apparatus validation points in Table 1 of Deng 2014.
+1) Interpolate the Han 2011 data at xexp and compare (reproducing the paper's stated 1.51%/2.89%)
+2) Validation of the frozen model (DG12=868.1, DG21=-929.1, alpha=0.3) on these 8 points
 """
 import csv, math, sys
 sys.path.insert(0, "/home/hatch/workspace/your_files/r134a_dmf")
 from r134a_dmf import psol
 
-# --- 读 Han 2011 数据, 按温度分组 ---
+# --- Read the Han 2011 data, grouped by temperature ---
 han = {}
 with open("/home/hatch/workspace/your_files/r134a_dmf/han2011.csv") as f:
     for row in csv.DictReader(f):

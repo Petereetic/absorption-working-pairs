@@ -1,71 +1,71 @@
-# 甲醇/(2LiBr-ZnBr2) 热力学关联式（参考实现）
-# 来源：S. El-Shamarka, "An investigation of methanol and inorganic bromides
+# Thermodynamic correlations for methanol / (2LiBr-ZnBr2) (reference implementation)
+# Source: S. El-Shamarka, "An investigation of methanol and inorganic bromides
 #   for thermally operated heat pumps", PhD thesis, Cranfield Institute of
 #   Technology, 1981.
 #
-# 体系：盐混合物比例固定 LiBr:ZnBr2 = 2:1（摩尔比），全文称 "2LiBr-ZnBr2"。
-# 浓度变量 w 始终为甲醇质量分数（kg/kg）。盐不挥发，气相视为纯甲醇。
+# System: the salt mixture ratio is fixed at LiBr:ZnBr2 = 2:1 (molar ratio); the whole thesis calls it "2LiBr-ZnBr2".
+# The concentration variable w is always the methanol mass fraction (kg/kg). The salt is non-volatile; the vapour phase is treated as pure methanol.
 #
-# 关联式（常数经原页图像逐字核对）：
-#   式(3.1) 泡点压力（论文 p.71，系数表 3.3 于 p.74）：
+# Correlations (constants checked character by character against images of the original pages):
+#   Eq. (3.1) Bubble-point pressure (thesis p.71; coefficient Table 3.3 on p.74):
 #           log10 P[mbar] = C1(w) + C2(w)·(1000/T[K] - 2.3)
-#           C1、C2 在 8 个实测组成节点上给定，节点间用 PCHIP 保形插值。
-#           注意表 3.3 的 -C2 在 w=28.0% 处（2.7278）打破单调趋势
-#           （30.1% 处为 2.8197），系按原表照印；PCHIP 在该节点斜率为 0，
-#           形成局部平台，不会产生过冲。
-#   式(3.4) 比热（p.86，附录 A p.194 重述）：
+#           C1 and C2 are given at 8 measured composition nodes; between nodes, shape-preserving PCHIP interpolation is used.
+#           Note: the -C2 in Table 3.3 at w=28.0% (2.7278) breaks the monotonic trend
+#           (2.8197 at 30.1%); printed as in the original table; PCHIP has zero slope at that node,
+#           forming a local plateau and producing no overshoot.
+#   Eq. (3.4) Specific heat (p.86; restated in Appendix A, p.194):
 #           Cp[kJ/(kg·°C)] = A + B·t[°C]
 #           A = 0.652 + 2.139w - 2.077w^2
 #           B = -0.000205 + 0.00928w - 0.0101w^2
-#           【符号裁决】p.86 原式 B 末项符号为叠印字形（∓），附录 A 重述印为
-#           "-"。用论文表 3.7 实测比热核对：取 "-" 时最大偏差 0.7%
-#           （w=0.403: 51.3°C→1.274 vs 实测 1.27；69.9°C→1.309 vs 1.30；
-#            w=0.311: 40.0°C→1.185 vs 1.19；80.6°C→1.254 vs 1.26），
-#           取 "+" 时偏差 6%~14%，与论文自称的 2% 平均误差矛盾。
-#           故本实现取 "-"，与附录 A 印刷及实测数据一致。
-#   附录 A 汽化焓 H'（p.196，含混合热，由蒸气压斜率经 Clausius-Clapeyron 导出）：
+#           [Sign ruling] In the original formula on p.86 the sign of the last term of B is an overprinted glyph; the restatement in Appendix A prints it as
+#           "-". Checked against the measured specific heats in Table 3.7 of the thesis: taking "-" gives a max deviation of 0.7%
+#           (w=0.403: 51.3°C->1.274 vs. measured 1.27; 69.9°C->1.309 vs. 1.30;
+#            w=0.311: 40.0°C->1.185 vs 1.19; 80.6°C->1.254 vs 1.26),
+#           taking "+" gives deviations of 6%~14%, contradicting the thesis's own claim of a 2% mean error.
+#           This implementation therefore takes "-", consistent with the printing in Appendix A and the measured data.
+#   Appendix A enthalpy of vaporisation H' (p.196, including the heat of mixing, derived from the vapour-pressure slope via Clausius-Clapeyron):
 #           H'[kJ/kg] = A + B·w + C·w^2
 #           A = 2202.6 + 9.24T - 0.0218T^2
 #           B = -(4417.8 + 15.53T - 0.0392T^2)
 #           C = 3570.0 + 10.81T - 0.0294T^2
-#           【陷阱】式中 T 为开尔文（同页数据表按 °C 列表）。已用表中三点验算：
-#           (10°C, w=0.25): 1920 vs 表值 1940（-1.0%)；
-#           (10°C, w=0.356): 1593 vs 1601（-0.5%)；
-#           (100°C, w=0.25): 1646 vs 1645（+0.05%）。
-#           拟合区间仅 w≈0.25~0.356，禁止外推（w=1 时给 1672 kJ/kg，
-#           纯甲醇真值约 1193）。表中 w=35.6%、110°C 一格印作 1221，
-#           破坏平滑趋势（邻值 1352、1288），疑印刷错误，未用作验算点。
+#           [Trap] T in the formula is in kelvin (the data table on the same page is listed in °C). Verified with three points from the table:
+#           (10°C, w=0.25): 1920 vs. table value 1940 (-1.0%);
+#           (10°C, w=0.356): 1593 vs 1601(-0.5%);
+#           (100°C, w=0.25): 1646 vs 1645(+0.05%).
+#           The fit interval is only w approx. 0.25~0.356; extrapolation is forbidden (at w=1 it gives 1672 kJ/kg,
+#           whereas the true value for pure methanol is about 1193). In the table, the cell at w=35.6%, 110°C is printed as 1221,
+#           breaking the smooth trend (neighbours 1352, 1288); suspected printing error; not used as a check point.
 #
-# 参考态（本文档自行约定，论文未定义溶液焓绝对基准，只用焓差）：
-#   hsol(0°C, 任意 w) = 100 kJ/kg，即 hsol = 100 + ∫(0°C→t) Cp dt
-#   = 100 + A·t + B·t^2/2。焓的浓度依赖经 h_prime 进入气相焓：
-#   hgas(T, w) = hsol(T, w) + H'(T, w)（组装法与作者 COP 程序相同）。
+# Reference state (a convention of this document; the thesis defines no absolute datum for the solution enthalpy and uses only enthalpy differences):
+#   hsol(0°C, any w) = 100 kJ/kg, i.e. hsol = 100 + integral(0°C->t) Cp dt
+#   = 100 + A*t + B*t^2/2. The concentration dependence of the enthalpy enters the vapour-phase enthalpy via h_prime:
+#   hgas(T, w) = hsol(T, w) + H'(T, w) (assembled the same way as in the author's COP program).
 #
-# 适用范围：
-#   泡点：w = 0.243~0.509，实测约 15~193°C；Cp：w = 0.249~0.403（论文自称）；
-#   H'：w = 0.25~0.356（硬性），T 约 283~472 K（表列 10~199°C）。
+# Valid ranges:
+#   Bubble point: w = 0.243~0.509, measured approx. 15~193°C; Cp: w = 0.249~0.403 (as stated in the thesis);
+#   H': w = 0.25~0.356 (hard limit), T approx. 283~472 K (the table lists 10~199°C).
 #
-# 纯甲醇饱和线（仅供滑移图露点用）：附录 A 表（p.194）给出纯甲醇在
-# 300~1000 mmHg 下的平衡温度，本模块用其中 7 点拟合 Antoine 方程
-# log10 P[mmHg] = A - B/(T + C)，A=8.885298, B=2070.3714, C=6.3818，
-# 拟合最大误差 0.11%。表中 400 mmHg 行甲醇温度印作 373.1 K，与该行
-# Ratio 列反推值 323.1 K 矛盾（拟合亦给出 323.13 K），判为误印，已剔除。
+# Pure-methanol saturation line (only for the dew point of the glide plots): the table in Appendix A (p.194) gives the equilibrium temperatures of pure methanol
+# at 300~1000 mmHg; this module fits an Antoine equation to 7 points from it
+# log10 P[mmHg] = A - B/(T + C), A=8.885298, B=2070.3714, C=6.3818,
+# Max fit error 0.11%. In the 400 mmHg row the methanol temperature is printed as 373.1 K, which contradicts the value 323.1 K back-computed from
+# the Ratio column of that row (the fit also gives 323.13 K); judged a misprint and excluded.
 #
-# 未核实式（仅 Python，不进 C/VBA）：
-#   式(4.10) 密度：rho = 2.55 - 2.366w - 0.0068t [g/cc]。按印刷 0.0068 与
-#   论文表 4.2 实测（如 w=0.253、50°C 约 1914 kg/m3）差约 16%；温度系数
-#   若为 0.00068 则差 0.2%。印刷小数点存疑，待按表 4.2 原始数据重拟合。
-#   式(4.11) 黏度（Guzman-Andrade 型）：mu = A·exp(B/T)，OCR 数字残损严重
-#   （含 A 的 10^-3 量级乘子与 B 的小数点），不可用，待按表 4.3 重拟合。
+# Unverified formulas (Python only; not in C/VBA):
+#   Eq. (4.10) Density: rho = 2.55 - 2.366w - 0.0068t [g/cc]. As printed (0.0068) it differs from the measured values of Table 4.2 of the thesis
+#   (e.g. w=0.253, 50°C approx. 1914 kg/m3) by about 16%; if the temperature coefficient
+#   were 0.00068, the difference would be 0.2%. The printed decimal point is in doubt; to be refitted from the raw data of Table 4.2.
+#   Eq. (4.11) Viscosity (Guzman-Andrade type): mu = A*exp(B/T); the OCR digits are severely damaged
+#   (including the multiplier of order 10^-3 in A and the decimal point of B); unusable; to be refitted from Table 4.3.
 
-# 压力单位（2026-10-14 全库统一）：本模块公开函数返回/接受 MPa。
-# 内部原生计算以 bar 进行（私有函数名后缀 _bar），公开函数只做边界
-# 缩放（MPa = bar×0.1；入参 MPa×10 回 bar）。meoh_pref_bar /
-# meoh_Tsat_bar 函数名中的 _bar 为历史名暂留，其公开口径实为 MPa。
+# Pressure unit (library-wide unification of 2026-10-14): the public functions of this module return/accept MPa.
+# Internal native computation is in bar (private function names carry the suffix _bar); public functions only scale at the boundary
+# (MPa = bar x0.1; MPa inputs x10 back to bar). The _bar in the function names meoh_pref_bar /
+# meoh_Tsat_bar is a retained historical name; their public convention is actually MPa.
 
 import math
 
-# ---- 表 3.3（p.74）：节点组成（甲醇质量分数）与 C1、C2（C2 为负值） ----
+# ---- Table 3.3 (p.74): node compositions (methanol mass fractions) and C1, C2 (C2 takes negative values) ----
 _W_NODES = (0.243, 0.250, 0.262, 0.280, 0.301, 0.356, 0.403, 0.509)
 _C1_NODES = (2.6712, 2.8572, 2.9758, 3.0535, 3.3146, 3.4604, 3.7770, 4.0494)
 _C2_NODES = (-3.0602, -3.0344, -2.9531, -2.7278, -2.8197, -2.6219, -2.4256, -2.0194)
@@ -81,7 +81,7 @@ def _pchip_end_slope(h0, h1, d0, d1):
 
 
 def _pchip_eval(xs, ys, x):
-    """Fritsch-Carlson PCHIP（与 scipy PchipInterpolator 同算法）。"""
+    """Fritsch-Carlson PCHIP (same algorithm as scipy's PchipInterpolator)."""
     n = len(xs)
     h = [xs[i + 1] - xs[i] for i in range(n - 1)]
     d = [(ys[i + 1] - ys[i]) / h[i] for i in range(n - 1)]
@@ -125,24 +125,24 @@ def _c2(w):
 
 
 def _psol_TW_bar(T_K, w):
-    """式(3.1) 原生值（私有）：泡点压力，bar。"""
+    """Eq. (3.1) native value (private): bubble-point pressure, bar."""
     log10p_mbar = _c1(w) + _c2(w) * (1000.0 / T_K - 2.3)
     return 10.0 ** log10p_mbar / 1000.0
 
 
 def psol_TW(T_K, w):
-    """式(3.1)：泡点压力，MPa。T_K 开尔文，w 甲醇质量分数（0.243~0.509）。"""
+    """Eq. (3.1): bubble-point pressure, MPa. T_K in kelvin, w methanol mass fraction (0.243~0.509)."""
     return _psol_TW_bar(T_K, w) * 0.1
 
 
 def _T_bubble_PW_bar(P_bar, w):
-    """式(3.1) 解析反解原生值（私有）：泡点温度，K。P_bar 巴。"""
+    """Eq. (3.1) analytic inverse, native value (private): bubble-point temperature, K. P_bar in bar."""
     log10p_mbar = math.log10(P_bar * 1000.0)
     return 1000.0 / ((log10p_mbar - _c1(w)) / _c2(w) + 2.3)
 
 
 def T_bubble_PW(P_MPa, w):
-    """式(3.1) 解析反解：泡点温度，K。P_MPa 兆帕，w 甲醇质量分数。"""
+    """Eq. (3.1) analytic inverse: bubble-point temperature, K. P_MPa in MPa, w methanol mass fraction."""
     return _T_bubble_PW_bar(P_MPa * 10.0, w)
 
 
@@ -153,14 +153,14 @@ def _cp_AB(w):
 
 
 def cp(T_K, w):
-    """式(3.4)：溶液比热，kJ/(kg·K)。t = T_K - 273.15（°C）。"""
+    """Eq. (3.4): solution specific heat, kJ/(kg·K). t = T_K - 273.15 (°C)."""
     A, B = _cp_AB(w)
     return A + B * (T_K - 273.15)
 
 
 def h_prime(T_K, w):
-    """附录 A：溶液汽化焓 H'（含混合热），kJ/kg。T_K 开尔文（切勿用 °C）。
-    仅 w = 0.25~0.356 有效，禁止外推。"""
+    """Appendix A: enthalpy of vaporisation of the solution H' (including the heat of mixing), kJ/kg. T_K in kelvin (never use °C).
+    Valid only for w = 0.25~0.356; extrapolation forbidden."""
     A = 2202.6 + 9.24 * T_K - 0.0218 * T_K * T_K
     B = -(4417.8 + 15.53 * T_K - 0.0392 * T_K * T_K)
     C = 3570.0 + 10.81 * T_K - 0.0294 * T_K * T_K
@@ -168,56 +168,56 @@ def h_prime(T_K, w):
 
 
 def hsol(T_K, w):
-    """溶液比焓，kJ/kg。本文档约定参考态：hsol(0°C, 任意 w) = 100 kJ/kg，
-    hsol = 100 + A·t + B·t^2/2，t 为 °C（式(3.4) 的解析积分）。"""
+    """Solution specific enthalpy, kJ/kg. Reference state by the convention of this document: hsol(0°C, any w) = 100 kJ/kg,
+    hsol = 100 + A*t + B*t^2/2, t in °C (analytic integral of Eq. (3.4))."""
     A, B = _cp_AB(w)
     t = T_K - 273.15
     return 100.0 + A * t + B * t * t / 2.0
 
 
 def hgas(T_K, w):
-    """气相比焓，kJ/kg：hgas = hsol + H'（气相为纯甲醇蒸气，
-    H' 已含把甲醇从溶液中汽化所需的混合热修正）。"""
+    """Vapour-phase specific enthalpy, kJ/kg: hgas = hsol + H' (the vapour phase is pure methanol vapour;
+    H' already includes the heat-of-mixing correction required to vaporise the methanol out of the solution)."""
     return hsol(T_K, w) + h_prime(T_K, w)
 
 
-# ---- 纯甲醇饱和线：Antoine 拟合自论文附录 A 表（见文件头说明） ----
-_MEOH_ANT = (8.885298, 2070.3714, 6.3818)  # log10 P[mmHg], T[K]；300~1000 mmHg 内误差 <=0.11%
+# ---- Pure-methanol saturation line: Antoine fit to the table in Appendix A of the thesis (see the header note) ----
+_MEOH_ANT = (8.885298, 2070.3714, 6.3818)  # log10 P[mmHg], T[K]; error <=0.11% within 300~1000 mmHg
 
 
 def _meoh_pref_bar(T_K):
-    """纯甲醇饱和压力原生值（私有）：bar（Antoine，拟合自论文附录 A 数据点）。"""
+    """Native value of the pure-methanol saturation pressure (private): bar (Antoine, fitted to the data points of Appendix A of the thesis)."""
     A, B, C = _MEOH_ANT
     return (10.0 ** (A - B / (T_K + C))) * 1.3332239e-3
 
 
 def meoh_pref_bar(T_K):
-    """纯甲醇饱和压力，MPa（Antoine，拟合自论文附录 A 数据点）。
-    函数名中 _bar 为历史名暂留，返回值实为 MPa。"""
+    """Pure-methanol saturation pressure, MPa (Antoine, fitted to the data points of Appendix A of the thesis).
+    The _bar in the function name is a retained historical name; the return value is actually MPa."""
     return _meoh_pref_bar(T_K) * 0.1
 
 
 def _meoh_Tsat_bar(P_bar):
-    """纯甲醇饱和温度原生值（私有）：K，P_bar 巴（Antoine 解析反解）。"""
+    """Native value of the pure-methanol saturation temperature (private): K, P_bar in bar (analytic inverse of Antoine)."""
     A, B, C = _MEOH_ANT
     return B / (A - math.log10(P_bar / 1.3332239e-3)) - C
 
 
 def meoh_Tsat_bar(P_MPa):
-    """纯甲醇饱和温度，K（上式解析反解）。P_MPa 兆帕；
-    函数名中 _bar 为历史名暂留，入参实为 MPa。"""
+    """Pure-methanol saturation temperature, K (analytic inverse of the above). P_MPa in MPa;
+    the _bar in the function name is a retained historical name; the input is actually MPa."""
     return _meoh_Tsat_bar(P_MPa * 10.0)
 
 
 def w_by_tsol_tdew(Tsol_K, Tdew_K):
-    """由露点温度与溶液温度反解甲醇质量分数 w。
+    """Solve the methanol mass fraction w back from the dew-point temperature and the solution temperature.
 
-    露点定压：P = _meoh_pref_bar(Tdew_K)（内部原生 bar 值；盐不挥发，
-    气相为纯甲醇，纯甲醇饱和压取本模块自有 Antoine 式，见上）；再二分
-    80 次反解 _psol_TW_bar(Tsol_K, w) = P，括号取泡点函数有效浓度域
-    w = 0.243~0.509（泡点压力在该域内随 w 单调增）。
-    无根时返回 None（P 落在 Tsol 下泡点压力跨度之外，
-    如溶液温度明显低于露点温度）。"""
+    Dew-point pressure: P = _meoh_pref_bar(Tdew_K) (internal native value in bar; the salt is non-volatile,
+    the vapour phase is pure methanol; the pure-methanol saturation pressure uses this module's own Antoine equation, see above); then
+    80 bisection steps invert _psol_TW_bar(Tsol_K, w) = P, with the bracket taken as the bubble-point function's valid concentration domain
+    w = 0.243~0.509 (the bubble-point pressure increases monotonically with w in that domain).
+    Returns None when there is no root (P outside the span of bubble-point pressures under Tsol,
+    e.g. the solution temperature clearly below the dew-point temperature)."""
     P = _meoh_pref_bar(Tdew_K)
     Plo = _psol_TW_bar(Tsol_K, _W_NODES[0])
     Phi = _psol_TW_bar(Tsol_K, _W_NODES[-1])
@@ -235,20 +235,20 @@ def w_by_tsol_tdew(Tsol_K, Tdew_K):
 
 
 def tdew_from_tsol_w(T_K, w):
-    """溶液在 (T_K, w) 的露点温度 [K]（全库 TdewByTsolXi 约定）：
-        Tdew = meoh_Tsat_bar(psol_TW(T_K, w))（公开口径 MPa；
-        实现内部走原生 bar 私有函数 _meoh_Tsat_bar(_psol_TW_bar(...))），
-    即以本模块自有纯甲醇 Antoine 线评价溶液表面压力 Psol 所对应的
-    饱和温度。盐不挥发，气相为纯甲醇，无端点约定问题。w 的有效域
-    随 psol_TW（0.243~0.509）。"""
+    """Dew-point temperature [K] of the solution at (T_K, w) (library-wide TdewByTsolXi convention):
+        Tdew = meoh_Tsat_bar(psol_TW(T_K, w)) (public convention MPa;
+        internally it goes through the native-bar private functions _meoh_Tsat_bar(_psol_TW_bar(...))),
+    i.e. the saturation temperature corresponding to the solution surface pressure Psol, evaluated with this module's own pure-methanol Antoine line.
+    The salt is non-volatile and the vapour phase is pure methanol, so there is no endpoint-convention issue. The valid domain of w
+    follows psol_TW (0.243~0.509)."""
     return _meoh_Tsat_bar(_psol_TW_bar(T_K, w))
 
 
 def tsol_by_hsol(h, w):
-    """由溶液比焓 h [kJ/kg] 与甲醇质量分数 w 反解溶液温度 [K]：
-    hsol 在固定 w 下随 T 单调增（cp = A + B·t 在全域为正），
-    二分 100 次反解，求解括号 T ∈ [233.15, 423.15] K。
-    h 超出该 w 下 hsol 值域时返回 None。"""
+    """Solve the solution temperature [K] back from the solution specific enthalpy h [kJ/kg] and methanol mass fraction w:
+    hsol increases monotonically with T at fixed w (cp = A + B*t is positive over the whole domain);
+    inverted by 100 bisection steps, with the solution bracket T in [233.15, 423.15] K.
+    Returns None when h lies outside the range of hsol at that w."""
     lo, hi = 233.15, 423.15
     hlo, hhi = hsol(lo, w), hsol(hi, w)
     if not (hlo <= h <= hhi):
@@ -262,34 +262,34 @@ def tsol_by_hsol(h, w):
     return 0.5 * (lo + hi)
 
 
-# ---- 未核实式（仅供存档，勿用于计算；见文件头说明） ----
+# ---- Unverified formulas (archival only; do not use for computation; see the header note) ----
 def density_printed_UNVERIFIED(T_K, w):
-    """式(4.10) 按印刷转录：rho = 2.55 - 2.366w - 0.0068t [g/cc]，返回 kg/m3。
-    警告：温度系数 0.0068 与论文表 4.2 实测差约 16%，疑应为 0.00068，未核实。"""
+    """Eq. (4.10) transcribed as printed: rho = 2.55 - 2.366w - 0.0068t [g/cc], returns kg/m3.
+    Warning: the temperature coefficient 0.0068 differs from the measurements in Table 4.2 of the thesis by about 16%; it is suspected to be 0.00068; unverified."""
     t = T_K - 273.15
     return 1000.0 * (2.55 - 2.366 * w - 0.0068 * t)
 
 
 def viscosity_eq411_UNVERIFIED(T_K, w):
-    """式(4.11) 按 OCR 转录：mu = A·exp(B/T) [cP]，
-    A = 2.516 - 5.722w + 3.304w^2，B = -5424 + 22.3009w - 38.558w^2。
-    警告：OCR 残损严重（A 疑漏 10^-3 乘子，B 小数点不可靠），数值不可用，
-    仅存档待按表 4.3 原始数据重拟合。"""
+    """Eq. (4.11) transcribed from the OCR: mu = A*exp(B/T) [cP],
+    A = 2.516 - 5.722w + 3.304w^2, B = -5424 + 22.3009w - 38.558w^2.
+    Warning: the OCR is severely damaged (A is suspected to be missing a 10^-3 multiplier and the decimal point of B is unreliable); the values are unusable;
+    archival only, to be refitted from the raw data of Table 4.3."""
     A = 2.516 - 5.722 * w + 3.304 * w * w
     B = -5424.0 + 22.3009 * w - 38.558 * w * w
     return A * math.exp(B / T_K)
 
 
 if __name__ == "__main__":
-    # 自检：附录 A 等压温度表（300 mmHg = 0.039997 MPa）泡点温度
+    # Self-check: bubble-point temperatures from the isobaric temperature table of Appendix A (300 mmHg = 0.039997 MPa)
     print("T_bubble @300mmHg: w=0.250 -> %.2f K (thesis 419.0)" % T_bubble_PW(0.039997, 0.250))
     print("T_bubble @300mmHg: w=0.301 -> %.2f K (thesis 391.4)" % T_bubble_PW(0.039997, 0.301))
     print("T_bubble @300mmHg: w=0.356 -> %.2f K (thesis 380.3)" % T_bubble_PW(0.039997, 0.356))
-    # H' 验算点
+    # Check points for H'
     print("H'(10C, 0.25)  = %.0f kJ/kg (thesis table 1940)" % h_prime(283.15, 0.25))
     print("H'(10C, 0.356) = %.0f kJ/kg (thesis table 1601)" % h_prime(283.15, 0.356))
     print("H'(100C, 0.25) = %.0f kJ/kg (thesis table 1645)" % h_prime(373.15, 0.25))
-    # Cp 验算点（表 3.7）
+    # Check points for Cp (Table 3.7)
     print("Cp(51.3C, 0.403) = %.3f (measured 1.27)" % cp(273.15 + 51.3, 0.403))
     print("Cp(69.9C, 0.403) = %.3f (measured 1.30)" % cp(273.15 + 69.9, 0.403))
     print("P_bubble(80C, 0.35) = %.4f MPa" % psol_TW(353.15, 0.35))

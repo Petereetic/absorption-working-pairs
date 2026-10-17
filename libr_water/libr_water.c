@@ -1,40 +1,40 @@
 /*
- * libr_water.c -- 溴化锂水溶液物性参考实现 (C, Patterson + Chua 混合)
+ * libr_water.c -- Reference implementation of the properties of lithium-bromide aqueous solutions (C, Patterson + Chua hybrid)
  * =====================================================================
  * Patterson, M.R. & Perez-Blanco, H. (1988)
  * "Numerical fits of the properties of lithium-bromide water solutions",
  * ASHRAE Transactions 94(2), pp. 2059-2077.
  * Chua, H.T. et al. (2000)
  * "Improved thermodynamic property fields of LiBr-H2O solution",
- * Int. J. Refrigeration 23, 412-429 (Dühring 蒸气压 + 密度)。
- * 注: Dühring 限 x≤60% (Table 1 <x-60> 项按印刷值发散, 60-75% 无法重建);
- *     B_12 取 -3.12628E-16 (原文漏印负号, 经 Fig.2 验证)。
+ * Int. J. Refrigeration 23, 412-429 (Dühring vapour pressure + density).
+ * Note: Dühring is limited to x<=60% (the Table 1 <x-60> terms diverge with the values as printed; the 60-75% segment cannot be reconstructed);
+ *     B_12 is taken as -3.12628E-16 (a minus sign dropped in the original's print, verified against Fig.2).
  *
- * 与同目录 libr_water.py 逐行对应。gcc -O2 -Wall -Wextra 零警告。
+ * Corresponds line by line to libr_water.py in the same directory. Compiles with gcc -O2 -Wall -Wextra with zero warnings.
  *
- * 约定: X = LiBr 重量百分数(数字,如 50); T = °C。
- * 返回 SI: h kJ/kg, p MPa, lambda W/(m K), eta Pa s,
- *           rho kg/m^3, sigma N/m; t_dew/crystallization_T 为 °C。
- * (压力单位 2026-10-14 规矩: 公开函数返回 MPa; 拟合原生值与
- *  内部算术仍为 Pa, 公开函数 = 私有原生值函数 psol_Pa /
- *  psol_chua_Pa ×1e-6, NAN 经乘法照常传播。)
+ * Conventions: X = LiBr weight percent (a number, e.g. 50); T = °C.
+ * Returns are SI: h kJ/kg, p MPa, lambda W/(m K), eta Pa s,
+ *           rho kg/m^3, sigma N/m; t_dew/crystallization_T in °C.
+ * (Pressure unit per the 2026-10-14 rule: public functions return MPa; the fits' native values and
+ *  internal arithmetic remain in Pa; a public function = the private native-value function psol_Pa /
+ *  psol_chua_Pa x1e-6; NAN propagates through the multiplication as usual.)
  *
- * 范围/结晶检查: Python 版 raise ValueError; C 版返回 NAN
- * (范围外或结晶区内), 调用方需用 isnan() 检查。
+ * Ranges/crystallisation checks: the Python version raises ValueError; the C version returns NAN
+ * (out of range or inside the crystallisation region); callers must check with isnan().
  */
 #include <math.h>
 
 /* ------------------------------------------------------------------ */
-/* 结晶边界表                                                          */
+/* Crystallisation boundary tables                                                          */
 /* ------------------------------------------------------------------ */
 static const double XN[7]    = {57.5, 62.5, 62.5, 67.5, 67.5, 100.0, 100.0};
 static const double TN[7]    = {0.0, 10.0, 40.0, 50.0, 90.0, 100.0, 180.0};
 static const double XUNKN[4] = {0.0, 37.5, 51.5, 60.5};
 static const double TUNKN[4] = {126.7, 137.8, 160.0, 182.2};
-/* TCON 按原文照录 °F 数值 */
+/* TCON as printed in the original, values in °F */
 static const double TUNKN_TCON[4] = {260.0, 280.0, 320.0, 360.0};
 
-/* 返回 0 = 通过, 非 0 = 拒绝(结晶区/未知区) */
+/* Returns 0 = pass, non-zero = reject (crystallisation region / unknown region) */
 static int check_region(double X, double T, int check_unknown,
                         const double *tunkn)
 {
@@ -52,12 +52,12 @@ static int check_region(double X, double T, int check_unknown,
                     * (XN[n] - XN[n - 1]);
         found = 1;
         if (X >= xstar)
-            return 1;               /* 结晶区 */
+            return 1;               /* crystallisation region */
         break;
     }
     if (found && !check_unknown)
-        return 0;                   /* 冰点通过 → 直接计算 */
-    /* 未知区检查 (T>180 时亦至此) */
+        return 0;                   /* passed the freezing-point check -> compute directly */
+    /* Unknown-region check (T>180 also reaches here) */
     for (n = 1; n < 4; n++) {
         if (T > tunkn[n])
             continue;
@@ -66,9 +66,9 @@ static int check_region(double X, double T, int check_unknown,
         else
             xstar = XUNKN[n - 1] + (T - tunkn[n - 1]) / (tunkn[n] - tunkn[n - 1])
                     * (XUNKN[n] - XUNKN[n - 1]);
-        return (X <= xstar) ? 2 : 0; /* 未知区 or 通过 */
+        return (X <= xstar) ? 2 : 0; /* unknown region or pass */
     }
-    return 2;                       /* T > TUNKN[3] → 未知区 */
+    return 2;                       /* T > TUNKN[3] -> unknown region */
 }
 
 static int range_check(double X, double T,
@@ -77,7 +77,7 @@ static int range_check(double X, double T,
     return (X < x_lo || X > x_hi || T < t_lo || T > t_hi);
 }
 
-/* 统一多项式 */
+/* Uniform polynomial */
 static double poly(double X, double T, const double *A, int kup)
 {
     double s = 0.0, xk = 1.0;
@@ -91,7 +91,7 @@ static double poly(double X, double T, const double *A, int kup)
 }
 
 /* ------------------------------------------------------------------ */
-/* Patterson 系数表                                                    */
+/* Patterson coefficient tables                                                    */
 /* ------------------------------------------------------------------ */
 static const double A_H[18] = {
     1.134125e+00, -4.800450e-01, -2.161438e-03, 2.336235e-04,
@@ -134,7 +134,7 @@ static const double A_SIG[15] = {
 };
 
 /* ------------------------------------------------------------------ */
-/* 公开函数 (Patterson)                                                */
+/* Public functions (Patterson)                                                */
 /* ------------------------------------------------------------------ */
 double hsol(double X, double T)
 {
@@ -160,7 +160,7 @@ double t_dew(double X, double T)
     return 5.0 / 9.0 * (tdew_poly(X, T) - 32.0);
 }
 
-/* 水蒸气分压原生值 [Pa] (Patterson PRESS, 私有); 内部算术走此值 */
+/* Native value of the water vapour partial pressure [Pa] (Patterson PRESS, private); all internal arithmetic uses this value */
 static double psol_Pa(double X, double T)
 {
     double tdew_f, TR;
@@ -174,7 +174,7 @@ static double psol_Pa(double X, double T)
            * 6894.757;
 }
 
-/* 水蒸气分压 [MPa] (Patterson PRESS): 公开边界 = psol_Pa ×1e-6 */
+/* Water vapour partial pressure [MPa] (Patterson PRESS): public boundary = psol_Pa x1e-6 */
 double psol(double X, double T)
 {
     return psol_Pa(X, T) * 1e-6;
@@ -241,9 +241,9 @@ double crystallization_T(double X)
 }
 
 /* ------------------------------------------------------------------ */
-/* Chua 2000: Dühring 蒸气压 (Table 1) + 密度 (Table 2)                */
-/* 注记见 .py: B_12 取 -3.12628E-16 (原文漏负号); B_14 读 E-19;       */
-/* A_10 读 E-15; <x-60> 项按印刷值发散, psol_chua 限 x≤60%。         */
+/* Chua 2000: Dühring vapour pressure (Table 1) + density (Table 2)                */
+/* See the notes in the .py: B_12 taken as -3.12628E-16 (minus sign dropped in the original's print); B_14 read as E-19;       */
+/* A_10 read as E-15; the <x-60> terms diverge with the values as printed, so psol_chua is limited to x<=60%.         */
 /* ------------------------------------------------------------------ */
 static const double DUHR_A[21] = {
     1.0,
@@ -270,7 +270,7 @@ static const double G_RHO[5][3] = {
     {-3.08671e-06, 9.94788e-08, 1.53514e-09},
 };
 
-/* 纯水 Psat: Wagner 方程 (IAPWS-95, 6 项) */
+/* Pure-water Psat: Wagner equation (IAPWS-95, 6 terms) */
 static double wagner_pref_water(double T_C)
 {
     static const double a[6] = {-7.85951783, 1.84408259, -11.7866497,
@@ -283,7 +283,7 @@ static double wagner_pref_water(double T_C)
     return 22.064e6 * exp((647.096 / T) * s);
 }
 
-/* 水蒸气分压原生值 [Pa] (Chua Dühring, 私有); 内部算术走此值 */
+/* Native value of the water vapour partial pressure [Pa] (Chua Dühring, private); all internal arithmetic uses this value */
 static double psol_chua_Pa(double X, double T)
 {
     double AD = 0.0, BD = 0.0, xk = 1.0, Tdp_C;
@@ -300,21 +300,21 @@ static double psol_chua_Pa(double X, double T)
     return wagner_pref_water(Tdp_C);
 }
 
-/* 水蒸气分压 [MPa] (Chua Dühring): 公开边界 = psol_chua_Pa ×1e-6 */
+/* Water vapour partial pressure [MPa] (Chua Dühring): public boundary = psol_chua_Pa x1e-6 */
 double psol_chua(double X, double T)
 {
     return psol_chua_Pa(X, T) * 1e-6;
 }
 
-/* 由露点温度与溶液温度反解 LiBr 浓度 X [wt%] (Chua 路线):
-   P = 纯水在 Tdew 下的饱和压 (模块自有 Wagner 纯水函数
-   wagner_pref_water); 二分 80 次反解 psol_chua_Pa(X, Tsol) = P
-   (内部一律 Pa, 与公开 psol_chua 的 MPa 边界分账),
-   括号 X∈[0,60] (psol_chua 有效浓度域)。psol_chua_Pa 随 X 单调
-   递减, 二分方向与递增型相反。选 Chua 路线因 psol_chua 本身即
-   由 Dühring 露点经同一 Wagner 函数构造, 定义自洽; 与 Patterson
-   PRESS 差约 0.5-1.4%, 不可混用。无根返回 NAN (如 Tsol 明显
-   低于 Tdew)。 */
+/* Solve the LiBr concentration X [wt%] back from the dew-point temperature and the solution temperature (Chua route):
+   P = the saturation pressure of pure water at Tdew (the module's own Wagner pure-water function
+   wagner_pref_water); 80 bisection steps invert psol_chua_Pa(X, Tsol) = P
+   (Pa throughout internally, accounted separately from the MPa boundary of the public psol_chua),
+   bracket X in [0,60] (the valid concentration domain of psol_chua). psol_chua_Pa decreases monotonically
+   with X, so the bisection direction is opposite to the increasing case. The Chua route is chosen because psol_chua itself
+   is constructed from the Dühring dew point via the same Wagner function, so the definition is self-consistent; it differs from Patterson
+   PRESS by about 0.5-1.4% and must not be mixed with it. Returns NAN when there is no root (e.g. Tsol clearly
+   below Tdew). */
 double x_by_tsol_tdew_chua(double Tsol_C, double Tdew_C)
 {
     double P = wagner_pref_water(Tdew_C);

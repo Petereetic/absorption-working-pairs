@@ -1,8 +1,8 @@
 Attribute VB_Name = "R22"
-' R22 纯物质饱和性质（单独计算文件，Excel VBA 工作表函数；与合并模块 pure_fluids.bas 系数逐字同源）
-' 源：CoolProp 参考状态方程拟合，与合并模块 pure_fluids 系数逐字相同；Wagner 饱和压最大偏差 0.0065%，焓偏差 0.42/0.59 kJ/kg；参考态 0°C 饱和液体 = 100 kJ/kg。
-' 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。Pref 返回 MPa；Tsat 入参 MPa 超界返回 #NUM!。
-' 注意：本模块未在真实 Excel 中编译运行过，使用前请先编译验证。
+' R22 pure-substance saturation properties (standalone calculation file, Excel VBA worksheet functions; coefficients verbatim identical to the merged module pure_fluids.bas)
+' Source: fit to the CoolProp reference equation of state, coefficients verbatim identical to the merged module pure_fluids; Wagner saturation pressure max deviation 0.0065%, enthalpy deviations 0.42/0.59 kJ/kg; reference state: saturated liquid at 0°C = 100 kJ/kg.
+' Reference state: saturated-liquid enthalpy at 0°C = 100 kJ/kg (uniform module reference). Pref returns MPa; Tsat takes MPa and returns #NUM! when out of range.
+' Note: this module has not been compiled or run in real Excel; compile and verify before use.
 
 Option Explicit
 
@@ -94,7 +94,7 @@ Public Function hgas_R22(ByVal t_C As Double) As Double
     hgas_R22 = Poly6(t_C, True)
 End Function
 
-' R22 饱和潜热 kJ/kg = hgas - hliq（同一参考态）
+' R22 saturation latent heat, kJ/kg = hgas - hliq (same reference state)
 Public Function hlat_R22(ByVal t_C As Double) As Double
     hlat_R22 = hgas_R22(t_C) - hliq_R22(t_C)
 End Function

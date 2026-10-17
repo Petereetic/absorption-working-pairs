@@ -1,39 +1,39 @@
 Attribute VB_Name = "LiBrWater"
 ' ==========================================================================
-' 溴化锂水溶液物性 VBA 工作表函数 (Patterson + Chua 混合)
+' Properties of lithium-bromide aqueous solutions - VBA worksheet functions (Patterson + Chua hybrid)
 ' ==========================================================================
 ' Patterson, M.R. & Perez-Blanco, H. (1988)
 ' "Numerical fits of the properties of lithium-bromide water solutions",
 ' ASHRAE Transactions 94(2), pp. 2059-2077.
 ' Chua, H.T. et al. (2000), Int. J. Refrigeration 23, 412-429
-' (Dühring 蒸气压 + 密度)。
+' (Dühring vapour pressure + density).
 '
-' *** 本 .bas 未在真实 Excel 中编译或运行,系由 Python 参考实现 ***
-' *** 逐行移植,使用前请在 Excel 中实测。                        ***
+' *** This .bas has not been compiled or run in real Excel; it is a line-by-line port of the Python reference implementation. ***
+' *** Verify it in Excel before use.                        ***
 '
-' 工作表函数 (X = LiBr 重量百分数数字,如 50; T = °C):
-'   LW_hsol(X,T)        溶液比焓 [kJ/kg]
-'   LW_Tdew(X,T)     露点温度 [°C]
-'   LW_Psol(X,T)     水蒸气分压 [MPa] (Patterson)
-'   LW_Lambda(X,T)   导热系数 [W/(m K)]
-'   LW_Eta(X,T)      动力黏度 [Pa s]
-'   LW_Rho(X,T)      密度 [kg/m^3]
-'   LW_Sigma(X,T)    表面张力 [N/m]
-'   LW_Tcryst(X)     结晶温度 [°C]
-'   LW_PsolChua(X,T) 水蒸气分压 [MPa] (Chua Dühring, 0-190°C/0-60wt%;
-'                      x>60 的 <x-60> 项按原文印刷值无法复现, 不实现)
-'   LW_RhoChua(X,T)  密度 [kg/m^3] (Chua, 0-200°C/0-70%)
-'   LW_XByTsolTdewChua(Tdew,Tsol)  由露点温度与溶液温度反解浓度 X [wt%]
-'                      (Chua 路线, Wagner 纯水定压; 无根返回 Empty)
+' Worksheet functions (X = LiBr weight percent as a number, e.g. 50; T = °C):
+'   LW_hsol(X,T)        solution specific enthalpy [kJ/kg]
+'   LW_Tdew(X,T)     dew-point temperature [°C]
+'   LW_Psol(X,T)     water vapour partial pressure [MPa] (Patterson)
+'   LW_Lambda(X,T)   thermal conductivity [W/(m K)]
+'   LW_Eta(X,T)      dynamic viscosity [Pa s]
+'   LW_Rho(X,T)      density [kg/m^3]
+'   LW_Sigma(X,T)    surface tension [N/m]
+'   LW_Tcryst(X)     crystallisation temperature [°C]
+'   LW_PsolChua(X,T) water vapour partial pressure [MPa] (Chua Dühring, 0-190°C/0-60wt%;
+'                      the <x-60> terms for x>60 cannot be reproduced with the values as printed in the original; not implemented)
+'   LW_RhoChua(X,T)  density [kg/m^3] (Chua, 0-200°C/0-70%)
+'   LW_XByTsolTdewChua(Tdew,Tsol)  solves the concentration X [wt%] back from the dew-point temperature and the solution temperature
+'                      (Chua route, pressure fixed by the Wagner pure-water line; returns Empty when there is no root)
 '
-' 范围外或结晶区内返回 #VALUE! 错误值。
-' 压力单位 (2026-10-14 规矩): 公开函数返回 MPa; 拟合原生值与内部
-' 算术仍为 Pa —— 私有 PsolPa / PsolChuaPa 返回 Pa 原生值, 公开
-' LW_Psol / LW_PsolChua = 原生值 ×0.000001, 内部反解一律走私有函数。
+' Out of range or inside the crystallisation region, the #VALUE! error value is returned.
+' Pressure unit (2026-10-14 rule): public functions return MPa; the fits' native values and internal
+' arithmetic remain in Pa - the private PsolPa / PsolChuaPa return native values in Pa; the public
+' LW_Psol / LW_PsolChua = native value x0.000001; internal inversions always go through the private functions.
 ' ==========================================================================
 Option Explicit
 
-' ---------- 统一多项式 ----------
+' ---------- Uniform polynomial ----------
 Private Function PolyLW(ByVal X As Double, ByVal T As Double, _
                         ByRef A As Variant, ByVal kup As Integer) As Double
     Dim s As Double, xk As Double, i As Integer
@@ -45,7 +45,7 @@ Private Function PolyLW(ByVal X As Double, ByVal T As Double, _
     PolyLW = s
 End Function
 
-' ---------- 结晶/未知区检查, 返回 ""=通过,否则错误信息 ----------
+' ---------- Crystallisation/unknown-region check; returns "" = pass, otherwise an error message ----------
 Private Function CheckRegion(ByVal X As Double, ByVal T As Double, _
         ByVal checkUnknown As Boolean, ByRef tunkn As Variant) As String
     Dim XN As Variant, TN As Variant, XUNKN As Variant
@@ -91,7 +91,7 @@ Private Function InRange(ByVal X As Double, ByVal T As Double, _
     InRange = (X >= xLo And X <= xHi And T >= tLo And T <= tHi)
 End Function
 
-' ---------- 系数表 ----------
+' ---------- Coefficient tables ----------
 Private Function CoefH() As Variant
     CoefH = Array(1.134125, -0.480045, -0.002161438, 0.0002336235, _
         -0.00001188679, 2.291532E-07, 4.124891, -0.07643903, _
@@ -145,7 +145,7 @@ Private Function TunknTcon() As Variant
     TunknTcon = Array(260#, 280#, 320#, 360#)
 End Function
 
-' ---------- 公开函数 ----------
+' ---------- Public functions ----------
 Public Function LW_hsol(ByVal X As Double, ByVal T As Double) As Variant
     If Not InRange(X, T, 0, 70, 0, 180) Then LW_hsol = CVErr(xlErrValue): Exit Function
     If CheckRegion(X, T, True, TunknStd()) <> "" Then LW_hsol = CVErr(xlErrValue): Exit Function
@@ -164,7 +164,7 @@ Public Function LW_Tdew(ByVal X As Double, ByVal T As Double) As Variant
     LW_Tdew = 5# / 9# * (TdewPolyF(X, T) - 32#)
 End Function
 
-' 水蒸气分压原生值 [Pa] (Patterson PRESS, 私有); 内部算术走此值
+' Native value of the water vapour partial pressure [Pa] (Patterson PRESS, private); all internal arithmetic uses this value
 Private Function PsolPa(ByVal X As Double, ByVal T As Double) As Variant
     Dim tdewF As Double, TR As Double
     If Not InRange(X, T, 0, 70, 4.4, 182.2) Then PsolPa = CVErr(xlErrValue): Exit Function
@@ -174,7 +174,7 @@ Private Function PsolPa(ByVal X As Double, ByVal T As Double) As Variant
     PsolPa = 10# ^ (6.21147 - 2886.373 / TR - 337269.46 / TR ^ 2) * 6894.757
 End Function
 
-' 水蒸气分压 [MPa] (Patterson PRESS): 公开边界 = PsolPa ×0.000001
+' Water vapour partial pressure [MPa] (Patterson PRESS): public boundary = PsolPa x0.000001
 Public Function LW_Psol(ByVal X As Double, ByVal T As Double) As Variant
     Dim v As Variant
     v = PsolPa(X, T)
@@ -231,10 +231,10 @@ Public Function LW_Tcryst(ByVal X As Double) As Variant
 End Function
 
 ' ---------- Chua 2000 ----------
-' Dühring 系数 (Table 1, p.417)。注记:
-' B_12 取 -3.12628E-16 (原文印刷漏负号, 经 Fig.2 验证);
-' B_14 读 1.87723E-19; A_10 读 2.37604E-15;
-' <x-60> 项 (i=17..20) 按印刷值在 x>60 发散, LW_PsolChua 限 x≤60%。
+' Dühring coefficients (Table 1, p.417). Notes:
+' B_12 is taken as -3.12628E-16 (a minus sign dropped in the original's print, verified against Fig.2);
+' B_14 is read as 1.87723E-19; A_10 is read as 2.37604E-15;
+' the <x-60> terms (i=17..20) diverge at x>60 with the values as printed, so LW_PsolChua is limited to x<=60%.
 Private Function DuhrA() As Variant
     DuhrA = Array(1#, 2.92242E-04, 1.05207E-04, 8.86101E-07, _
         -2.71833E-06, 3.52718E-07, -2.03849E-08, 5.6881E-10, _
@@ -266,7 +266,7 @@ Private Function WagnerPref(ByVal Tc As Double) As Double
     WagnerPref = 22.064E+06 * Exp((647.096 / T) * s)
 End Function
 
-' 水蒸气分压原生值 [Pa] (Chua Dühring, 私有); 内部算术走此值
+' Native value of the water vapour partial pressure [Pa] (Chua Dühring, private); all internal arithmetic uses this value
 Private Function PsolChuaPa(ByVal X As Double, ByVal T As Double) As Variant
     Dim AD As Double, BD As Double, xk As Double, i As Integer
     Dim A As Variant, B As Variant, TdpC As Double
@@ -284,7 +284,7 @@ Private Function PsolChuaPa(ByVal X As Double, ByVal T As Double) As Variant
     PsolChuaPa = WagnerPref(TdpC)
 End Function
 
-' 水蒸气分压 [MPa] (Chua Dühring): 公开边界 = PsolChuaPa ×0.000001
+' Water vapour partial pressure [MPa] (Chua Dühring): public boundary = PsolChuaPa x0.000001
 Public Function LW_PsolChua(ByVal X As Double, ByVal T As Double) As Variant
     Dim v As Variant
     v = PsolChuaPa(X, T)
@@ -292,13 +292,13 @@ Public Function LW_PsolChua(ByVal X As Double, ByVal T As Double) As Variant
     LW_PsolChua = v * 0.000001
 End Function
 
-' 由露点温度与溶液温度反解 LiBr 浓度 X [wt%] (Chua 路线):
-' P = 纯水在 Tdew 下的饱和压 (模块自有 WagnerPref 纯水函数);
-' 二分 80 次反解 PsolChuaPa(X, Tsol) = P (内部一律 Pa, 与公开
-' LW_PsolChua 的 MPa 边界分账), 括号 X∈[0,60]
-' (LW_PsolChua 有效浓度域)。PsolChuaPa 随 X 单调递减,
-' 二分方向与递增型相反。与 Python/C 同算法。
-' 无根返回 Empty (如 Tsol 明显低于 Tdew)。
+' Solve the LiBr concentration X [wt%] back from the dew-point temperature and the solution temperature (Chua route):
+' P = the saturation pressure of pure water at Tdew (the module's own WagnerPref pure-water function);
+' 80 bisection steps invert PsolChuaPa(X, Tsol) = P (Pa throughout internally, accounted separately
+' from the MPa boundary of the public LW_PsolChua), bracket X in [0,60]
+' (the valid concentration domain of LW_PsolChua). PsolChuaPa decreases monotonically with X,
+' so the bisection direction is opposite to the increasing case. Same algorithm as Python/C.
+' Returns Empty when there is no root (e.g. Tsol clearly below Tdew).
 Public Function LW_XByTsolTdewChua(ByVal Tsol_C As Double, ByVal Tdew_C As Double) As Variant
     Dim P As Double, Pmin As Double, Pmax As Double
     Dim lo As Double, hi As Double, mid As Double, k As Long
@@ -318,12 +318,12 @@ Public Function LW_XByTsolTdewChua(ByVal Tsol_C As Double, ByVal Tdew_C As Doubl
 End Function
 
 
-' ---------- 露点温度（溶液）[°C]：全库 TdewByTsolXi 约定 ----------
-' Tdew = 纯水饱和温度(PsolPa(X, T))：对 psol 内置的 Patterson 纯水
-' log10 关系式解析反解（对 1/TR 的二次方程）。内部用 Pa 原生值
-' PsolPa（公开 LW_Psol 返回 MPa）。构造上与 LW_Tdew
-' （Patterson TDEW 多项式）相等；LiBr 不挥发，无端点约定问题。
-' 超辖区时与 LW_Tdew 同样返回 #VALUE!。
+' ---------- Dew-point temperature (solution) [°C]: library-wide TdewByTsolXi convention ----------
+' Tdew = saturation temperature of pure water (PsolPa(X, T)): analytic inversion of the log10 relation built into psol
+' (a quadratic in 1/TR). The native Pa value PsolPa is used internally (the public LW_Psol returns MPa). By construction it
+' equals LW_Tdew (the Patterson TDEW polynomial); LiBr is non-volatile,
+' so there is no endpoint-convention issue.
+' Out of range it returns #VALUE!, like LW_Tdew.
 Public Function LW_TdewByTsolX(ByVal X As Double, ByVal T As Double) As Variant
     Dim P As Variant, L As Double, disc As Double, u As Double
     If Not InRange(X, T, 0, 70, 4.4, 182.2) Then LW_TdewByTsolX = CVErr(xlErrValue): Exit Function
@@ -337,11 +337,11 @@ Public Function LW_TdewByTsolX(ByVal X As Double, ByVal T As Double) As Variant
     LW_TdewByTsolX = (1# / u - 459.7 - 32#) * 5# / 9#
 End Function
 
-' ---------- 由溶液比焓反解溶液温度 [°C] ----------
-' hsol 只在 Patterson 标准区有定义（未知区返回 #VALUE!），故先以
-' 5 °C 步长扫描 T = 0..180 °C 找可评价的括号，再二分 80 次反解
-' LW_hsol(X, T) = h（hsol 在固定 X 下随 T 单调增）。无括号返回
-' Empty。与 C/Python 同算法；本函数未在真实 Excel 中编译运行。
+' ---------- Solve the solution temperature [°C] back from the solution specific enthalpy ----------
+' hsol is defined only in the Patterson standard region (the unknown region returns #VALUE!), so first scan
+' T = 0..180 °C in 5 °C steps for an evaluable bracket, then invert LW_hsol(X, T) = h by 80 bisection steps
+' (hsol increases monotonically with T at fixed X). Returns Empty when there is no bracket. Same algorithm
+' as C/Python; this function has not been compiled or run in real Excel.
 Public Function LW_TsolByHsol(ByVal h As Double, ByVal X As Double) As Variant
     Dim prevT As Double, prevH As Double, havePrev As Boolean
     Dim lo As Double, hi As Double, mid As Double, k As Long

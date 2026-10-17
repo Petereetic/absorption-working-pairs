@@ -1,15 +1,15 @@
-"""R22-DMF 混合焓独立验证：Agarwal-Bapat 1984 vs 现用 Fatouh 1993 模型。
+"""Independent check of the R22-DMF enthalpy of mixing: Agarwal-Bapat 1984 vs. the Fatouh 1993 model in current use.
 
 Agarwal & Bapat, "Thermodynamic properties of R22-DMF mixtures",
 J. Thermal Engineering, Vol.3, No.4, 1984, pp.7-13.
-  G^E = x1*x2*[a + b*(x1-x2)]  （两参数 Redlich-Kister，x 为摩尔分数）
+  G^E = x1*x2*[a + b*(x1-x2)]  (two-parameter Redlich-Kister; x is mole fraction)
   lnγ1 = x2^2*[A + B*(4*x1-1)],  lnγ2 = x1^2*[A + B*(1-4*x2)]
-  A(T) = -2.6422693 + 0.0066829*T            (式14)
-  B(T) = 17.739537 - 2302.5584/T - 0.03913805*T   (式15)
-  H^E = -R*T^2 * Σ xi*(d lnγi/dT)            （式17 第二项）
-A、B 由 Bapat 博士论文(1981) 的 P-T-x 数据经 Barker 法拟合，与 Fatouh 1993
-的数据源独立。自检：40°C、x1=0.5(摩尔) 时算得 P≈4.18 bar，
-Raoult 7.66 bar，偏差 3.48 bar，与论文所述 3.6 bar 吻合，参数实现正确。
+  A(T) = -2.6422693 + 0.0066829*T            (Eq. 14)
+  B(T) = 17.739537 - 2302.5584/T - 0.03913805*T   (Eq. 15)
+  H^E = -R*T^2 * Σ xi*(d lnγi/dT)            (Eq. 17, second term)
+A and B were fitted by Barker's method to the P-T-x data in Bapat's doctoral thesis (1981), a data source independent of Fatouh 1993.
+Self-check: at 40°C and x1=0.5 (molar) the computed P is approx. 4.18 bar, vs. Raoult 7.66 bar,
+a deviation of 3.48 bar, matching the 3.6 bar stated in the paper - the parameters are implemented correctly.
 """
 import math, sys
 sys.path.insert(0, '.')
@@ -23,7 +23,7 @@ def _dAdB(T_K):
 
 
 def excess_enthalpy_AB(T_C, xi):
-    """Agarwal-Bapat 1984 的超额焓，kJ/kg。xi = R22 质量分数（转摩尔分数计算）。"""
+    """Excess enthalpy of Agarwal-Bapat 1984, kJ/kg. xi = R22 mass fraction (converted to mole fraction for the calculation)."""
     n1 = xi / _MR22
     n2 = (1.0 - xi) / _MDMF
     x1 = n1 / (n1 + n2)
@@ -39,7 +39,7 @@ def excess_enthalpy_AB(T_C, xi):
 
 
 def hmix_fatouh(T_C, xi):
-    """现用 Fatouh 1993 模型的 hmix 部分，kJ/kg（直接复用 r22_dmf 常数）。"""
+    """The hmix part of the Fatouh 1993 model in current use, kJ/kg (reuses the r22_dmf constants directly)."""
     from r22_dmf import _B, _C, _E1, _E2, _E3
     T = T_C + 273.15
     omx = 1.0 - xi

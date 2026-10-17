@@ -1,6 +1,6 @@
 import os
 # -*- coding: utf-8 -*-
-"""生成《喷射式三压吸收制冷循环文献综述》.docx"""
+"""Generate the .docx of the literature review "Ejector-Based Triple-Pressure Absorption Refrigeration Cycles"."""
 from docx import Document
 from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH

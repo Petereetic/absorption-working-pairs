@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-"""用现有 R134a-DMF 模型 (NRTL+gamma-phi, 拟合自 Zehioua 2009)
-对 Cui et al. 2007 (ICR07) 的 90 点 p-T-x 数据做独立验证。"""
+"""Independent validation of the existing R134a-DMF model (NRTL + gamma-phi, fitted to Zehioua 2009)
+against the 90-point p-T-x data of Cui et al. 2007 (ICR07)."""
 import csv, sys
 sys.path.insert(0, "/home/hatch/workspace/your_files/r134a_dmf")
 from r134a_dmf import psol

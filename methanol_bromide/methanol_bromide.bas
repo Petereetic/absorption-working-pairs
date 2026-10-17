@@ -1,53 +1,53 @@
 Attribute VB_Name = "MethanolBromide"
-' 甲醇/(2LiBr-ZnBr2) 热力学关联式（Excel VBA 工作表函数）
-' 来源：S. El-Shamarka, PhD thesis, Cranfield Institute of Technology, 1981.
-' 体系：盐比固定 LiBr:ZnBr2 = 2:1（摩尔）；w 为甲醇质量分数；盐不挥发。
-'   式(3.1) 泡点压力：log10 P[mbar] = C1(w) + C2(w)·(1000/T[K] - 2.3)
-'           C1、C2 为表 3.3 的 8 个节点值，节点间 PCHIP 保形插值。
-'           表 3.3 的 -C2 在 w=28.0% 处（2.7278）打破单调（30.1% 处 2.8197），
-'           按原表照印，PCHIP 在该处斜率为 0，不产生过冲。
-'   式(3.4) 比热：Cp = A + B·t[°C]，A = 0.652 + 2.139w - 2.077w^2，
-'           B = -0.000205 + 0.00928w - 0.0101w^2。
-'           末项符号：p.86 原式为叠印字形，附录 A 重述印 "-"，且取 "-" 与
-'           论文表 3.7 实测比热的最大偏差仅 0.7%（取 "+" 则 6%~14%），故取 "-"。
-'   附录 A 汽化焓 H'（含混合热）：H' = A + B·w + C·w^2，A/B/C 为 T 的二次式；
-'           T 为开尔文（切勿用 °C）；仅 w=0.25~0.356 有效，禁止外推。
-' 密度与黏度（MB_RhoIedema / MB_EtaIedema）为另一来源，与上文无关：
-'   P. D. Iedema, PhD thesis, TU Delft, 1984（同体系 LiBr/ZnBr2-甲醇）。
-'   密度（表 2.7.2.2.2）：rho = [rho25(w) + rho'(w)·(t-25)]·(1 + 0.32·w_H)，
-'           rho25、rho' 为 w 的三次式，t 为 °C；w 为总溶剂质量分数
-'           （甲醇+水，干溶液时即甲醇质量分数），w_H 为水质量分数。
-'           适用 w=0.28~0.42，t=-10~140 °C；作者称平均偏差 0.13%。
-'   黏度（表 2.7.3）：ln eta = eta0(w) + etaT(w)/T，eta 为 Pa·s，T 为 K，
-'           eta0、etaT 为 w 的三次式。适用 w=0.28~1.0，t=20~120 °C。
-'           原表 etaT 末项印作 w^4 且系数下标错标，经 9 个实测点裁决取
-'           w^3 读法（平均偏差 2.8%，与作者自称吻合；w^4 读法偏 36%）。
-'   注：El-Shamarka 自己的式(4.10) 密度、式(4.11) 黏度仍未核实，本模块
-'   未实现，勿与上述 Iedema 关联式混淆（详见 公式说明.md）。
-' 参考态（本文档约定，论文未定义绝对基准）：
-'   hsol(0°C, 任意 w) = 100 kJ/kg；hgas = hsol + H'。
+' Thermodynamic correlations for methanol / (2LiBr-ZnBr2) (Excel VBA worksheet functions)
+' Source: S. El-Shamarka, PhD thesis, Cranfield Institute of Technology, 1981.
+' System: the salt ratio is fixed at LiBr:ZnBr2 = 2:1 (molar); w is the methanol mass fraction; the salt is non-volatile.
+'   Eq. (3.1) Bubble-point pressure: log10 P[mbar] = C1(w) + C2(w)·(1000/T[K] - 2.3)
+'           C1 and C2 are the 8 node values of Table 3.3; between nodes, shape-preserving PCHIP interpolation.
+'           The -C2 of Table 3.3 at w=28.0% (2.7278) breaks monotonicity (2.8197 at 30.1%);
+'           printed as in the original table; PCHIP has zero slope there and produces no overshoot.
+'   Eq. (3.4) Specific heat: Cp = A + B·t[°C], A = 0.652 + 2.139w - 2.077w^2,
+'           B = -0.000205 + 0.00928w - 0.0101w^2.
+'           Sign of the last term: in the original formula on p.86 it is an overprinted glyph; the restatement in Appendix A prints "-", and taking "-"
+'           gives a max deviation of only 0.7% against the measured specific heats of Table 3.7 of the thesis (taking "+" gives 6%~14%); so "-" is taken.
+'   Appendix A enthalpy of vaporisation H' (including the heat of mixing): H' = A + B·w + C·w^2, where A/B/C are quadratics in T;
+'           T is in kelvin (never use °C); valid only for w=0.25~0.356; extrapolation forbidden.
+' The density and viscosity (MB_RhoIedema / MB_EtaIedema) are from another source, unrelated to the above:
+'   P. D. Iedema, PhD thesis, TU Delft, 1984 (same system, LiBr/ZnBr2-methanol).
+'   Density (Table 2.7.2.2.2): rho = [rho25(w) + rho'(w)·(t-25)]·(1 + 0.32·w_H),
+'           rho25 and rho' are cubics in w; t in °C; w is the total solvent mass fraction
+'           (methanol + water; for a dry solution it is the methanol mass fraction), w_H is the water mass fraction.
+'           Valid w=0.28~0.42, t=-10~140 °C; the author states a mean deviation of 0.13%.
+'   Viscosity (Table 2.7.3): ln eta = eta0(w) + etaT(w)/T, eta in Pa·s, T in K,
+'           eta0 and etaT are cubics in w. Valid w=0.28~1.0, t=20~120 °C.
+'           In the original table the last term of etaT is printed as w^4 and the coefficient subscript is mislabelled; ruled by 9 measured points,
+'           the w^3 reading is taken (mean deviation 2.8%, matching the author's own claim; the w^4 reading deviates by 36%).
+'   Note: El-Shamarka's own density Eq. (4.10) and viscosity Eq. (4.11) are still unverified; this module
+'   does not implement them; do not confuse them with the Iedema correlations above (see the formula notes file).
+' Reference state (a convention of this document; the thesis defines no absolute datum):
+'   hsol(0°C, any w) = 100 kJ/kg; hgas = hsol + H'.
 '
-' 压力单位（2026-10-14 全库统一）：公开函数返回/接受 MPa；内部原生
-' 计算以 bar 进行（私有函数 PsolBar / TbubBar 及 MeohPrefBar /
-' MeohTsatBar），公开函数只做边界缩放（MPa = bar×0.1；入参 MPa×10
-' 回 bar）。
+' Pressure unit (library-wide unification of 2026-10-14): public functions return/accept MPa; internal native
+' computation is in bar (private functions PsolBar / TbubBar and MeohPrefBar /
+' MeohTsatBar); public functions only scale at the boundary (MPa = bar x0.1; MPa inputs x10
+' back to bar).
 '
-' 工作表函数：
-'   =MB_Psol(T_K, w)    泡点压力，MPa
-'   =MB_Tbub(P_MPa, w)  泡点温度，K
-'   =MB_Cp(T_K, w)      溶液比热，kJ/(kg·K)
-'   =MB_Hprime(T_K, w)  汽化焓 H'，kJ/kg（仅 w=0.25~0.356）
-'   =MB_hsol(T_K, w)    溶液比焓，kJ/kg
-'   =MB_hgas(T_K, w)    气相比焓，kJ/kg
-'   =MB_RhoIedema(T_K, w, w_H)  密度（Iedema 1984），kg/m3
-'   =MB_EtaIedema(T_K, w)       动力黏度（Iedema 1984），Pa·s
-'   =MB_XiByTsolTdew(Tdew_K, Tsol_K)  由露点温度与溶液温度反解 w，无根返回 Empty
+' Worksheet functions:
+'   =MB_Psol(T_K, w)    bubble-point pressure, MPa
+'   =MB_Tbub(P_MPa, w)  bubble-point temperature, K
+'   =MB_Cp(T_K, w)      solution specific heat, kJ/(kg·K)
+'   =MB_Hprime(T_K, w)  enthalpy of vaporisation H', kJ/kg (only w=0.25~0.356)
+'   =MB_hsol(T_K, w)    solution specific enthalpy, kJ/kg
+'   =MB_hgas(T_K, w)    vapour-phase specific enthalpy, kJ/kg
+'   =MB_RhoIedema(T_K, w, w_H)  density (Iedema 1984), kg/m3
+'   =MB_EtaIedema(T_K, w)       dynamic viscosity (Iedema 1984), Pa·s
+'   =MB_XiByTsolTdew(Tdew_K, Tsol_K)  solves w back from the dew-point temperature and the solution temperature; returns Empty when there is no root
 '
-' 注意：本模块未在真实 Excel 中编译运行过，使用前请先编译验证。
+' Note: this module has not been compiled or run in real Excel; compile and verify before use.
 
 Option Explicit
 
-' 表 3.3（p.74）节点：甲醇质量分数
+' Table 3.3 (p.74) nodes: methanol mass fractions
 Private Function NodeW(ByVal i As Long) As Double
     Select Case i
         Case 0: NodeW = 0.243
@@ -100,7 +100,7 @@ Private Function PchipEndSlope(ByVal h0 As Double, ByVal h1 As Double, _
     End If
 End Function
 
-' Fritsch-Carlson PCHIP；which=1 取 C1，which=2 取 C2
+' Fritsch-Carlson PCHIP; which=1 takes C1, which=2 takes C2
 Private Function PchipEval(ByVal which As Long, ByVal w As Double) As Double
     Dim xs(0 To 7) As Double, ys(0 To 7) As Double
     Dim h(0 To 6) As Double, d(0 To 6) As Double, m(0 To 7) As Double
@@ -150,42 +150,42 @@ Private Sub CpAB(ByVal w As Double, ByRef A As Double, ByRef B As Double)
     B = -0.000205 + 0.00928 * w - 0.0101 * w * w
 End Sub
 
-' 式(3.1) 原生值（私有）：泡点压力，bar
+' Eq. (3.1) native value (private): bubble-point pressure, bar
 Private Function PsolBar(ByVal T_K As Double, ByVal w As Double) As Double
     Dim log10p As Double
     log10p = PchipEval(1, w) + PchipEval(2, w) * (1000# / T_K - 2.3)
     PsolBar = 10# ^ log10p / 1000#
 End Function
 
-' 式(3.1)：泡点压力，MPa
+' Eq. (3.1): bubble-point pressure, MPa
 Public Function MB_Psol(ByVal T_K As Double, ByVal w As Double) As Double
     MB_Psol = PsolBar(T_K, w) * 0.1
 End Function
 
-' 式(3.1) 解析反解原生值（私有）：泡点温度，K；P_bar 巴
+' Eq. (3.1) analytic inverse, native value (private): bubble-point temperature, K; P_bar in bar
 Private Function TbubBar(ByVal P_bar As Double, ByVal w As Double) As Double
     Dim log10p As Double
     log10p = Log(P_bar * 1000#) / Log(10#)
     TbubBar = 1000# / ((log10p - PchipEval(1, w)) / PchipEval(2, w) + 2.3)
 End Function
 
-' 式(3.1) 解析反解：泡点温度，K；P_MPa 兆帕
+' Eq. (3.1) analytic inverse: bubble-point temperature, K; P_MPa in MPa
 Public Function MB_Tbub(ByVal P_MPa As Double, ByVal w As Double) As Double
     MB_Tbub = TbubBar(P_MPa * 10#, w)
 End Function
 
-' 纯甲醇饱和压（私有辅助，原生 bar，与 Python 版 _meoh_pref_bar 同常数）：
-' Antoine 拟合自论文附录 A 表：log10 P[mmHg] = 8.885298 - 2070.3714/(T[K] + 6.3818)
+' Pure-methanol saturation pressure (private helper, native bar; same constants as _meoh_pref_bar of the Python version):
+' Antoine fit to the table in Appendix A of the thesis: log10 P[mmHg] = 8.885298 - 2070.3714/(T[K] + 6.3818)
 Private Function MeohPrefBar(ByVal T_K As Double) As Double
     MeohPrefBar = 10# ^ (8.885298 - 2070.3714 / (T_K + 6.3818)) * 0.0013332239
 End Function
 
-' 由露点温度与溶液温度反解甲醇质量分数 w：
-' 露点定压 P = MeohPrefBar(Tdew_K)（内部原生 bar 值；盐不挥发，
-' 气相为纯甲醇），再二分 80 次反解 PsolBar(Tsol_K, w) = P，
-' 括号取泡点函数有效浓度域 w = 0.243~0.509。
-' 无根时返回 Empty（如溶液温度明显低于露点温度）。
-' 与 C/Python 同算法；本函数未在真实 Excel 中编译运行。
+' Solve the methanol mass fraction w back from the dew-point temperature and the solution temperature:
+' the dew point fixes the pressure P = MeohPrefBar(Tdew_K) (internal native value in bar; the salt is non-volatile,
+' the vapour phase is pure methanol); then 80 bisection steps invert PsolBar(Tsol_K, w) = P,
+' with the bracket taken as the bubble-point function's valid concentration domain w = 0.243~0.509.
+' Returns Empty when there is no root (e.g. the solution temperature clearly below the dew-point temperature).
+' Same algorithm as C/Python; this function has not been compiled or run in real Excel.
 Public Function MB_XiByTsolTdew(ByVal Tsol_K As Double, ByVal Tdew_K As Double) As Variant
     Dim P As Double, lo As Double, hi As Double, mid As Double, k As Long
     P = MeohPrefBar(Tdew_K)
@@ -202,24 +202,24 @@ Public Function MB_XiByTsolTdew(ByVal Tsol_K As Double, ByVal Tdew_K As Double) 
 End Function
 
 
-' 纯甲醇饱和温度 [K]（私有辅助，原生 bar）：MeohPrefBar 的解析反解，
-' 与 Python 版 _meoh_Tsat_bar 同式。
+' Pure-methanol saturation temperature [K] (private helper, native bar): analytic inverse of MeohPrefBar,
+' same formula as _meoh_Tsat_bar of the Python version.
 Private Function MeohTsatBar(ByVal P_bar As Double) As Double
     MeohTsatBar = 2070.3714 / (8.885298 - Log(P_bar / 0.0013332239) / Log(10#)) - 6.3818
 End Function
 
-' 溶液在 (T_K, w) 的露点温度 [K]（全库 TdewByTsolXi 约定）：
-' Tdew = MeohTsatBar(PsolBar(T_K, w))（实现内部走原生 bar 私有函数；
-' 公开口径为 MPa），以本模块自有纯甲醇线评价
-' 溶液表面压力 Psol。盐不挥发，气相为纯甲醇。
+' Dew-point temperature [K] of the solution at (T_K, w) (library-wide TdewByTsolXi convention):
+' Tdew = MeohTsatBar(PsolBar(T_K, w)) (internally via the native-bar private functions;
+' the public convention is MPa), evaluating the solution surface pressure Psol with this module's own pure-methanol line.
+' The salt is non-volatile; the vapour phase is pure methanol.
 Public Function MB_TdewByTsolW(ByVal T_K As Double, ByVal w As Double) As Double
     MB_TdewByTsolW = MeohTsatBar(PsolBar(T_K, w))
 End Function
 
-' 由溶液比焓 h [kJ/kg] 与甲醇质量分数 w 反解溶液温度 [K]：
-' MB_hsol 在固定 w 下随 T 单调增，二分 100 次反解，
-' 求解括号 T ∈ [233.15, 423.15] K。h 超出值域返回 Empty。
-' 与 C/Python 同算法；本函数未在真实 Excel 中编译运行。
+' Solve the solution temperature [K] back from the solution specific enthalpy h [kJ/kg] and methanol mass fraction w:
+' MB_hsol increases monotonically with T at fixed w; inverted by 100 bisection steps,
+' with the solution bracket T in [233.15, 423.15] K. Returns Empty when h is outside the range.
+' Same algorithm as C/Python; this function has not been compiled or run in real Excel.
 Public Function MB_TsolByHsol(ByVal h As Double, ByVal w As Double) As Variant
     Dim lo As Double, hi As Double, mid As Double, k As Long
     lo = 233.15: hi = 423.15
@@ -233,14 +233,14 @@ Public Function MB_TsolByHsol(ByVal h As Double, ByVal w As Double) As Variant
     MB_TsolByHsol = 0.5 * (lo + hi)
 End Function
 
-' 式(3.4)：溶液比热，kJ/(kg·K)
+' Eq. (3.4): solution specific heat, kJ/(kg·K)
 Public Function MB_Cp(ByVal T_K As Double, ByVal w As Double) As Double
     Dim A As Double, B As Double
     CpAB w, A, B
     MB_Cp = A + B * (T_K - 273.15)
 End Function
 
-' 附录 A：汽化焓 H'（含混合热），kJ/kg；T_K 为开尔文；仅 w=0.25~0.356
+' Appendix A: enthalpy of vaporisation H' (including the heat of mixing), kJ/kg; T_K in kelvin; only w=0.25~0.356
 Public Function MB_Hprime(ByVal T_K As Double, ByVal w As Double) As Double
     Dim A As Double, B As Double, C As Double
     A = 2202.6 + 9.24 * T_K - 0.0218 * T_K * T_K
@@ -249,7 +249,7 @@ Public Function MB_Hprime(ByVal T_K As Double, ByVal w As Double) As Double
     MB_Hprime = A + B * w + C * w * w
 End Function
 
-' 溶液比焓，kJ/kg；参考态约定 hsol(0°C) = 100 kJ/kg
+' Solution specific enthalpy, kJ/kg; reference-state convention hsol(0°C) = 100 kJ/kg
 Public Function MB_hsol(ByVal T_K As Double, ByVal w As Double) As Double
     Dim A As Double, B As Double, t As Double
     CpAB w, A, B
@@ -257,14 +257,14 @@ Public Function MB_hsol(ByVal T_K As Double, ByVal w As Double) As Double
     MB_hsol = 100# + A * t + B * t * t / 2#
 End Function
 
-' 气相比焓，kJ/kg：hgas = hsol + H'
+' Vapour-phase specific enthalpy, kJ/kg: hgas = hsol + H'
 Public Function MB_hgas(ByVal T_K As Double, ByVal w As Double) As Double
     MB_hgas = MB_hsol(T_K, w) + MB_Hprime(T_K, w)
 End Function
 
-' Iedema 表 2.7.2.2.2：密度，kg/m3。T_K 为开尔文（内部换算 t[°C]）；
-' w 为总溶剂质量分数 w_t（甲醇+水），w_H 为水质量分数；
-' 干溶液 w_H=0 时 w_t 即甲醇质量分数。适用 w=0.28~0.42，t=-10~140 °C
+' Iedema Table 2.7.2.2.2: density, kg/m3. T_K in kelvin (converted internally to t[°C]);
+' w is the total solvent mass fraction w_t (methanol + water), w_H is the water mass fraction;
+' for a dry solution (w_H=0), w_t is the methanol mass fraction. Valid w=0.28~0.42, t=-10~140 °C
 Public Function MB_RhoIedema(ByVal T_K As Double, ByVal w As Double, _
                              ByVal w_H As Double) As Double
     Dim t As Double, rho25 As Double, drho As Double
@@ -274,8 +274,8 @@ Public Function MB_RhoIedema(ByVal T_K As Double, ByVal w As Double, _
     MB_RhoIedema = (rho25 + drho * (t - 25#)) * (1# + 0.32 * w_H)
 End Function
 
-' Iedema 表 2.7.3：动力黏度，Pa·s；ln eta = eta0(w) + etaT(w)/T_K。
-' 末项取 w^3 读法（裁决依据见模块头）。适用 w=0.28~1.0，t=20~120 °C
+' Iedema Table 2.7.3: dynamic viscosity, Pa·s; ln eta = eta0(w) + etaT(w)/T_K.
+' The last term takes the w^3 reading (ruling basis in the module header). Valid w=0.28~1.0, t=20~120 °C
 Public Function MB_EtaIedema(ByVal T_K As Double, ByVal w As Double) As Double
     Dim eta0 As Double, etaT As Double
     eta0 = -18.29756 + 26.2373 * w - 33.51444 * w * w + 13.86405 * w * w * w

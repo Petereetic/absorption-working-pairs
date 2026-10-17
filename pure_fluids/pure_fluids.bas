@@ -1,37 +1,37 @@
 Attribute VB_Name = "PureFluids"
-' 九工质纯物质饱和性质（Excel VBA 工作表函数）：R134a / R22 / R124 / H2O / NH3 / CH3OH / R32 / R218 / CO2
-' 基准：CoolProp 内置参考状态方程（R134a: Tillner-Roth & Baehr 1994）
-' 参考态：0°C 饱和液体焓 = 100 kJ/kg（与用户现有模型统一）
-' 压力公开单位 MPa（2026-10-14 改）：Wagner 拟合内部以 bar 计（Pc 为 bar），公开函数边界换算；lnP 六工质原生 MPa。
+' Pure-substance saturation properties of nine fluids (Excel VBA worksheet functions): R134a / R22 / R124 / H2O / NH3 / CH3OH / R32 / R218 / CO2
+' Datum: CoolProp's built-in reference equations of state (R134a: Tillner-Roth & Baehr 1994)
+' Reference state: saturated-liquid enthalpy at 0°C = 100 kJ/kg (unified with the user's existing models)
+' Public pressure unit MPa (changed 2026-10-14): the Wagner fits work internally in bar (Pc in bar), with conversion at the public-function boundary; the six lnP fluids are natively in MPa.
 '
-' 工作表函数：
-'   =Pref_R134a(t_C)  饱和压力 MPa，t_C: °C（-50~95）
-'   =Tsat_R134a(P_MPa) 饱和温度 °C，P_MPa: MPa
-'   =hliq_R134a(t_C)    饱和液体焓 kJ/kg
-'   =hgas_R134a(t_C)    饱和蒸气焓 kJ/kg
-'   =Pref_R22(t_C)    饱和压力 MPa（-50~90）
-'   =Tsat_R22(P_MPa)  饱和温度 °C
-'   =hliq_R22(t_C)      饱和液体焓 kJ/kg
-'   =hgas_R22(t_C)      饱和蒸气焓 kJ/kg
-'   =Pref_R124(t_C)   R124 饱和压力 MPa（-40~110；NIST 表 Wagner 拟合）
-'   =Tsat_R124(P_MPa) R124 饱和温度 °C
-'   =hliq_R124(t_C)     R124 饱和液体焓 kJ/kg（基准同上，已平移）
-'   =hgas_R124(t_C)     R124 饱和蒸气焓 kJ/kg
-' （R124 函数名用"属性在前"式：Excel 工作表不接受 R+数字打头的函数名）
-' 2026-10-13 增补六工质（NIST WebBook 饱和表拟合，笔记见 fit-notes/）：
-'   =Pref_H2O(t_C) / =Tsat_H2O(P_MPa) / =hliq_H2O / =hgas_H2O / =hlat_H2O（1~373°C）
-'   =Pref_NH3 / =Tsat_NH3 / =hliq_NH3 / =hgas_NH3 / =hlat_NH3（-77~132°C）
-'   =Pref_CH3OH / =Tsat_CH3OH / =hliq_CH3OH / =hgas_CH3OH / =hlat_CH3OH（-90~239°C）
-'   =Pref_R32 / =Tsat_R32 / =hliq_R32 / =hgas_R32 / =hlat_R32（-136~78°C）
-'   =Pref_R218 / =Tsat_R218 / =hliq_R218 / =hgas_R218 / =hlat_R218（-147~71°C）
-'   =Pref_CO2 / =Tsat_CO2 / =hliq_CO2 / =hgas_CO2 / =hlat_CO2（-56~30°C）
-'   六工质焓已平移到统一基准，平移量见各工质段注；饱和压以 MPa 返回。
+' Worksheet functions:
+'   =Pref_R134a(t_C)  saturation pressure MPa, t_C: °C (-50~95)
+'   =Tsat_R134a(P_MPa) saturation temperature °C, P_MPa: MPa
+'   =hliq_R134a(t_C)    saturated-liquid enthalpy kJ/kg
+'   =hgas_R134a(t_C)    saturated-vapour enthalpy kJ/kg
+'   =Pref_R22(t_C)    saturation pressure MPa (-50~90)
+'   =Tsat_R22(P_MPa)  saturation temperature °C
+'   =hliq_R22(t_C)      saturated-liquid enthalpy kJ/kg
+'   =hgas_R22(t_C)      saturated-vapour enthalpy kJ/kg
+'   =Pref_R124(t_C)   R124 saturation pressure MPa (-40~110; NIST-table Wagner fit)
+'   =Tsat_R124(P_MPa) R124 saturation temperature °C
+'   =hliq_R124(t_C)     R124 saturated-liquid enthalpy kJ/kg (datum as above, shifted)
+'   =hgas_R124(t_C)     R124 saturated-vapour enthalpy kJ/kg
+' (The R124 names use the property-first form: Excel worksheets do not accept function names beginning with R followed by a digit)
+' Six fluids added 2026-10-13 (fits to the NIST WebBook saturation tables; notes in fit-notes/):
+'   =Pref_H2O(t_C) / =Tsat_H2O(P_MPa) / =hliq_H2O / =hgas_H2O / =hlat_H2O(1~373°C)
+'   =Pref_NH3 / =Tsat_NH3 / =hliq_NH3 / =hgas_NH3 / =hlat_NH3(-77~132°C)
+'   =Pref_CH3OH / =Tsat_CH3OH / =hliq_CH3OH / =hgas_CH3OH / =hlat_CH3OH(-90~239°C)
+'   =Pref_R32 / =Tsat_R32 / =hliq_R32 / =hgas_R32 / =hlat_R32(-136~78°C)
+'   =Pref_R218 / =Tsat_R218 / =hliq_R218 / =hgas_R218 / =hlat_R218(-147~71°C)
+'   =Pref_CO2 / =Tsat_CO2 / =hliq_CO2 / =hgas_CO2 / =hlat_CO2(-56~30°C)
+'   The enthalpies of the six fluids are shifted to the uniform datum; see each fluid's section note for the shift. Saturation pressures are returned in MPa.
 '
-' 注意：本模块未在真实 Excel 中编译运行过，使用前请先编译验证。
+' Note: this module has not been compiled or run in real Excel; compile and verify before use.
 
 Option Explicit
 
-' ---------- R134a 常数 ----------
+' ---------- R134a constants ----------
 Private Const R134A_TC As Double = 374.21
 Private Const R134A_PC As Double = 40.59
 Private Const R134A_TLO As Double = -50#
@@ -70,7 +70,7 @@ Private Function R134aHVc(ByVal i As Long) As Double
     End Select
 End Function
 
-' ---------- R22 常数 ----------
+' ---------- R22 constants ----------
 Private Const R22_TC As Double = 369.3
 Private Const R22_PC As Double = 49.9
 Private Const R22_TLO As Double = -50#
@@ -109,7 +109,7 @@ Private Function R22HVc(ByVal i As Long) As Double
     End Select
 End Function
 
-' ---------- 内部：Wagner 饱和压力 ----------
+' ---------- Internal: Wagner saturation pressure ----------
 Private Function WagnerPref(ByVal t_C As Double, ByVal Tc As Double, _
     ByVal Pc As Double, ByVal fluid As Long) As Double
     Dim T As Double, tau As Double, s As Double, i As Long
@@ -129,7 +129,7 @@ Private Function WagnerPref(ByVal t_C As Double, ByVal Tc As Double, _
     WagnerPref = Pc * Exp((Tc / T) * s)
 End Function
 
-' ---------- 内部：6 次多项式 ----------
+' ---------- Internal: degree-6 polynomial ----------
 Private Function Poly6(ByVal t As Double, ByVal fluid As Long, ByVal isVap As Boolean) As Double
     Dim c(0 To 6) As Double, i As Long, r As Double
     For i = 0 To 6
@@ -146,7 +146,7 @@ Private Function Poly6(ByVal t As Double, ByVal fluid As Long, ByVal isVap As Bo
     Poly6 = r
 End Function
 
-' ---------- 内部：二分法反算饱和温度 ----------
+' ---------- Internal: bisection inversion of saturation temperature ----------
 Private Function TsatBisect(ByVal P_bar As Double, ByVal fluid As Long) As Double
     Dim lo As Double, hi As Double, mid As Double, i As Long
     Dim tlo As Double, thi As Double, Tc As Double, Pc As Double
@@ -167,7 +167,7 @@ Private Function TsatBisect(ByVal P_bar As Double, ByVal fluid As Long) As Doubl
     TsatBisect = 0.5 * (lo + hi)
 End Function
 
-' ================= R134a 工作表函数 =================
+' ================= R134a worksheet functions =================
 Public Function Pref_R134a(ByVal t_C As Double) As Double
     Pref_R134a = 0.1 * WagnerPref(t_C, R134A_TC, R134A_PC, 1)
 End Function
@@ -184,12 +184,12 @@ Public Function hgas_R134a(ByVal t_C As Double) As Double
     hgas_R134a = Poly6(t_C, 1, True)
 End Function
 
-' R134a 饱和潜热 kJ/kg = hgas - hliq（同一参考态）
+' R134a saturation latent heat, kJ/kg = hgas - hliq (same reference state)
 Public Function hlat_R134a(ByVal t_C As Double) As Double
     hlat_R134a = hgas_R134a(t_C) - hliq_R134a(t_C)
 End Function
 
-' ================= R22 工作表函数 =================
+' ================= R22 worksheet functions =================
 Public Function Pref_R22(ByVal t_C As Double) As Double
     Pref_R22 = 0.1 * WagnerPref(t_C, R22_TC, R22_PC, 2)
 End Function
@@ -206,16 +206,16 @@ Public Function hgas_R22(ByVal t_C As Double) As Double
     hgas_R22 = Poly6(t_C, 2, True)
 End Function
 
-' R22 饱和潜热 kJ/kg = hgas - hliq（同一参考态）
+' R22 saturation latent heat, kJ/kg = hgas - hliq (same reference state)
 Public Function hlat_R22(ByVal t_C As Double) As Double
     hlat_R22 = hgas_R22(t_C) - hliq_R22(t_C)
 End Function
 
-' ================= R124（NIST WebBook 饱和表拟合） =================
-' Psat: Wagner 变体 ln(P/Pc)=(Tc/T)(a1 τ+a2 τ^1.5+a3 τ^3+a4 τ^6)，τ=1-T/Tc
-'   Tc=395.428K, Pc=36.245bar；适用 -40~110°C，对表最大偏差 0.111%
-' 焓: 6 次多项式；表基准 0°C 液体 = 200 kJ/kg，已整体平移 -100 与本模块统一
-'   同带最大偏差 hf 1.11、hg 1.63 kJ/kg
+' ================= R124 (NIST WebBook saturation-table fit) =================
+' Psat: Wagner variant ln(P/Pc)=(Tc/T)(a1 τ+a2 τ^1.5+a3 τ^3+a4 τ^6), τ=1-T/Tc
+'   Tc=395.428K, Pc=36.245bar; valid -40~110°C, max deviation vs. table 0.111%
+' Enthalpy: degree-6 polynomial; table datum saturated liquid at 0°C = 200 kJ/kg, shifted as a whole by -100 to unify with this module
+'   Max deviations in the same band: hf 1.11, hg 1.63 kJ/kg
 Private Const R124_TC As Double = 395.428
 Private Const R124_PC As Double = 36.245
 Private Const R124_TLO As Double = -40#
@@ -304,18 +304,18 @@ Public Function hgas_R124(ByVal t_C As Double) As Double
     hgas_R124 = Poly6_R124(t_C, True)
 End Function
 
-' R124 饱和潜热 kJ/kg = hgas - hliq（同一参考态）
+' R124 saturation latent heat, kJ/kg = hgas - hliq (same reference state)
 Public Function hlat_R124(ByVal t_C As Double) As Double
     hlat_R124 = hgas_R124(t_C) - hliq_R124(t_C)
 End Function
 
-' =============== NIST WebBook 表拟合六工质（2026-10-13 增补）===============
-' 饱和压：lnP-t 7 次多项式（笔记取定式，ln(P/MPa)；此处直接以 MPa 返回）；
-' 焓：6 次多项式，常数项已平移到统一基准（0°C 饱和液体 = 100 kJ/kg），
-' 平移量见各工质段注（仅常数项变动，潜热不变）。
-' fluid 编号：3=H2O，4=NH3，5=CH3OH，6=R32，7=R218，8=CO2。
+' =============== Six fluids fitted to the NIST WebBook tables (added 2026-10-13) ===============
+' Saturation pressure: lnP-t degree-7 polynomial (the notes' adopted form, ln(P/MPa); returned directly in MPa here);
+' Enthalpy: degree-6 polynomial; the constant term has been shifted to the uniform datum (saturated liquid at 0°C = 100 kJ/kg);
+' see each fluid's section note for the shift (constant term only; latent heats unchanged).
+' Fluid indices: 3=H2O, 4=NH3, 5=CH3OH, 6=R32, 7=R218, 8=CO2.
 
-' ---------- H2O 常数（平移 +93.351889719 kJ/kg） ----------
+' ---------- H2O constants (shift +93.351889719 kJ/kg) ----------
 Private Const H2O_TLO As Double = 1.0
 Private Const H2O_THI As Double = 373.0
 
@@ -356,7 +356,7 @@ Private Function H2OHVc(ByVal i As Long) As Double
     End Select
 End Function
 
-' ---------- NH3 常数（平移 -244.76806269 kJ/kg） ----------
+' ---------- NH3 constants (shift -244.76806269 kJ/kg) ----------
 Private Const NH3_TLO As Double = -77.0
 Private Const NH3_THI As Double = 132.0
 
@@ -397,7 +397,7 @@ Private Function NH3HVc(ByVal i As Long) As Double
     End Select
 End Function
 
-' ---------- CH3OH 常数（平移 +266.34144157 kJ/kg） ----------
+' ---------- CH3OH constants (shift +266.34144157 kJ/kg) ----------
 Private Const CH3OH_TLO As Double = -90.0
 Private Const CH3OH_THI As Double = 239.0
 
@@ -438,7 +438,7 @@ Private Function CH3OHHVc(ByVal i As Long) As Double
     End Select
 End Function
 
-' ---------- R32 常数（平移 -100.67343194 kJ/kg） ----------
+' ---------- R32 constants (shift -100.67343194 kJ/kg) ----------
 Private Const R32_TLO As Double = -136.0
 Private Const R32_THI As Double = 78.0
 
@@ -479,7 +479,7 @@ Private Function R32HVc(ByVal i As Long) As Double
     End Select
 End Function
 
-' ---------- R218 常数（平移 -100.17798078 kJ/kg） ----------
+' ---------- R218 constants (shift -100.17798078 kJ/kg) ----------
 Private Const R218_TLO As Double = -147.0
 Private Const R218_THI As Double = 71.0
 
@@ -520,7 +520,7 @@ Private Function R218HVc(ByVal i As Long) As Double
     End Select
 End Function
 
-' ---------- CO2 常数（平移 -100.25579182 kJ/kg） ----------
+' ---------- CO2 constants (shift -100.25579182 kJ/kg) ----------
 Private Const CO2_TLO As Double = -56.0
 Private Const CO2_THI As Double = 30.0
 
@@ -561,7 +561,7 @@ Private Function CO2HVc(ByVal i As Long) As Double
     End Select
 End Function
 
-' ---------- 内部：六工质分发 ----------
+' ---------- Internal: six-fluid dispatcher ----------
 Private Function LnpCoef(ByVal fluid As Long, ByVal i As Long) As Double
     Select Case fluid
         Case 3: LnpCoef = H2OLnPc(i)
@@ -657,7 +657,7 @@ Private Function TsatBisectF(ByVal P_MPa As Double, ByVal fluid As Long) As Doub
     TsatBisectF = 0.5 * (lo + hi)
 End Function
 
-' ================= H2O 工作表函数 =================
+' ================= H2O worksheet functions =================
 Public Function Pref_H2O(ByVal t_C As Double) As Double
     Pref_H2O = LnpPref(t_C, 3)
 End Function
@@ -674,12 +674,12 @@ Public Function hgas_H2O(ByVal t_C As Double) As Double
     hgas_H2O = Poly6F(t_C, 3, True)
 End Function
 
-' H2O 饱和潜热 kJ/kg = hgas - hliq（同一参考态）
+' H2O saturation latent heat, kJ/kg = hgas - hliq (same reference state)
 Public Function hlat_H2O(ByVal t_C As Double) As Double
     hlat_H2O = hgas_H2O(t_C) - hliq_H2O(t_C)
 End Function
 
-' ================= NH3 工作表函数 =================
+' ================= NH3 worksheet functions =================
 Public Function Pref_NH3(ByVal t_C As Double) As Double
     Pref_NH3 = LnpPref(t_C, 4)
 End Function
@@ -696,12 +696,12 @@ Public Function hgas_NH3(ByVal t_C As Double) As Double
     hgas_NH3 = Poly6F(t_C, 4, True)
 End Function
 
-' NH3 饱和潜热 kJ/kg = hgas - hliq（同一参考态）
+' NH3 saturation latent heat, kJ/kg = hgas - hliq (same reference state)
 Public Function hlat_NH3(ByVal t_C As Double) As Double
     hlat_NH3 = hgas_NH3(t_C) - hliq_NH3(t_C)
 End Function
 
-' ================= CH3OH 工作表函数 =================
+' ================= CH3OH worksheet functions =================
 Public Function Pref_CH3OH(ByVal t_C As Double) As Double
     Pref_CH3OH = LnpPref(t_C, 5)
 End Function
@@ -718,12 +718,12 @@ Public Function hgas_CH3OH(ByVal t_C As Double) As Double
     hgas_CH3OH = Poly6F(t_C, 5, True)
 End Function
 
-' CH3OH 饱和潜热 kJ/kg = hgas - hliq（同一参考态）
+' CH3OH saturation latent heat, kJ/kg = hgas - hliq (same reference state)
 Public Function hlat_CH3OH(ByVal t_C As Double) As Double
     hlat_CH3OH = hgas_CH3OH(t_C) - hliq_CH3OH(t_C)
 End Function
 
-' ================= R32 工作表函数 =================
+' ================= R32 worksheet functions =================
 Public Function Pref_R32(ByVal t_C As Double) As Double
     Pref_R32 = LnpPref(t_C, 6)
 End Function
@@ -740,12 +740,12 @@ Public Function hgas_R32(ByVal t_C As Double) As Double
     hgas_R32 = Poly6F(t_C, 6, True)
 End Function
 
-' R32 饱和潜热 kJ/kg = hgas - hliq（同一参考态）
+' R32 saturation latent heat, kJ/kg = hgas - hliq (same reference state)
 Public Function hlat_R32(ByVal t_C As Double) As Double
     hlat_R32 = hgas_R32(t_C) - hliq_R32(t_C)
 End Function
 
-' ================= R218 工作表函数 =================
+' ================= R218 worksheet functions =================
 Public Function Pref_R218(ByVal t_C As Double) As Double
     Pref_R218 = LnpPref(t_C, 7)
 End Function
@@ -762,12 +762,12 @@ Public Function hgas_R218(ByVal t_C As Double) As Double
     hgas_R218 = Poly6F(t_C, 7, True)
 End Function
 
-' R218 饱和潜热 kJ/kg = hgas - hliq（同一参考态）
+' R218 saturation latent heat, kJ/kg = hgas - hliq (same reference state)
 Public Function hlat_R218(ByVal t_C As Double) As Double
     hlat_R218 = hgas_R218(t_C) - hliq_R218(t_C)
 End Function
 
-' ================= CO2 工作表函数 =================
+' ================= CO2 worksheet functions =================
 Public Function Pref_CO2(ByVal t_C As Double) As Double
     Pref_CO2 = LnpPref(t_C, 8)
 End Function
@@ -784,7 +784,7 @@ Public Function hgas_CO2(ByVal t_C As Double) As Double
     hgas_CO2 = Poly6F(t_C, 8, True)
 End Function
 
-' CO2 饱和潜热 kJ/kg = hgas - hliq（同一参考态）
+' CO2 saturation latent heat, kJ/kg = hgas - hliq (same reference state)
 Public Function hlat_CO2(ByVal t_C As Double) As Double
     hlat_CO2 = hgas_CO2(t_C) - hliq_CO2(t_C)
 End Function

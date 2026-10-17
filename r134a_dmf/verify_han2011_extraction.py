@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""用 Han 2011 论文自带的 NRTL 参数重算 pcal, 与论文表3的 pcal 列对比,
-验证 han2011.csv 录入无误 (温度块划分、行对应关系)。
-论文式(6)(7): tau12=(a0+a1*lnT)/(R*T), tau21=(b0+b1*lnT)/(R*T)
-表4: a0=8073, a1=1367, b0=11638, b1=2106, alpha=0.14
-p = gamma1 * x1 * psat(T) * Poynting (Poynting~1, 忽略)
-psat 用本项目 Tillner-Roth&Baehr 拟合 (与 REFPROP 7 在此温区偏差 <0.3%)。"""
+"""Recompute pcal with the NRTL parameters printed in Han 2011 itself and compare with the pcal column of the paper's Table 3,
+verifying that han2011.csv was entered without error (temperature-block division, row correspondence).
+Paper Eqs. (6)(7): tau12=(a0+a1*lnT)/(R*T), tau21=(b0+b1*lnT)/(R*T)
+Table 4: a0=8073, a1=1367, b0=11638, b1=2106, alpha=0.14
+p = gamma1 * x1 * psat(T) * Poynting (Poynting ~ 1, neglected)
+psat uses this project's Tillner-Roth & Baehr fit (deviation from REFPROP 7 in this temperature range <0.3%)."""
 import csv, math, sys
 sys.path.insert(0, "/home/hatch/workspace/your_files/r134a_dmf")
-from r134a_dmf import pref_r134a  # 返回 MPa
+from r134a_dmf import pref_r134a  # returns MPa
 
 R = 8.314462
 a0, a1, b0, b1, alpha = 8073.0, 1367.0, 11638.0, 2106.0, 0.14
@@ -22,7 +22,7 @@ def gamma1_han(T, x1):
     term2 = t12 * G12 / (x2 + x1 * G12) ** 2
     return math.exp(x2 ** 2 * (term1 + term2))
 
-# 论文表3的 pcal (kPa), 按录入顺序
+# The paper's Table 3 pcal values (kPa), in entry order
 pcal_paper = [
  # 263.15
  29.17,47.58,66.56,90.74,113.00,125.89,148.06,177.05,
@@ -65,4 +65,4 @@ for (T, x1, pe), pc_paper in zip(pts, pcal_paper):
 worst_sorted = sorted(worst, reverse=True)
 print(f"112 点: 我算的 pcal vs 论文 pcal, 平均|偏差|={sum(worst)/112:.3f}%, 最大|偏差|={worst_sorted[0]:.3f}%")
 print("最大的5个:", [f"{v:.2f}%" for v in worst_sorted[:5]])
-# 若平均偏差 <0.5% 且最大 <1.5%, 则录入的 (T,x) 与论文行一一对应无误
+# If the mean deviation is <0.5% and the maximum <1.5%, the entered (T,x) correspond one-to-one to the paper's rows

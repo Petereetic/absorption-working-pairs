@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""在两份 R22-DMF .docx 末尾（适用范围之后、注脚之前）插入"文章是怎么来的"章节。"""
+"""Insert a "how this article came about" section at the end of the two R22-DMF .docx files (after the scope section, before the footnotes)."""
 from docx import Document
 from docx.text.paragraph import Paragraph
 from docx.oxml import OxmlElement

@@ -1,35 +1,35 @@
 /*
- * R134a (1) + DMF (2) 溶液 VLE 与焓计算 - C 语言实现
+ * R134a (1) + DMF (2) solution VLE and enthalpy calculation - C implementation
  * ==================================================
- * 模型: NRTL 活度系数 + gamma-phi 泡点模型
- * 数据源: Zehioua et al., J. Chem. Eng. Data 2009, DOI: 10.1021/je900440t
- * 验证: 58 个实验点 (303.30-353.24 K), 泡点压力平均绝对相对误差 1.49%
- *        (注: 1.49% 仅为训练集拟合精度。独立验证: Cui 2007 90点 AARD 15.1%,
- *         Han 2011 112点 AARD 10.1%; 跨实验室不确定度约 300K/8%、360K/20%。
- *         详见《文献合并研究-R134a-DMF-2026-09-30.md》)
+ * Model: NRTL activity coefficients + gamma-phi bubble-point model
+ * Data source: Zehioua et al., J. Chem. Eng. Data 2009, DOI: 10.1021/je900440t
+ * Validation: 58 experimental points (303.30-353.24 K); bubble-point pressure mean absolute relative error 1.49%
+ *        (Note: the 1.49% is only the fit accuracy on the training set. Independent validations: Cui 2007, 90 points, AARD 15.1%;
+ *         Han 2011, 112 points, AARD 10.1%; cross-laboratory uncertainty about 300K/8%, 360K/20%.
+ *         See the merged-literature study document for R134a-DMF, dated 2026-09-30.)
  *
- * 参考态: 273.15 K 饱和液体焓 = 100 kJ/kg (R134a 与 DMF 统一)
+ * Reference state: saturated-liquid enthalpy at 273.15 K = 100 kJ/kg (unified for R134a and DMF)
  *
- * 编译: gcc -O2 -o r134a_dmf r134a_dmf.c -lm
- * 运行: ./r134a_dmf
+ * Build: gcc -O2 -o r134a_dmf r134a_dmf.c -lm
+ * Run: ./r134a_dmf
  */
 
 #include <stdio.h>
 #include <math.h>
 
-/* ---------- 常数 ---------- */
+/* ---------- Constants ---------- */
 #define R_GAS   8.314462618   /* J/(mol·K) */
-#define M1      102.03        /* R134a 摩尔质量, g/mol */
-#define M2      73.09         /* DMF 摩尔质量, g/mol */
+#define M1      102.03        /* R134a molar mass, g/mol */
+#define M2      73.09         /* DMF molar mass, g/mol */
 
-/* NRTL 参数 (gamma-phi 框架下拟合, alpha=0.3) */
+/* NRTL parameters (fitted within the gamma-phi framework, alpha=0.3) */
 #define DG12    868.1         /* J/mol, (g12 - g22) */
 #define DG21   -929.1         /* J/mol, (g21 - g11) */
 #define ALPHA   0.3
 
-/* ---------- 纯组分饱和压力 (MPa), T in K ---------- */
+/* ---------- Pure-component saturation pressures (MPa), T in K ---------- */
 
-/* R134a: 拟合自 Zehioua 表3, 298-353K 内误差 < 0.2% */
+/* R134a: fitted to Table 3 of Zehioua; error < 0.2% within 298-353K */
 double pref_r134a(double T)
 {
     return exp(7.89191 - 2310.84 / (T - 19.79));
@@ -41,7 +41,7 @@ double psat_dmf(double T)
     return pow(10.0, 3.93068 - 1337.716 / (T - 82.648)) * 0.1;
 }
 
-/* ---------- 液体摩尔体积 (m3/mol), Poynting 校正用 ---------- */
+/* ---------- Liquid molar volumes (m3/mol), for the Poynting correction ---------- */
 
 double vl_r134a(double T)
 {
@@ -55,8 +55,8 @@ double vl_dmf(double T)
     return 0.07309 / (944.0 * (1.0 - 0.0009 * (T - 293.0)));
 }
 
-/* ---------- NRTL 活度系数 ---------- */
-/* 输入: T(K), x1(R134a 液相摩尔分数); 输出: *g1, *g2 */
+/* ---------- NRTL activity coefficients ---------- */
+/* Input: T(K), x1 (R134a liquid-phase mole fraction); output: *g1, *g2 */
 void nrtl_gamma(double T, double x1, double *g1, double *g2)
 {
     double x2 = 1.0 - x1;
@@ -73,7 +73,7 @@ void nrtl_gamma(double T, double x1, double *g1, double *g2)
     *g2 = exp(ln_g2);
 }
 
-/* ---------- NRTL 超额摩尔焓 (J/mol), 解析式 ---------- */
+/* ---------- NRTL excess molar enthalpy (J/mol), analytic form ---------- */
 double nrtl_hE(double T, double x1)
 {
     double x2 = 1.0 - x1;
@@ -88,11 +88,11 @@ double nrtl_hE(double T, double x1)
     return -R_GAS * T * x1 * x2 * (term1 + term2);
 }
 
-/* ---------- 泡点压力 ---------- */
+/* ---------- Bubble-point pressure ---------- */
 /*
- * 输入: T(K), x1(液相摩尔分数)
- * 输出: *p_MPa 泡点压力, *y1 气相摩尔分数 (可传 NULL)
- * 返回: 0 成功
+ * Input: T(K), x1 (liquid-phase mole fraction)
+ * Output: *p_MPa bubble-point pressure, *y1 vapour-phase mole fraction (NULL allowed)
+ * Returns: 0 on success
  */
 int psol(double T, double x1, double *p_MPa, double *y1)
 {
@@ -121,7 +121,7 @@ int psol(double T, double x1, double *p_MPa, double *y1)
     return 0;
 }
 
-/* ---------- 已知泡点压力反算温度 (牛顿迭代) ---------- */
+/* ---------- Back-calculate the temperature from the bubble-point pressure (Newton iteration) ---------- */
 double bubble_T(double p_MPa, double x1, double Tguess)
 {
     double T = Tguess, pc, p2, dpdT, dT = 0.2;
@@ -138,13 +138,13 @@ double bubble_T(double p_MPa, double x1, double Tguess)
     return T;
 }
 
-/* ---------- 已知露点温度与溶液温度反算浓度 (二分 80 次) ---------- */
+/* ---------- Back-calculate the concentration from the dew-point temperature and the solution temperature (80 bisection steps) ---------- */
 /*
- * 输入: Tdew(K) 露点温度, Tsol(K) 溶液温度
- * 返回: x1 (R134a 液相摩尔分数); 无根时返回 NAN
- * 原理: DMF 视为不挥发, 露点定压 P = pref_r134a(Tdew);
- *       再二分求 psol(Tsol, x1) = P, 括号取 x1 in [0, 1]。
- * 无根情形: P 超出 Tsol 下泡点压力区间 (如 Tsol 明显低于 Tdew)。
+ * Input: Tdew(K) dew-point temperature, Tsol(K) solution temperature
+ * Returns: x1 (R134a liquid-phase mole fraction); NAN when there is no root
+ * Principle: DMF is treated as non-volatile; the dew point fixes the pressure P = pref_r134a(Tdew);
+ *       then bisection solves psol(Tsol, x1) = P, with the bracket x1 in [0, 1].
+ * No-root case: P outside the bubble-point pressure interval under Tsol (e.g. Tsol clearly below Tdew).
  */
 double xi_by_tsol_tdew(double Tsol, double Tdew)
 {
@@ -163,9 +163,9 @@ double xi_by_tsol_tdew(double Tsol, double Tdew)
     return 0.5 * (lo + hi);
 }
 
-/* ---------- 纯组分液体焓 (kJ/kg), 参考态 273.15K=100 ---------- */
+/* ---------- Pure-component liquid enthalpies (kJ/kg), reference state 273.15K = 100 ---------- */
 
-/* R134a 饱和液体: 拟合自 Tillner-Roth & Baehr (1994), 233-353K */
+/* R134a saturated liquid: fitted to Tillner-Roth & Baehr (1994), 233-353K */
 
 double hsol(double T, double x1);  /* forward: defined below */
 /* R134a saturation temperature [K]: analytic inverse of pref_r134a. */
@@ -207,13 +207,13 @@ double hliq_r134a(double T)
          + 100.0;
 }
 
-/* DMF 液体: He et al., Solar Energy 83 (2009) 式(5) */
+/* DMF liquid: He et al., Solar Energy 83 (2009), Eq. (5) */
 double h_dmf_L(double T)
 {
     return -297.61 + 0.89544 * T + 0.0020551 * T * T;
 }
 
-/* ---------- 摩尔分数 <-> 质量分数 (R134a) ---------- */
+/* ---------- Mole fraction <-> mass fraction (R134a) ---------- */
 double x_to_w(double x1)
 {
     return x1 * M1 / (x1 * M1 + (1.0 - x1) * M2);
@@ -224,7 +224,7 @@ double w_to_x(double w1)
     return (w1 / M1) / (w1 / M1 + (1.0 - w1) / M2);
 }
 
-/* ---------- 溶液焓 (kJ/kg) ---------- */
+/* ---------- Solution enthalpy (kJ/kg) ---------- */
 /* h = w1*h1 + w2*h2 + hE/Mbar */
 double hsol(double T, double x1)
 {
@@ -236,13 +236,13 @@ double hsol(double T, double x1)
     return w1 * hliq_r134a(T) + w2 * h_dmf_L(T) + hE / Mbar;
 }
 
-/* ---------- 自检主函数 ---------- */
+/* ---------- Self-check main function ---------- */
 int main(void)
 {
     double p, y1, T;
     int i;
 
-    /* VLE 验证点: {T(K), x1, Pexp(kPa)} */
+    /* VLE check points: {T(K), x1, Pexp(kPa)} */
     double chk[][3] = {
         {303.30, 0.4437,  337.0},
         {323.34, 0.7247,  923.8},

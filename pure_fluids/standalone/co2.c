@@ -1,8 +1,8 @@
-/* CO2 纯物质饱和性质（单独计算文件，与合并模块 pure_fluids.c 系数逐字同源）
- * 源：NIST WebBook 饱和表紧凑拟合（笔记见 ../fit-notes/二氧化碳饱和性质拟合-NIST表.md；源表有取整）；饱和压 lnP-t 7 次式，对表全程最大 0.0099%、常用带（-50~25°C）0.0059%；焓已由表基准平移 -100.255791821 至统一基准。
- * 函数：Pref(MPa) / Tsat(°C，二分反解，超界返回 NAN) / hliq / hgas / hlat（kJ/kg）。
- * 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。
- * 编译：gcc -O2 -Wall -DSTANDALONE_MAIN -o test_co2 co2.c -lm */
+/* CO2 pure-substance saturation properties (standalone calculation file; coefficients verbatim identical to the merged module pure_fluids.c)
+ * Source: compact fit to the NIST WebBook saturation table (see fit notes in ../fit-notes/, "carbon-dioxide saturation-property fit - NIST table"; the source table is rounded); saturation pressure as a degree-7 lnP-t polynomial, max deviation vs. table 0.0099% over the full range and 0.0059% in the usual band (-50~25°C); enthalpy shifted from the table datum by -100.255791821 to the uniform reference.
+ * Functions: Pref (MPa) / Tsat (°C, inverse by bisection, returns NAN when out of range) / hliq / hgas / hlat (kJ/kg).
+ * Reference state: saturated-liquid enthalpy at 0°C = 100 kJ/kg (uniform module reference).
+ * Build: gcc -O2 -Wall -DSTANDALONE_MAIN -o test_co2 co2.c -lm */
 #include <stdio.h>
 #include <math.h>
 

@@ -1,53 +1,53 @@
 """
-R134a (1) + DMF (2) 溶液 VLE 与焓计算 - 参考实现
+R134a (1) + DMF (2) solution VLE and enthalpy calculation - reference implementation
 ================================================
-模型: NRTL 活度系数 + gamma-phi 泡点模型
-参数拟合自: Zehioua et al., J. Chem. Eng. Data 2009 (DOI: 10.1021/je900440t)
-            表 5, 58 个数据点, 303.30-353.24 K
-验证精度: 泡点压力平均绝对相对误差 1.49%, 最大 3.01%
+Model: NRTL activity coefficients + gamma-phi bubble-point model
+Parameters fitted to: Zehioua et al., J. Chem. Eng. Data 2009 (DOI: 10.1021/je900440t)
+            Table 5, 58 data points, 303.30-353.24 K
+Validation accuracy: bubble-point pressure mean absolute relative error 1.49%, maximum 3.01%
 
-参考态: 273.15 K 饱和液体焓 = 100 kJ/kg (R134a 与 DMF 统一)
+Reference state: saturated-liquid enthalpy at 273.15 K = 100 kJ/kg (unified for R134a and DMF)
 
-作者: Muse (2026-09-27)
+Author: Muse (2026-09-27)
 """
 
 import math
 
 R = 8.314462618          # J/(mol·K)
-M1 = 102.03              # R134a 摩尔质量, g/mol
-M2 = 73.09               # DMF 摩尔质量, g/mol
+M1 = 102.03              # R134a molar mass, g/mol
+M2 = 73.09               # DMF molar mass, g/mol
 
-# ---- NRTL 参数 (拟合值, alpha=0.3) ----
+# ---- NRTL parameters (fitted values, alpha=0.3) ----
 DG12 = 868.1             # J/mol,  (g12 - g22)
 DG21 = -929.1            # J/mol,  (g21 - g11)
 ALPHA = 0.3
 
 
 def pref_r134a(T):
-    """R134a 饱和压力, MPa. T in K. (拟合自 Zehioua 表3, 298-353K, 误差<0.2%)"""
+    """R134a saturation pressure, MPa. T in K. (Fitted to Table 3 of Zehioua, 298-353K, error <0.2%)"""
     return math.exp(7.89191 - 2310.84 / (T - 19.79))
 
 
 def psat_dmf(T):
-    """DMF 饱和压力, MPa. T in K. (NIST WebBook, Gopal & Rizvi 1968)"""
+    """DMF saturation pressure, MPa. T in K. (NIST WebBook, Gopal & Rizvi 1968)"""
     return (10 ** (3.93068 - 1337.716 / (T - 82.648))) * 0.1
 
 
 def vl_r134a(T):
-    """R134a 饱和液体摩尔体积, m3/mol (Poynting 校正用, 粗略值即可)"""
+    """R134a saturated-liquid molar volume, m3/mol (for the Poynting correction; a rough value suffices)"""
     rho = 1207 * (1 - 0.35 * (T - 300) / 100)   # kg/m3
     return 0.10203 / max(rho, 800)
 
 
 def vl_dmf(T):
-    """DMF 液体摩尔体积, m3/mol"""
+    """DMF liquid molar volume, m3/mol"""
     return 0.07309 / (944 * (1 - 0.0009 * (T - 293)))
 
 
 def nrtl_gamma(T, x1):
     """
-    NRTL 活度系数.
-    返回 (gamma1, gamma2)
+    NRTL activity coefficients.
+    Returns (gamma1, gamma2)
     """
     x2 = 1.0 - x1
     t12 = DG12 / (R * T)
@@ -63,7 +63,7 @@ def nrtl_gamma(T, x1):
 
 def nrtl_hE(T, x1):
     """
-    NRTL 超额摩尔焓, J/mol. (由 gE 对 T 解析求导, 已用数值微分验证)
+    NRTL excess molar enthalpy, J/mol. (Obtained by analytic differentiation of gE with respect to T; verified by numerical differentiation)
     hE = -R*T^2 * d(gE/RT)/dT
     """
     x2 = 1.0 - x1
@@ -80,9 +80,9 @@ def nrtl_hE(T, x1):
 
 def psol(T, x1):
     """
-    泡点压力计算.
-    输入: T (K), x1 (R134a 液相摩尔分数)
-    返回: (p_MPa, y1) 泡点压力 MPa, 气相 R134a 摩尔分数
+    Bubble-point pressure calculation.
+    Input: T (K), x1 (R134a liquid-phase mole fraction)
+    Returns: (p_MPa, y1) bubble-point pressure in MPa and vapour-phase R134a mole fraction
     """
     x2 = 1.0 - x1
     g1, g2 = nrtl_gamma(T, x1)
@@ -101,9 +101,9 @@ def psol(T, x1):
 
 def bubble_T(p_MPa, x1, Tguess=330.0):
     """
-    已知泡点压力反算温度 (牛顿迭代).
-    输入: p_MPa, x1, 初值 Tguess (K)
-    返回: T (K)
+    Back-calculate the temperature from a known bubble-point pressure (Newton iteration).
+    Input: p_MPa, x1, initial value Tguess (K)
+    Returns: T (K)
     """
     T = Tguess
     for _ in range(50):
@@ -119,13 +119,13 @@ def bubble_T(p_MPa, x1, Tguess=330.0):
 
 def xi_by_tsol_tdew(Tsol, Tdew):
     """
-    已知露点温度与溶液温度反算浓度 (二分迭代 80 次).
-    输入: Tdew (K) 露点温度, Tsol (K) 溶液温度
-    返回: x1 (R134a 液相摩尔分数); 无根时返回 None
-    原理: DMF 视为不挥发, 露点定压 P = pref_r134a(Tdew);
-          再二分求 psol(Tsol, x1) = P, 括号取 x1 in [0, 1]
-          (泡点压力在该区间内随 x1 单调增).
-    无根情形: P 超出 Tsol 下泡点压力区间 (如 Tsol 明显低于 Tdew).
+    Back-calculate the concentration from a known dew-point temperature and solution temperature (80 bisection iterations).
+    Input: Tdew (K) dew-point temperature, Tsol (K) solution temperature
+    Returns: x1 (R134a liquid-phase mole fraction); None when there is no root
+    Principle: DMF is treated as non-volatile; the dew point fixes the pressure P = pref_r134a(Tdew);
+          then bisection solves psol(Tsol, x1) = P, with the bracket x1 in [0, 1]
+          (the bubble-point pressure increases monotonically with x1 in that interval).
+    No-root case: P outside the bubble-point pressure interval under Tsol (e.g. Tsol clearly below Tdew).
     """
     P = pref_r134a(Tdew)
     Plo = psol(Tsol, 0.0)[0]
@@ -144,9 +144,9 @@ def xi_by_tsol_tdew(Tsol, Tdew):
 
 def hliq_r134a(T):
     """
-    R134a 饱和液体焓, kJ/kg.
-    拟合自 Tillner-Roth & Baehr (1994) 表 C-1, 参考态已平移至 273.15K=100 kJ/kg.
-    适用 ~233-353 K, 拟合误差 <0.4 kJ/kg.
+    R134a saturated-liquid enthalpy, kJ/kg.
+    Fitted to Table C-1 of Tillner-Roth & Baehr (1994); the reference state has been shifted to 273.15K = 100 kJ/kg.
+    Valid approx. 233-353 K, fit error <0.4 kJ/kg.
     """
     t = T - 273.15
     return 1.310235e-5 * t**3 + 1.34329e-3 * t**2 + 1.334242 * t + 100.0
@@ -154,27 +154,27 @@ def hliq_r134a(T):
 
 def h_dmf_L(T):
     """
-    DMF 液体焓, kJ/kg.
-    He et al., Solar Energy 83 (2009) 式(5), 参考态 273.15K 饱和液体=100 kJ/kg.
+    DMF liquid enthalpy, kJ/kg.
+    He et al., Solar Energy 83 (2009), Eq. (5); reference state: saturated liquid at 273.15K = 100 kJ/kg.
     """
     return -297.61 + 0.89544 * T + 0.0020551 * T * T
 
 
 def x_to_w(x1):
-    """摩尔分数 -> 质量分数 (R134a)"""
+    """Mole fraction -> mass fraction (R134a)"""
     return x1 * M1 / (x1 * M1 + (1 - x1) * M2)
 
 
 def w_to_x(w1):
-    """质量分数 -> 摩尔分数 (R134a)"""
+    """Mass fraction -> mole fraction (R134a)"""
     return (w1 / M1) / (w1 / M1 + (1 - w1) / M2)
 
 
 def hsol(T, x1):
     """
-    R134a-DMF 溶液焓, kJ/kg.
-    输入: T (K), x1 (R134a 液相摩尔分数)
-    参考态: 273.15K 饱和液体 = 100 kJ/kg (两组分统一)
+    R134a-DMF solution enthalpy, kJ/kg.
+    Input: T (K), x1 (R134a liquid-phase mole fraction)
+    Reference state: saturated liquid at 273.15K = 100 kJ/kg (unified for both components)
     h = w1*h1 + w2*h2 + hE/Mbar
     """
     x2 = 1.0 - x1
@@ -187,26 +187,26 @@ def hsol(T, x1):
 
 
 def _tsat_r134a(P_MPa):
-    """R134a 饱和温度 (K): pref_r134a 的解析反解
-    (P = exp(7.89191 - 2310.84/(T - 19.79)) 的逆函数)。"""
+    """R134a saturation temperature (K): analytic inverse of pref_r134a
+    (the inverse function of P = exp(7.89191 - 2310.84/(T - 19.79)))."""
     return 2310.84 / (7.89191 - math.log(P_MPa)) + 19.79
 
 
 def tdew_by_tsol_xi(T, x1):
     """
-    溶液在 (T, x1) 的露点温度 (K) (全库 TdewByTsolXi 约定):
-        Tdew = _tsat_r134a(psol(T, x1) 的压力),
-    即以本模块自有纯 R134a 线评价溶液表面压力 Psol 所对应的
-    饱和温度。DMF 视为不挥发 (气相 y1 > 0.99)。
+    Dew-point temperature (K) of the solution at (T, x1) (library-wide TdewByTsolXi convention):
+        Tdew = _tsat_r134a(the pressure from psol(T, x1)),
+    i.e. the saturation temperature corresponding to the solution surface pressure Psol, evaluated with this module's own pure-R134a line.
+    DMF is treated as non-volatile (vapour phase y1 > 0.99).
     """
     return _tsat_r134a(psol(T, x1)[0])
 
 
 def tsol_by_hsol(h, x1):
     """
-    由溶液比焓 h (kJ/kg) 与 R134a 摩尔分数 x1 反解溶液温度 (K):
-    hsol 在固定 x1 下随 T 单调增, 二分 100 次反解,
-    求解括号 T in [280, 360] K。h 超出值域时返回 None。
+    Solve the solution temperature (K) back from the solution specific enthalpy h (kJ/kg) and the R134a mole fraction x1:
+    hsol increases monotonically with T at fixed x1; inverted by 100 bisection steps,
+    with the solution bracket T in [280, 360] K. Returns None when h is outside the range.
     """
     lo, hi = 280.0, 360.0
     hlo, hhi = hsol(lo, x1), hsol(hi, x1)

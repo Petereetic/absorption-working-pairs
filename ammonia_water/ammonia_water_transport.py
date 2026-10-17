@@ -1,84 +1,84 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ammonia_water_transport.py -- 输运物性参考实现
+ammonia_water_transport.py -- Reference implementation of the transport properties
 =================================================
 M. Conde Engineering (2004)
 "Thermophysical Properties of NH3 + H2O Solutions for the Industrial
-Design of Absorption Refrigeration Equipment", 第 5~15 章 + 附录 A/B/C。
+Design of Absorption Refrigeration Equipment", Chapters 5-15 + Appendices A/B/C.
 
-第 4 章(VLE+焓, Patek & Klomfar 1995)见同目录 ammonia_water.py。
+Chapter 4 (VLE + enthalpy, Patek & Klomfar 1995) is in ammonia_water.py in the same directory.
 
-约定
+Conventions
 ----
-* x : 液相氨摩尔分数 ; y : 气相氨摩尔分数
-* T : K ; p : MPa(本模块内部按需换算) ; pc_sol 返回 MPa
-* 返回值均为 SI: cp kJ/(kg K), lambda W/(m K), eta Pa s,
-  sigma N/m, rho kg/m^3, D m^2/s ; pc_sol 为 MPa
-  (§5 多项式系数 b_i 原生以 bar 计(书中源口径),公开函数出口 ×0.1 换算)
+* x : liquid-phase ammonia mole fraction ; y : vapour-phase ammonia mole fraction
+* T : K ; p : MPa (converted internally in this module as needed) ; pc_sol returns MPa
+* All return values are SI: cp kJ/(kg K), lambda W/(m K), eta Pa s,
+  sigma N/m, rho kg/m^3, D m^2/s ; pc_sol is in MPa
+  (the §5 polynomial coefficients b_i are natively in bar (the book's source convention); public functions convert x0.1 at the exit)
 
-气相函数取 (T, y), T 为气相温度。饱和态下 T 取对应露点温度
-(用 ammonia_water.py 的 T_dew_P_y 求), 文档中给出调用示例。
+Vapour-phase functions take (T, y), with T the vapour-phase temperature. At saturation, T is the corresponding dew-point temperature
+(obtained with T_dew_P_y of ammonia_water.py); call examples are given in the documentation.
 
-拟对应状态温度(§6~§10, §14):
+Corresponding-states temperatures (§6-§10, §14):
     theta = T_sol / T_c,sol(x)
     T*_NH3 = theta * T_c,NH3 ; T*_H2O = theta * T_c,H2O
-纯组分物性在各自 T* 下求值,再按摩尔分数加权(+超额项)。
+Pure-component properties are evaluated at their own T*, then weighted by mole fraction (+ excess terms).
 
-2026-10-01 转录自 Conde 2004 全文核对。
-注意:
-* §13 正文"Appendix A"为笔误,水蒸气黏度实为附录 B(IAPWS 黏度);
-  §12 正文"Appendix B"为笔误,水蒸气导热实为附录 A(IAPWS 导热)。
-* 附录 C 的 Δη(ρ,T) 式中内层求和印刷为 ρ,按 Fenghour 原文及
-  Table 5 列标 dη_{2,j},dη_{3,j},dη_{4,j} 应为 ρ^i(i=2,3,4);
-  另按 ρ 实现与图 12 差一个量级,已用图 12 验证 ρ^i 正确。
-* 附录 C 的 Δηc(临界增强项)书中未给系数,按书中说明取 0。
+Transcribed 2026-10-01, checked against the full text of Conde 2004.
+Notes:
+* The "Appendix A" in the §13 text is a misprint; the water-vapour viscosity is actually Appendix B (IAPWS viscosity);
+  the "Appendix B" in the §12 text is a misprint; the water-vapour thermal conductivity is actually Appendix A (IAPWS thermal conductivity).
+* In the Δη(ρ,T) formula of Appendix C, the inner sum is printed as ρ; per the Fenghour original and
+  the column headings dη_{2,j}, dη_{3,j}, dη_{4,j} of Table 5 it should be ρ^i (i=2,3,4);
+  implementing it as ρ also differs from Fig. 12 by an order of magnitude; ρ^i has been verified against Fig. 12.
+* The book gives no coefficients for the Δηc (critical enhancement) term of Appendix C; per the book's note it is taken as 0.
 """
 
 import math
 
 # --------------------------------------------------------------------------
-# 临界常数(PDF p9 表)
+# Critical constants (PDF p9 table)
 # --------------------------------------------------------------------------
 T_C_NH3 = 405.4          # K
 T_C_H2O = 647.14         # K
-P_C_NH3 = 113.336        # bar(书中源数据,非模块返回值)
-P_C_H2O = 220.64         # bar(书中源数据,非模块返回值)
+P_C_NH3 = 113.336        # bar (source data as in the book; not a module return value)
+P_C_H2O = 220.64         # bar (source data as in the book; not a module return value)
 RHO_C_NH3 = 225.0        # kg/m^3
 RHO_C_H2O = 322.0        # kg/m^3
 M_NH3 = 17.03026         # kg/kmol
 M_H2O = 18.015268        # kg/kmol
 
 # --------------------------------------------------------------------------
-# §5 溶液临界温度/压力: x 的四次多项式(Sassen et al. 1990 数据拟合)
+# §5 Solution critical temperature/pressure: quartic polynomials in x (fit to data of Sassen et al. 1990)
 # --------------------------------------------------------------------------
 _A_TC = [647.14, -199.822371, 109.035522, -239.626217, 88.689691]
 _B_PC = [220.64, -37.923795, 36.424739, -41.851597, -63.805617]
 
 
 def tc_sol(x):
-    """溶液临界温度 [K], x = 氨摩尔分数。"""
+    """Solution critical temperature [K]; x = ammonia mole fraction."""
     return sum(a * x ** i for i, a in enumerate(_A_TC))
 
 
 def _pc_sol_bar(x):
-    """溶液临界压力原生值 [bar](系数 b_i 的书中源口径),仅供内部/核对。"""
+    """Native value of the solution critical pressure [bar] (the book-source convention of the coefficients b_i); for internal/check use only."""
     return sum(b * x ** i for i, b in enumerate(_B_PC))
 
 
 def pc_sol(x):
-    """溶液临界压力 [MPa], x = 氨摩尔分数。(原生 bar 值 ×0.1)"""
+    """Solution critical pressure [MPa]; x = ammonia mole fraction. (Native bar value x0.1)"""
     return _pc_sol_bar(x) * 0.1
 
 
 def _tstar(T, x):
-    """对应状态温度 (T*_NH3, T*_H2O)。"""
+    """Corresponding-states temperatures (T*_NH3, T*_H2O)."""
     theta = T / tc_sol(x)
     return theta * T_C_NH3, theta * T_C_H2O
 
 
 # --------------------------------------------------------------------------
-# 附录 A: IAPWS 水导热系数(工业用公式, IAPWS 1998)
+# Appendix A: IAPWS thermal conductivity of water (industrial formulation, IAPWS 1998)
 # --------------------------------------------------------------------------
 # Table 1, L[i][j]: i=0..3, j=0..5
 _L = [
@@ -93,12 +93,12 @@ _LAMSTAR_W = 1.0        # W/(m K)
 
 
 def _iapws_lambda_water(T, rho):
-    """水导热系数 [W/(m K)], T[K], rho[kg/m^3]。
-    IAPWS 1998 工业用公式: λ = λ0(T̄) + λ1(ρ̄) + λ2(T̄,ρ̄)。
-    注意: Conde 书中总式印刷为 λ̄0×λ̄1×λ̄2,系排印错误。
-    乘法在稀薄气体极限(ρ̄→0)给出 λ→0,物理上不成立;
-    唯有加法给出 298.15K/998kg/m^3 = 0.6077 W/(m K) 的验证值,
-    与 IAPWS 原文及 XSteam 实现一致。"""
+    """Thermal conductivity of water [W/(m K)]; T[K], rho[kg/m^3].
+    IAPWS 1998 industrial formulation: λ = λ0(T̄) + λ1(ρ̄) + λ2(T̄,ρ̄).
+    Note: the overall formula in Conde's book is printed as λ̄0×λ̄1×λ̄2, a typesetting error.
+    Multiplication gives λ→0 in the dilute-gas limit (ρ̄→0), which is physically untenable;
+    only the additive form gives the check value 0.6077 W/(m K) at 298.15K/998kg/m^3,
+    consistent with the IAPWS original and the XSteam implementation."""
     Tb = T / _TSTAR_W
     rb = rho / _RHOSTAR_W
     lam0 = math.sqrt(Tb) * sum(_L[0][j] * Tb ** j for j in range(4))
@@ -117,7 +117,7 @@ def _iapws_lambda_water(T, rho):
 
 
 # --------------------------------------------------------------------------
-# 附录 B: IAPWS 水动力黏度(工业用公式), η2 取 1(书中说明)
+# Appendix B: IAPWS dynamic viscosity of water (industrial formulation); η2 taken as 1 (per the book)
 # --------------------------------------------------------------------------
 _H = [1.000, 0.978197, 0.579829, -0.202354]
 # Table 3, G[i][j]: i=0..5, j=0..6
@@ -135,7 +135,7 @@ _ETASTAR_V = 55.071e-6  # Pa s
 
 
 def _iapws_eta_water(T, rho):
-    """水动力黏度 [Pa s], T[K], rho[kg/m^3]。"""
+    """Dynamic viscosity of water [Pa s]; T[K], rho[kg/m^3]."""
     Tb = T / _TSTAR_V
     rb = rho / _RHOSTAR_V
     eta0 = math.sqrt(Tb) / sum(_H[i] * Tb ** (-i) for i in range(4))
@@ -152,9 +152,9 @@ def _iapws_eta_water(T, rho):
 
 
 # --------------------------------------------------------------------------
-# 附录 C: Fenghour et al.(1995) 氨黏度
-# η(ρ,T) = η0(T) + Δη(ρ,T) (+Δηc, 书中未给,取 0)
-# ρ: mol/l ; 返回 μPa s
+# Appendix C: Fenghour et al. (1995) viscosity of ammonia
+# η(ρ,T) = η0(T) + Δη(ρ,T) (+Δηc, not given in the book, taken as 0)
+# ρ: mol/l ; returns μPa s
 # --------------------------------------------------------------------------
 _F_AETA = [4.99318220, -0.61122364, 0.0, 0.18535124, -0.11160946]
 _F_CETA = [-1.7999496, 46.692621, -534.60794, 3360.4074, -13019.164,
@@ -168,11 +168,11 @@ _F_DETA = {
 }
 _F_SIGMA = 0.2957       # nm
 _F_EPSK = 386.0         # K, ε/κ
-_F_M = 17.03            # g/mol(书中表值)
+_F_M = 17.03            # g/mol (value in the book's table)
 
 
 def _fenghour_eta_nh3_upas(T, rho_mol_l):
-    """氨黏度 [μPa s]; T[K], rho[mol/l]。"""
+    """Viscosity of ammonia [μPa s]; T[K], rho[mol/l]."""
     th = T / _F_EPSK
     lnth = math.log(th)
     zeta = math.exp(sum(_F_AETA[i] * lnth ** i for i in range(5)))
@@ -188,13 +188,13 @@ def _fenghour_eta_nh3_upas(T, rho_mol_l):
 
 
 def _fenghour_eta_nh3(T, rho_kg_m3):
-    """氨黏度 [Pa s]; T[K], rho[kg/m^3]。"""
-    rho_mol_l = rho_kg_m3 / _F_M  # kg/m^3 / (g/mol) = mol/l(数值)
+    """Viscosity of ammonia [Pa s]; T[K], rho[kg/m^3]."""
+    rho_mol_l = rho_kg_m3 / _F_M  # kg/m^3 / (g/mol) = mol/l (numerically)
     return _fenghour_eta_nh3_upas(T, rho_mol_l) * 1e-6
 
 
 # --------------------------------------------------------------------------
-# §10 纯组分饱和液体密度: ρL/ρc = Σ A_i τ^{b_i}, τ = 1-T/Tc
+# §10 Pure-component saturated-liquid density: ρL/ρc = Σ A_i τ^{b_i}, τ = 1-T/Tc
 # --------------------------------------------------------------------------
 _RHOL_A = {  # [H2O..., NH3...]
     'H2O': [1.0, 1.9937718430, 1.0985211604, -0.5094492996,
@@ -205,11 +205,11 @@ _RHOL_A = {  # [H2O..., NH3...]
 _RHOL_B = [0.0, 1.0 / 3.0, 2.0 / 3.0, 5.0 / 3.0, 16.0 / 3.0,
            43.0 / 3.0, 110.0 / 3.0]
 _RHOL_B_NH3 = [0.0, 1.0 / 3.0, 2.0 / 3.0, 5.0 / 3.0, 16.0 / 3.0,
-               43.0 / 3.0, 70.0 / 3.0]  # NH3 第 6 项指数为 70/3
+               43.0 / 3.0, 70.0 / 3.0]  # the 6th exponent for NH3 is 70/3
 
 
 def _rho_liq_pure(T, which):
-    """纯组分饱和液体密度 [kg/m^3]。"""
+    """Pure-component saturated-liquid density [kg/m^3]."""
     Tc = T_C_H2O if which == 'H2O' else T_C_NH3
     rhoc = RHO_C_H2O if which == 'H2O' else RHO_C_NH3
     tau = 1.0 - T / Tc
@@ -218,7 +218,7 @@ def _rho_liq_pure(T, which):
 
 
 # --------------------------------------------------------------------------
-# §14 纯组分饱和蒸气密度: ln(ρG/ρc) = Σ A_i τ^{b_i}
+# §14 Pure-component saturated-vapour density: ln(ρG/ρc) = Σ A_i τ^{b_i}
 # --------------------------------------------------------------------------
 _RHOV_A = {
     'H2O': [-2.025450113, -2.701314216, -5.359161836,
@@ -230,7 +230,7 @@ _RHOV_B = [1.0 / 3.0, 2.0 / 3.0, 4.0 / 3.0, 3.0, 37.0 / 6.0, 71.0 / 6.0]
 
 
 def _rho_vap_pure(T, which):
-    """纯组分饱和蒸气密度 [kg/m^3]。"""
+    """Pure-component saturated-vapour density [kg/m^3]."""
     Tc = T_C_H2O if which == 'H2O' else T_C_NH3
     rhoc = RHO_C_H2O if which == 'H2O' else RHO_C_NH3
     tau = 1.0 - T / Tc
@@ -239,14 +239,14 @@ def _rho_vap_pure(T, which):
 
 
 # --------------------------------------------------------------------------
-# §6 饱和液体定压比热: Cp_m = x Cp_NH3(T*) + (1-x) Cp_H2O(T*)
+# §6 Saturated-liquid specific heat at constant pressure: Cp_m = x Cp_NH3(T*) + (1-x) Cp_H2O(T*)
 #      Cp(T*) = A_cp + B_cp / τ, τ = 1 - T*/Tc ; [kJ/(kg K)]
 # --------------------------------------------------------------------------
 _CP = {'NH3': (3.875648, 0.242125), 'H2O': (3.665785, 0.236312)}
 
 
 def cp_liq(T, x):
-    """饱和液相比热 [kJ/(kg K)]。"""
+    """Saturated-liquid specific heat [kJ/(kg K)]."""
     Ts_nh3, Ts_h2o = _tstar(T, x)
     cp = 0.0
     for Ts, Tc, key, w in ((Ts_nh3, T_C_NH3, 'NH3', x),
@@ -258,14 +258,14 @@ def cp_liq(T, x):
 
 
 # --------------------------------------------------------------------------
-# §7 液相导热: λ_m = x λ_NH3(T*) + (1-x) λ_H2O(T*) ; [W/(m K)]
-# 纯 NH3: λ = Σ A_i T^i [mW/(m K)], T[K]
+# §7 Liquid-phase thermal conductivity: λ_m = x λ_NH3(T*) + (1-x) λ_H2O(T*) ; [W/(m K)]
+# Pure NH3: λ = Σ A_i T^i [mW/(m K)], T[K]
 # --------------------------------------------------------------------------
 _LAM_L_NH3 = [8.902275e2, -0.69235, -2.4010e-3, 0.0]
 
 
 def lambda_liq(T, x):
-    """饱和液体导热系数 [W/(m K)]。"""
+    """Saturated-liquid thermal conductivity [W/(m K)]."""
     Ts_nh3, Ts_h2o = _tstar(T, x)
     lam_nh3 = sum(a * Ts_nh3 ** i for i, a in enumerate(_LAM_L_NH3)) * 1e-3
     lam_h2o = _iapws_lambda_water(Ts_h2o, _rho_liq_pure(Ts_h2o, 'H2O'))
@@ -273,14 +273,14 @@ def lambda_liq(T, x):
 
 
 # --------------------------------------------------------------------------
-# §8 液相动力黏度:
+# §8 Liquid-phase dynamic viscosity:
 #   ln η_m = x ln η_NH3(T*) + (1-x) ln η_H2O(T*) + Δη
 #   Δη = (0.534 - 0.815 T_sol/T_c,H2O) F(x)
 #   F(x) = 6.38(1-x)^1.125 x (1-e^{-0.585 x (1-x)^0.18})
-#          ln(η_NH3^0.5 η_H2O^0.5)   [η 取 μPa s, 见验证说明]
+#          ln(η_NH3^0.5 η_H2O^0.5)   [η in μPa s; see the verification note]
 # --------------------------------------------------------------------------
 def eta_liq(T, x):
-    """饱和液体动力黏度 [Pa s]。"""
+    """Saturated-liquid dynamic viscosity [Pa s]."""
     Ts_nh3, Ts_h2o = _tstar(T, x)
     eta_nh3_upas = _fenghour_eta_nh3_upas(
         Ts_nh3, _rho_liq_pure(Ts_nh3, 'NH3') / _F_M)
@@ -296,7 +296,7 @@ def eta_liq(T, x):
 
 
 # --------------------------------------------------------------------------
-# §9 表面张力: σ_m = x σ_NH3(T*) + (1-x) σ_H2O(T*) + Δσ ; [N/m]
+# §9 Surface tension: σ_m = x σ_NH3(T*) + (1-x) σ_H2O(T*) + Δσ ; [N/m]
 #   σ = σ0 (1+bτ) τ^μ ; Δσ = -(σ_H2O - σ_NH3) F(x)
 #   F(x) = 1.442(1-x)[1-e^{-2.5x^4}] + 1.106x[1-e^{-2.5(1-x)^6}]
 # --------------------------------------------------------------------------
@@ -311,7 +311,7 @@ def _sigma_pure(T, which):
 
 
 def sigma(T, x):
-    """溶液表面张力 [N/m]。"""
+    """Solution surface tension [N/m]."""
     Ts_nh3, Ts_h2o = _tstar(T, x)
     s_nh3 = _sigma_pure(Ts_nh3, 'NH3')
     s_h2o = _sigma_pure(Ts_h2o, 'H2O')
@@ -322,17 +322,17 @@ def sigma(T, x):
 
 
 # --------------------------------------------------------------------------
-# §10 液相密度: ρ_m = x ρ_NH3(T*) + (1-x) ρ_H2O(T*) + Δρ ; [kg/m^3]
+# §10 Liquid-phase density: ρ_m = x ρ_NH3(T*) + (1-x) ρ_H2O(T*) + Δρ ; [kg/m^3]
 #   Δρ = x(1-x)(1 - A x) sqrt(ρ_NH3 ρ_H2O)
 #   A = Σ A1_i T‡^i + Σ A2_i T‡^i / x,  T‡ = T_sol/T_c,H2O
-#   (写成 A x = x ΣA1 T‡^i + ΣA2 T‡^i 避免 x=0 奇点)
+#   (written as A x = x ΣA1 T‡^i + ΣA2 T‡^i to avoid the singularity at x=0)
 # --------------------------------------------------------------------------
 _RHO_A1 = [-2.410, 8.310, -6.924]
 _RHO_A2 = [2.118, -4.050, 4.443]
 
 
 def rho_liq(T, x):
-    """饱和液体密度 [kg/m^3]。"""
+    """Saturated-liquid density [kg/m^3]."""
     Ts_nh3, Ts_h2o = _tstar(T, x)
     r_nh3 = _rho_liq_pure(Ts_nh3, 'NH3')
     r_h2o = _rho_liq_pure(Ts_h2o, 'H2O')
@@ -345,17 +345,17 @@ def rho_liq(T, x):
 
 
 # --------------------------------------------------------------------------
-# §11 质扩散系数(修正 Wilke-Chang): [m^2/s]
+# §11 Mass diffusivity (modified Wilke-Chang): [m^2/s]
 #   D = 117.282e-18 T_sol sqrt(ψ_sol M_sol) / (η_sol Ṽ_diff^0.6)
-#   ψ_sol, M_sol 摩尔分数加权; Ṽ_diff = M_NH3[g/mol]/ρ_NH3(T_sol)[kg/m^3]
-#   η_sol[Pa s] 取 §8
+#   ψ_sol, M_sol mole-fraction weighted; Ṽ_diff = M_NH3[g/mol]/ρ_NH3(T_sol)[kg/m^3]
+#   η_sol[Pa s] from §8
 # --------------------------------------------------------------------------
 _WC_PSI = {'NH3': 1.7, 'H2O': 2.6}
 _WC_M = {'NH3': 17.03, 'H2O': 18.0152}
 
 
 def diffusivity(T, x):
-    """氨蒸气向氨水溶液的质扩散系数 [m^2/s]。"""
+    """Mass diffusivity of ammonia vapour into the ammonia-water solution [m^2/s]."""
     psi_sol = x * _WC_PSI['NH3'] + (1.0 - x) * _WC_PSI['H2O']
     M_sol = x * _WC_M['NH3'] + (1.0 - x) * _WC_M['H2O']
     Vdiff = _WC_M['NH3'] / _rho_liq_pure(T, 'NH3')
@@ -365,23 +365,23 @@ def diffusivity(T, x):
 
 
 # --------------------------------------------------------------------------
-# §12 气相导热: Wassiljewa-Mason-Saxena 混合规则 ; [W/(m K)]
+# §12 Vapour-phase thermal conductivity: Wassiljewa-Mason-Saxena mixing rule ; [W/(m K)]
 #   λ_m = y λ_NH3/(y+(1-y)φ12) + (1-y) λ_H2O/((1-y)+y φ21)
-#   纯 NH3 气: λ = Σ A_i [ln(1/τ)]^i [mW/(m K)], τ=1-T/T_c,NH3
-#   纯 H2O 气: IAPWS 附录 A
+#   Pure NH3 gas: λ = Σ A_i [ln(1/τ)]^i [mW/(m K)], τ=1-T/T_c,NH3
+#   Pure H2O gas: IAPWS Appendix A
 # --------------------------------------------------------------------------
 _LAM_V_NH3 = [-0.48173, 20.04383, 0.0, 0.0]
 
 
 def _phi12(eta1, eta2):
-    """Mason-Saxena φ12 ; eta1=NH3, eta2=H2O(单位一致即可)。"""
+    """Mason-Saxena φ12 ; eta1=NH3, eta2=H2O (any consistent unit)."""
     m1, m2 = _WC_M['NH3'], _WC_M['H2O']
     return ((1.0 + math.sqrt(eta1 / eta2) * (m2 / m1) ** 0.25) ** 2
             / math.sqrt(8.0 * (1.0 + m1 / m2)))
 
 
 def lambda_vap(T, y):
-    """饱和气相导热系数 [W/(m K)] ; T[K] 气相温度, y 气相氨摩尔分数。"""
+    """Saturated vapour-phase thermal conductivity [W/(m K)] ; T[K] vapour-phase temperature, y vapour-phase ammonia mole fraction."""
     tau = 1.0 - T / T_C_NH3
     lam_nh3 = sum(a * math.log(1.0 / tau) ** i
                   for i, a in enumerate(_LAM_V_NH3)) * 1e-3
@@ -395,12 +395,12 @@ def lambda_vap(T, y):
 
 
 # --------------------------------------------------------------------------
-# §13 气相动力黏度: Wilke 混合规则 ; [Pa s]
+# §13 Vapour-phase dynamic viscosity: Wilke mixing rule ; [Pa s]
 #   η_m = y η_NH3/(y+(1-y)φ12) + (1-y) η_H2O/((1-y)+y φ21)
-#   纯 NH3 气: Fenghour 附录 C ; 纯 H2O 气: IAPWS 附录 B
+#   Pure NH3 gas: Fenghour Appendix C ; pure H2O gas: IAPWS Appendix B
 # --------------------------------------------------------------------------
 def eta_vap(T, y):
-    """饱和气相动力黏度 [Pa s]。"""
+    """Saturated vapour-phase dynamic viscosity [Pa s]."""
     eta_nh3 = _fenghour_eta_nh3(T, _rho_vap_pure(T, 'NH3'))
     eta_h2o = _iapws_eta_water(T, _rho_vap_pure(T, 'H2O'))
     p12 = _phi12(eta_nh3, eta_h2o)
@@ -410,7 +410,7 @@ def eta_vap(T, y):
 
 
 # --------------------------------------------------------------------------
-# §14 气相密度: ρ_m = y ρ_NH3(T*) + (1-y) ρ_H2O(T*) + Δρ ; [kg/m^3]
+# §14 Vapour-phase density: ρ_m = y ρ_NH3(T*) + (1-y) ρ_H2O(T*) + Δρ ; [kg/m^3]
 #   Δρ = A(1-y)^B (1-e^{C y^D}) Δρmax ; Δρmax = e^{J-K/T‡}
 #   T‡ = T_sol/T_c,H2O
 # --------------------------------------------------------------------------
@@ -419,7 +419,7 @@ _RV_D, _RV_J, _RV_K = 2.75, 9.952, 3.884
 
 
 def rho_vap(T, y):
-    """饱和气相密度 [kg/m^3] ; T[K] 气相温度。"""
+    """Saturated vapour-phase density [kg/m^3] ; T[K] vapour-phase temperature."""
     Ts_nh3, Ts_h2o = _tstar(T, y)
     r_nh3 = _rho_vap_pure(Ts_nh3, 'NH3')
     r_h2o = _rho_vap_pure(Ts_h2o, 'H2O')
@@ -431,7 +431,7 @@ def rho_vap(T, y):
 
 
 # --------------------------------------------------------------------------
-# §15 气相比热: Cp_m = y Cp_NH3(τ) + (1-y) Cp_H2O(τ) ; [kJ/(kg K)]
+# §15 Vapour-phase specific heat: Cp_m = y Cp_NH3(τ) + (1-y) Cp_H2O(τ) ; [kJ/(kg K)]
 #   Cp(τ) = A + B τ^{-1/3} + C τ^{-2/3} + D τ^{-5/3} + E τ^{-7.5/3}
 #   τ = 1 - T_vap/T_c,sol(y)
 # --------------------------------------------------------------------------
@@ -442,7 +442,7 @@ _CPV = {
 
 
 def cp_vap(T, y):
-    """饱和气相比热 [kJ/(kg K)]。"""
+    """Saturated vapour-phase specific heat [kJ/(kg K)]."""
     tau = 1.0 - T / tc_sol(y)
     cp = 0.0
     for key, w in (('NH3', y), ('H2O', 1.0 - y)):
@@ -453,7 +453,7 @@ def cp_vap(T, y):
 
 
 if __name__ == '__main__':
-    # 快速自检: 20°C 纯水/纯氨端点
+    # Quick self-check: pure-water / pure-ammonia endpoints at 20°C
     T = 293.15
     print('water 20C: eta=%.4g Pa s (exp 1.002e-3)' % _iapws_eta_water(T, 998.2))
     print('water 20C: lam=%.4g W/m/K (exp 0.598)' % _iapws_lambda_water(T, 998.2))

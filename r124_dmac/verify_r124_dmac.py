@@ -27,7 +27,7 @@ for c, tb in TB.items():
     print(f"  {c:7s} tb={tb:7.1f} C  Psat={m.psat(c, tb):.4f} MPa  (target 0.1013)")
 
 print("== 2. Eq.(16) endpoints vs Eq.(15) ==")
-# Documented characteristic of the printed fit (see 核验 record S.4.1):
+# Documented characteristic of the printed fit (see verification record S.4.1):
 # at xi=1 the polynomial runs +13..+23 % above Eq. (15); at xi=0 the
 # absolute deviation stays <= 0.003 MPa (= 0.03 bar).
 for T in range(0, 141, 20):

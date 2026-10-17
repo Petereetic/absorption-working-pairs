@@ -1,8 +1,8 @@
 Attribute VB_Name = "Water"
-' H2O 纯物质饱和性质（单独计算文件，Excel VBA 工作表函数；与合并模块 pure_fluids.bas 系数逐字同源）
-' 源：NIST WebBook 饱和表紧凑拟合（笔记见 ../fit-notes/水饱和性质拟合-NIST表.md）；饱和压 lnP-t 7 次式，对表全程最大 0.0291%、常用带（5~300°C）0.0128%；焓已由表基准平移 +93.351889719 至统一基准。水的权威标准为 IAPWS 公式，本式为可移植紧凑式。
-' 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。Pref 返回 MPa；Tsat 入参 MPa 超界返回 #NUM!。
-' 注意：本模块未在真实 Excel 中编译运行过，使用前请先编译验证。
+' H2O pure-substance saturation properties (standalone calculation file, Excel VBA worksheet functions; coefficients verbatim identical to the merged module pure_fluids.bas)
+' Source: compact fit to the NIST WebBook saturation table (see fit notes in ../fit-notes/, "water saturation-property fit - NIST table"); saturation pressure as a degree-7 lnP-t polynomial, max deviation vs. table 0.0291% over the full range and 0.0128% in the usual band (5~300°C); enthalpy shifted from the table datum by +93.351889719 to the uniform reference. The authoritative standard for water is the IAPWS formulation; this is a portable compact fit.
+' Reference state: saturated-liquid enthalpy at 0°C = 100 kJ/kg (uniform module reference). Pref returns MPa; Tsat takes MPa and returns #NUM! when out of range.
+' Note: this module has not been compiled or run in real Excel; compile and verify before use.
 
 Option Explicit
 
@@ -104,7 +104,7 @@ Public Function hgas_H2O(ByVal t_C As Double) As Double
     hgas_H2O = Poly6(t_C, True)
 End Function
 
-' H2O 饱和潜热 kJ/kg = hgas - hliq（同一参考态）
+' H2O saturation latent heat, kJ/kg = hgas - hliq (same reference state)
 Public Function hlat_H2O(ByVal t_C As Double) As Double
     hlat_H2O = hgas_H2O(t_C) - hliq_H2O(t_C)
 End Function

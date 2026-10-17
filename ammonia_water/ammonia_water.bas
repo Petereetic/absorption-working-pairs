@@ -244,20 +244,20 @@ Public Function AW_XByTsolTdew(ByVal Tsol_K As Double, ByVal Tdew_K As Double) A
 End Function
 
 
-' ---------- 露点温度（溶液）[K]：全库 TdewByTsolXi 约定 ----------
-' Tdew = AW_Tbub_P(AW_Psol_T(Tsol_K, x), 1)，即以本模块自身纯氨线
-' （式(6) 的 x=1 端点）评价溶液表面压力 Psol 所对应的饱和温度。
-' 注意：本工质对的吸收剂（水）挥发，此函数不等于式(7) 的真混合物
-' 露点 AW_Tdew_P(p, y)（滑移图口径），两函数不可互换。
+' ---------- Dew-point temperature (solution) [K]: library-wide TdewByTsolXi convention ----------
+' Tdew = AW_Tbub_P(AW_Psol_T(Tsol_K, x), 1), i.e. the saturation temperature corresponding to
+' the solution surface pressure Psol, evaluated with this module's own pure-ammonia line (the x=1 endpoint of Eq. (6)).
+' Note: for this pair the absorbent (water) is volatile, so this function is not the true mixture dew point
+' AW_Tdew_P(p, y) of Eq. (7) (the glide-plot convention); the two functions are not interchangeable.
 Public Function AW_TdewByTsolX(ByVal Tsol_K As Double, ByVal x As Double) As Double
     AW_TdewByTsolX = AW_Tbub_P(AW_Psol_T(Tsol_K, x), 1#)
 End Function
 
 
-' 由溶液比焓 h [kJ/kg] 与氨摩尔分数 x 反解溶液温度 [K]：
-' hsol（式(9)）在固定 x 下随 T 单调增，二分 100 次反解；
-' 求解括号 T ∈ [240, 480] K。h 超出该 x 下 hsol 值域时返回 Empty。
-' 与 C/Python 同算法；本函数未在真实 Excel 中编译运行。
+' Solve the solution temperature [K] back from the solution specific enthalpy h [kJ/kg] and ammonia mole fraction x:
+' hsol (Eq. (9)) increases monotonically with T at fixed x; inverted by 100 bisection steps;
+' solution bracket T in [240, 480] K. Returns Empty when h lies outside the range of hsol at that x.
+' Same algorithm as the C/Python versions; this function has not been compiled or run in real Excel.
 Public Function AW_TsolByHsol(ByVal h As Double, ByVal x As Double) As Variant
     Dim lo As Double, hi As Double, mid As Double, k As Long
     lo = 240#: hi = 480#

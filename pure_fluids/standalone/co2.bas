@@ -1,8 +1,8 @@
 Attribute VB_Name = "CO2"
-' CO2 纯物质饱和性质（单独计算文件，Excel VBA 工作表函数；与合并模块 pure_fluids.bas 系数逐字同源）
-' 源：NIST WebBook 饱和表紧凑拟合（笔记见 ../fit-notes/二氧化碳饱和性质拟合-NIST表.md；源表有取整）；饱和压 lnP-t 7 次式，对表全程最大 0.0099%、常用带（-50~25°C）0.0059%；焓已由表基准平移 -100.255791821 至统一基准。
-' 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。Pref 返回 MPa；Tsat 入参 MPa 超界返回 #NUM!。
-' 注意：本模块未在真实 Excel 中编译运行过，使用前请先编译验证。
+' CO2 pure-substance saturation properties (standalone calculation file, Excel VBA worksheet functions; coefficients verbatim identical to the merged module pure_fluids.bas)
+' Source: compact fit to the NIST WebBook saturation table (see fit notes in ../fit-notes/, "carbon-dioxide saturation-property fit - NIST table"; the source table is rounded); saturation pressure as a degree-7 lnP-t polynomial, max deviation vs. table 0.0099% over the full range and 0.0059% in the usual band (-50~25°C); enthalpy shifted from the table datum by -100.255791821 to the uniform reference.
+' Reference state: saturated-liquid enthalpy at 0°C = 100 kJ/kg (uniform module reference). Pref returns MPa; Tsat takes MPa and returns #NUM! when out of range.
+' Note: this module has not been compiled or run in real Excel; compile and verify before use.
 
 Option Explicit
 
@@ -104,7 +104,7 @@ Public Function hgas_CO2(ByVal t_C As Double) As Double
     hgas_CO2 = Poly6(t_C, True)
 End Function
 
-' CO2 饱和潜热 kJ/kg = hgas - hliq（同一参考态）
+' CO2 saturation latent heat, kJ/kg = hgas - hliq (same reference state)
 Public Function hlat_CO2(ByVal t_C As Double) As Double
     hlat_CO2 = hgas_CO2(t_C) - hliq_CO2(t_C)
 End Function

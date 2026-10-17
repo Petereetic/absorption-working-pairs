@@ -16,7 +16,7 @@ Conventions (as in the paper):
   0.1 (pressure outputs) or 10 (pressure inputs) at the boundary.
 
 Two misprints in the paper are corrected here, each arbitrated by the paper's
-own data (see 公式说明.md for the full evidence):
+own data (see the formula notes file for the full evidence):
   * Table 8, DMAC row: eta0/eta1 are printed x10 too large
     (-16.8400 / 1348.80). The mixture correlation Eq. (26) at xi = 0 and the
     literature value of DMAC viscosity agree with -1.68400 / 134.880.
@@ -32,7 +32,7 @@ systematically low against the NIST saturation table (-5.13 % at
 library dossier on the R124 NIST fit vs Borde).  pref_R124 is now the
 NIST-table Wagner-type fit held in pure_fluids (identical coefficients),
 and Eq. (15) remains in psat() for the absorbent-side components and
-for the xi = 1 endpoint comparison of Eq. (16).  See 公式说明.md.
+for the xi = 1 endpoint comparison of Eq. (16).  See the formula notes file.
 """
 import math
 

@@ -1,39 +1,39 @@
-# R134a / R22 / R124 / H2O / NH3 / CH3OH / R32 / R218 / CO2 纯物质饱和性质（参考实现）
+# R134a / R22 / R124 / H2O / NH3 / CH3OH / R32 / R218 / CO2 pure-substance saturation properties (reference implementation)
 #
-# 基准：CoolProp 内置参考状态方程
-#   R134a: Tillner-Roth & Baehr (1994)；R22: CoolProp 参考 EOS
-# 参考态（与用户现有模型统一）：0°C 饱和液体焓 = 100 kJ/kg
-#   （CoolProp 默认 200 kJ/kg，已整体平移 -100）
-#   R124: NIST WebBook 饱和表（276 点，-153~122°C）拟合，见
-#     工质对公式素材库《R124纯工质-NIST表拟合与Borde仲裁》；
-#     表焓基准同为 0°C 饱和液体 = 200 kJ/kg，已整体平移 -100（潜热不变）。
-#     Psat 为 Wagner 型（指数 1, 1.5, 3, 6）：Tc=395.428K, Pc=36.245bar，
-#     适用 -40~110°C, 对表最大偏差 0.111%；hL/hV 同带最大偏差 1.11/1.63 kJ/kg
+# Datum: CoolProp's built-in reference equations of state
+#   R134a: Tillner-Roth & Baehr (1994); R22: CoolProp reference EOS
+# Reference state (unified with the user's existing models): saturated-liquid enthalpy at 0°C = 100 kJ/kg
+#   (CoolProp's default is 200 kJ/kg; shifted as a whole by -100)
+#   R124: fit to the NIST WebBook saturation table (276 points, -153~122°C), see
+#     the working-pair formula materials library document "R124 pure fluid - NIST table fit and Borde arbitration";
+#     the table's enthalpy datum is likewise saturated liquid at 0°C = 200 kJ/kg, shifted as a whole by -100 (latent heat unchanged).
+#     Psat is of Wagner type (exponents 1, 1.5, 3, 6): Tc=395.428K, Pc=36.245bar,
+#     valid -40~110°C, max deviation vs. table 0.111%; hL/hV max deviations in the same band 1.11/1.63 kJ/kg
 #
-# 拟合式：
-#   饱和压力 Wagner 方程：ln(P/Pc) = (Tc/T)·(a1·τ + a2·τ^1.5 + a3·τ^2.5 + a4·τ^5),
-#     τ = 1-T/Tc, T in K, P in bar（拟合内部单位，Pc 以 bar 计；
-#     公开接口 Pref 以 MPa 返回、Tsat 以 MPa 入参，边界处 ×0.1／×10 换算）
-#     R134a: Tc=374.21K, Pc=40.59bar, 适用 -50~95°C, 最大偏差 0.031%
-#     R22:   Tc=369.30K, Pc=49.90bar, 适用 -50~90°C, 最大偏差 0.0065%
-#   饱和液体/蒸气焓：6 次多项式 h(t), t in °C, kJ/kg
-#     R134a hL 偏差 0.41, hV 偏差 0.61 kJ/kg
-#     R22   hL 偏差 0.42, hV 偏差 0.59 kJ/kg
-# 饱和温度 Tsat(P)：对 Psat 二分反算。
+# Fitted forms:
+#   Saturation pressure, Wagner equation: ln(P/Pc) = (Tc/T)·(a1·τ + a2·τ^1.5 + a3·τ^2.5 + a4·τ^5),
+#     τ = 1-T/Tc, T in K, P in bar (the fit's internal unit; Pc is in bar;
+#     the public interface Pref returns MPa and Tsat takes MPa, converting by x0.1 / x10 at the boundary)
+#     R134a: Tc=374.21K, Pc=40.59bar, valid -50~95°C, max deviation 0.031%
+#     R22:   Tc=369.30K, Pc=49.90bar, valid -50~90°C, max deviation 0.0065%
+#   Saturated-liquid/vapour enthalpy: degree-6 polynomial h(t), t in °C, kJ/kg
+#     R134a hL deviation 0.41, hV deviation 0.61 kJ/kg
+#     R22   hL deviation 0.42, hV deviation 0.59 kJ/kg
+# Saturation temperature Tsat(P): inverted from Psat by bisection.
 #
-# 2026-10-13 增补六工质（源：NIST WebBook 饱和表紧凑拟合，笔记全本见
-#   fit-notes/）：H2O（373 点，1~373°C）、NH3（210 点，-77~132°C）、
-#   CH3OH（330 点，-90~239°C）、R32（215 点，-136~78°C）、
-#   R218（219 点，-147~71°C）、CO2（601 点，-56~30°C）。
-#   饱和压取笔记取定式 lnP-t 7 次多项式（ln(P/MPa)，本模块直接以 MPa 返回），
-#   对表最大偏差（全程/常用带）：H2O 0.0291%/0.0128%，NH3 0.0272%/0.0027%，
-#   CH3OH 0.1064%/0.0321%，R32 0.0609%/0.0147%，R218 0.1495%/0.0396%，
-#   CO2 0.0099%/0.0059%；焓 6 次多项式（常用带最大偏差 0.29~5.51 kJ/kg，
-#   近临界端较大，分带数字见各笔记）。焓已由各表自带基准平移到统一基准
-#   （0°C 饱和液体 = 100 kJ/kg），平移量（kJ/kg）：H2O +93.351889719、
-#   NH3 -244.768062686、CH3OH +266.341441575、R32 -100.673431938、
-#   R218 -100.177980782、CO2 -100.255791821（仅常数项，潜热不变）。
-#   水的权威标准仍是 IAPWS 公式，本拟合为可移植紧凑式，不替代之。
+# Six fluids added 2026-10-13 (source: compact fits to the NIST WebBook saturation tables; the full notes are in
+#   fit-notes/): H2O (373 points, 1~373°C), NH3 (210 points, -77~132°C),
+#   CH3OH (330 points, -90~239°C), R32 (215 points, -136~78°C),
+#   R218 (219 points, -147~71°C), CO2 (601 points, -56~30°C).
+#   Saturation pressures use the notes' adopted lnP-t degree-7 polynomial (ln(P/MPa)); this module returns MPa directly,
+#   max deviations vs. table (full range / usual band): H2O 0.0291%/0.0128%, NH3 0.0272%/0.0027%,
+#   CH3OH 0.1064%/0.0321%, R32 0.0609%/0.0147%, R218 0.1495%/0.0396%,
+#   CO2 0.0099%/0.0059%; enthalpy degree-6 polynomials (max deviation in the usual band 0.29~5.51 kJ/kg,
+#   larger near the critical end; per-band figures in each note). The enthalpies have been shifted from each table's own datum to the uniform datum
+#   (saturated liquid at 0°C = 100 kJ/kg); shifts (kJ/kg): H2O +93.351889719,
+#   NH3 -244.768062686, CH3OH +266.341441575, R32 -100.673431938,
+#   R218 -100.177980782, CO2 -100.255791821 (constant term only; latent heats unchanged).
+#   The authoritative standard for water remains the IAPWS formulation; this fit is a portable compact form and does not replace it.
 
 import math
 
@@ -58,8 +58,8 @@ _R22_hV = (-6.5412360e-11, 3.1584987e-09, 1.6628519e-07, -2.1606737e-05,
 _R22_TLO, _R22_THI = -50.0, 90.0
 
 # ---------------- R124 ----------------
-# 源：NIST WebBook 饱和表拟合（Wagner 指数 1, 1.5, 3, 6；焓 6 次多项式，
-# 已由表基准 0°C 液体 = 200 整体平移 -100 至本模块统一基准）
+# Source: fit to the NIST WebBook saturation table (Wagner exponents 1, 1.5, 3, 6; enthalpy degree-6 polynomial,
+# shifted as a whole by -100 from the table datum (saturated liquid at 0°C = 200) to this module's uniform datum)
 _R124_Tc = 395.428
 _R124_Pc = 36.245
 _R124_W = (-7.401179377235425, 1.4613603991162563, -3.476435267708954,
@@ -81,7 +81,7 @@ def _wagner_pref(t_C, Tc, Pc, a):
 
 
 def _wagner_pref36(t_C, Tc, Pc, a):
-    """Wagner 变体（指数 1, 1.5, 3, 6），R124 拟合所用式形。"""
+    """Wagner variant (exponents 1, 1.5, 3, 6), the form used for the R124 fit."""
     T = t_C + 273.15
     tau = 1.0 - T / Tc
     return Pc * math.exp((Tc / T) * (a[0] * tau + a[1] * tau ** 1.5
@@ -93,7 +93,7 @@ def _poly6(c, t):
 
 
 def _tsat_bisect(P, pref_fn, t_lo, t_hi):
-    # P 的单位与 pref_fn 的返回单位一致（由调用方负责换算）
+    # The unit of P is the same as the return unit of pref_fn (the caller is responsible for conversion)
     Plo, Phi = pref_fn(t_lo), pref_fn(t_hi)
     if not (Plo <= P <= Phi):
         return None
@@ -108,103 +108,103 @@ def _tsat_bisect(P, pref_fn, t_lo, t_hi):
 
 
 def _R134a_pref_bar(t_C):
-    """R134a 饱和压力内部值，bar（Wagner 拟合原生单位）。"""
+    """R134a saturation pressure, internal value, bar (native unit of the Wagner fit)."""
     return _wagner_pref(t_C, _R134a_Tc, _R134a_Pc, _R134a_W)
 
 
 def R134a_Pref(t_C):
-    """R134a 饱和压力，MPa。t_C: °C，适用 -50~95°C。"""
+    """R134a saturation pressure, MPa. t_C: °C, valid -50~95°C."""
     return 0.1 * _R134a_pref_bar(t_C)
 
 
 def R134a_Tsat(P_MPa):
-    """R134a 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    """R134a saturation temperature, °C. P_MPa: MPa. Returns None when out of range."""
     return _tsat_bisect(10.0 * P_MPa, _R134a_pref_bar, _R134a_TLO, _R134a_THI)
 
 
 def R134a_hliq(t_C):
-    """R134a 饱和液体焓，kJ/kg。参考态 0°C 饱和液体 = 100 kJ/kg。"""
+    """R134a saturated-liquid enthalpy, kJ/kg. Reference state: saturated liquid at 0°C = 100 kJ/kg."""
     return _poly6(_R134a_hL, t_C)
 
 
 def R134a_hgas(t_C):
-    """R134a 饱和蒸气焓，kJ/kg。参考态 0°C 饱和液体 = 100 kJ/kg。"""
+    """R134a saturated-vapour enthalpy, kJ/kg. Reference state: saturated liquid at 0°C = 100 kJ/kg."""
     return _poly6(_R134a_hV, t_C)
 
 
 def R134a_hlat(t_C):
-    """R134a 饱和潜热，kJ/kg = hgas - hliq（同一参考态，两焓同基准）。"""
+    """R134a saturation latent heat, kJ/kg = hgas - hliq (same reference state; both enthalpies on the same datum)."""
     return R134a_hgas(t_C) - R134a_hliq(t_C)
 
 
 def _R22_pref_bar(t_C):
-    """R22 饱和压力内部值，bar（Wagner 拟合原生单位）。"""
+    """R22 saturation pressure, internal value, bar (native unit of the Wagner fit)."""
     return _wagner_pref(t_C, _R22_Tc, _R22_Pc, _R22_W)
 
 
 def R22_Pref(t_C):
-    """R22 饱和压力，MPa。t_C: °C，适用 -50~90°C。"""
+    """R22 saturation pressure, MPa. t_C: °C, valid -50~90°C."""
     return 0.1 * _R22_pref_bar(t_C)
 
 
 def R22_Tsat(P_MPa):
-    """R22 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    """R22 saturation temperature, °C. P_MPa: MPa. Returns None when out of range."""
     return _tsat_bisect(10.0 * P_MPa, _R22_pref_bar, _R22_TLO, _R22_THI)
 
 
 def R22_hliq(t_C):
-    """R22 饱和液体焓，kJ/kg。参考态 0°C 饱和液体 = 100 kJ/kg。"""
+    """R22 saturated-liquid enthalpy, kJ/kg. Reference state: saturated liquid at 0°C = 100 kJ/kg."""
     return _poly6(_R22_hL, t_C)
 
 
 def R22_hgas(t_C):
-    """R22 饱和蒸气焓，kJ/kg。参考态 0°C 饱和液体 = 100 kJ/kg。"""
+    """R22 saturated-vapour enthalpy, kJ/kg. Reference state: saturated liquid at 0°C = 100 kJ/kg."""
     return _poly6(_R22_hV, t_C)
 
 
 def R22_hlat(t_C):
-    """R22 饱和潜热，kJ/kg = hgas - hliq（同一参考态，两焓同基准）。"""
+    """R22 saturation latent heat, kJ/kg = hgas - hliq (same reference state; both enthalpies on the same datum)."""
     return R22_hgas(t_C) - R22_hliq(t_C)
 
 
 def _R124_pref_bar(t_C):
-    """R124 饱和压力内部值，bar（Wagner 拟合原生单位）。"""
+    """R124 saturation pressure, internal value, bar (native unit of the Wagner fit)."""
     return _wagner_pref36(t_C, _R124_Tc, _R124_Pc, _R124_W)
 
 
 def R124_Pref(t_C):
-    """R124 饱和压力，MPa。t_C: °C，适用 -40~110°C（NIST 表 Wagner 拟合）。"""
+    """R124 saturation pressure, MPa. t_C: °C, valid -40~110°C (NIST-table Wagner fit)."""
     return 0.1 * _R124_pref_bar(t_C)
 
 
 def R124_Tsat(P_MPa):
-    """R124 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    """R124 saturation temperature, °C. P_MPa: MPa. Returns None when out of range."""
     return _tsat_bisect(10.0 * P_MPa, _R124_pref_bar, _R124_TLO, _R124_THI)
 
 
 def R124_hliq(t_C):
-    """R124 饱和液体焓，kJ/kg。参考态 0°C 饱和液体 = 100 kJ/kg。"""
+    """R124 saturated-liquid enthalpy, kJ/kg. Reference state: saturated liquid at 0°C = 100 kJ/kg."""
     return _poly6(_R124_hL, t_C)
 
 
 def R124_hgas(t_C):
-    """R124 饱和蒸气焓，kJ/kg。参考态 0°C 饱和液体 = 100 kJ/kg。"""
+    """R124 saturated-vapour enthalpy, kJ/kg. Reference state: saturated liquid at 0°C = 100 kJ/kg."""
     return _poly6(_R124_hV, t_C)
 
 
 def R124_hlat(t_C):
-    """R124 饱和潜热，kJ/kg = hgas - hliq（同一参考态，两焓同基准）。"""
+    """R124 saturation latent heat, kJ/kg = hgas - hliq (same reference state; both enthalpies on the same datum)."""
     return R124_hgas(t_C) - R124_hliq(t_C)
 
 
 
-# =============== NIST WebBook 表拟合六工质（2026-10-13 增补）===============
-# 式形：饱和压 lnP–t 7 次多项式（笔记取定式，ln(P/MPa)=Σc_k t^k，
-#   条内直接以 MPa 返回）；焓 6 次多项式（系数降幂，与 _poly6 同序）。
-# 焓常数项已由各表自带基准平移至本模块统一基准（0°C 饱和液体 = 100 kJ/kg），
-#   平移量见各工质注（仅常数项变动，潜热不变）。适用范围与残差见头注及 fit-notes/。
+# =============== Six fluids fitted to the NIST WebBook tables (added 2026-10-13) ===============
+# Form: saturation pressure as an lnP-t degree-7 polynomial (the notes' adopted form, ln(P/MPa)=Σc_k t^k,
+#   returned directly in MPa within the entry); enthalpy as a degree-6 polynomial (coefficients in descending powers, same order as _poly6).
+# The enthalpy constant terms have been shifted from each table's own datum to this module's uniform datum (saturated liquid at 0°C = 100 kJ/kg);
+#   see each fluid's note for the shift (constant term only; latent heats unchanged). Valid ranges and residuals: see the header note and fit-notes/.
 
-# ---------------- H2O（平移 +93.351889719 kJ/kg） ----------------
+# ---------------- H2O (shift +93.351889719 kJ/kg) ----------------
 _H2O_LNP = (5.54627791673895e-18, -8.99249875691861e-15, 6.660700555390007e-12, -3.088083641876246e-09,
              1.056735995405781e-06, -0.0002954387998568004, 0.07259423527358563, -7.399704960820133)
 _H2O_hL = (4.9253814056437e-12, -4.8364685293173926e-09, 1.8115766448129802e-06, -0.0003141174119157094,
@@ -213,7 +213,7 @@ _H2O_hV = (-8.083632440447619e-12, 7.910908004577575e-09, -2.951073494811462e-06
              -0.04153882947643235, 3.1701433360694287, 2583.8464687067276)
 _H2O_TLO, _H2O_THI = 1.0, 373.0
 
-# ---------------- NH3（平移 -244.76806269 kJ/kg） ----------------
+# ---------------- NH3 (shift -244.76806269 kJ/kg) ----------------
 _NH3_LNP = (1.1501679663496297e-16, -3.681466540446358e-14, 9.070213653911228e-12, -2.4759314474490567e-09,
              6.551063627525382e-07, -0.00015333383280607642, 0.03739502393748032, -0.8457026848887617)
 _NH3_hL = (1.0230389195910096e-10, -9.01173619674778e-09, -7.693180171285098e-07, 8.148925711345767e-05,
@@ -222,7 +222,7 @@ _NH3_hV = (-1.5323246964436346e-10, 1.341154075047321e-08, 1.181178610537754e-06
              -0.01090080493286388, 1.2129121114680004, 1364.0392422964662)
 _NH3_TLO, _NH3_THI = -77.0, 132.0
 
-# ---------------- CH3OH（平移 +266.34144157 kJ/kg） ----------------
+# ---------------- CH3OH (shift +266.34144157 kJ/kg) ----------------
 _CH3OH_LNP = (6.071697789417314e-17, -4.474383382147671e-14, 1.4922332158687438e-11, -3.713389940921318e-09,
              9.643627950530163e-07, -0.00025454685882528256, 0.06310145783702696, -5.507805919357708)
 _CH3OH_hL = (5.573934158642428e-12, -1.8104866695124476e-09, 8.709794689054448e-08, 2.7396583808978296e-05,
@@ -231,7 +231,7 @@ _CH3OH_hV = (-1.228628960059207e-11, 4.469399531774273e-09, -3.1756317512396483e
              0.002018557942790822, 1.156097552141014, 1301.565002270651)
 _CH3OH_TLO, _CH3OH_THI = -90.0, 239.0
 
-# ---------------- R32（平移 -100.67343194 kJ/kg） ----------------
+# ---------------- R32 (shift -100.67343194 kJ/kg) ----------------
 _R32_LNP = (4.985734545925537e-16, 8.088993550316065e-15, 7.23916818285453e-12, -2.4123562470111985e-09,
              5.690865248769261e-07, -0.00012346886007261548, 0.032029536226752524, -0.20703267077542895)
 _R32_hL = (3.052117712232615e-11, 7.669342242883148e-09, 4.426168044128746e-07, -6.097377922612308e-06,
@@ -240,7 +240,7 @@ _R32_hV = (-4.488337246373621e-11, -1.1379788910261148e-08, -6.764615880681746e-
              -0.0024175577393345023, 0.1589860001017608, 413.6297944744754)
 _R32_TLO, _R32_THI = -136.0, 78.0
 
-# ---------------- R218（平移 -100.17798078 kJ/kg） ----------------
+# ---------------- R218 (shift -100.17798078 kJ/kg) ----------------
 _R218_LNP = (8.255415504414131e-16, 7.344897883851216e-14, 1.093452574911193e-11, -2.800385114611927e-09,
              6.13844960232108e-07, -0.00013063706572324828, 0.03248293004447796, -0.8809937809605295)
 _R218_hL = (7.040720312389206e-12, 2.1911253182755153e-09, 1.9931060577128075e-07, 4.329266994236428e-06,
@@ -249,7 +249,7 @@ _R218_hV = (-1.0731550245287959e-11, -3.374732945181214e-09, -3.125522092678402e
              -2.3183839296438865e-05, 0.596775089781136, 189.38572453841817)
 _R218_TLO, _R218_THI = -147.0, 71.0
 
-# ---------------- CO2（平移 -100.25579182 kJ/kg） ----------------
+# ---------------- CO2 (shift -100.25579182 kJ/kg) ----------------
 _CO2_LNP = (7.349267422320306e-15, 9.714937274844203e-13, 5.722737962459257e-11, -5.000472245728414e-10,
              5.236317080887681e-07, -9.20196795346934e-05, 0.02647312340946483, 1.2485141855617028)
 _CO2_hL = (2.948691221375449e-09, 3.3584601264848553e-07, 1.0969134467517922e-05, 9.865777775779578e-05,
@@ -264,157 +264,157 @@ def _poly7(c, t):
 
 
 def _lnp_pref(t_C, c):
-    """lnP–t 7 次多项式饱和压：笔记式原生 MPa，本模块直接以 MPa 返回。"""
+    """Saturation pressure from the lnP-t degree-7 polynomial: the notes' formula is natively in MPa; this module returns MPa directly."""
     return math.exp(_poly7(c, t_C))
 
 
 def H2O_Pref(t_C):
-    """H2O 饱和压力，MPa。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
+    """H2O saturation pressure, MPa. t_C: °C (NIST-table fit, lnP-t degree-7 polynomial)."""
     return _lnp_pref(t_C, _H2O_LNP)
 
 
 def H2O_Tsat(P_MPa):
-    """H2O 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    """H2O saturation temperature, °C. P_MPa: MPa. Returns None when out of range."""
     return _tsat_bisect(P_MPa, H2O_Pref, _H2O_TLO, _H2O_THI)
 
 
 def H2O_hliq(t_C):
-    """H2O 饱和液体焓，kJ/kg。参考态 0°C 饱和液体 = 100 kJ/kg（已平移）。"""
+    """H2O saturated-liquid enthalpy, kJ/kg. Reference state: saturated liquid at 0°C = 100 kJ/kg (after the shift)."""
     return _poly6(_H2O_hL, t_C)
 
 
 def H2O_hgas(t_C):
-    """H2O 饱和蒸气焓，kJ/kg。参考态同 hliq（已平移）。"""
+    """H2O saturated-vapour enthalpy, kJ/kg. Reference state as for hliq (after the shift)."""
     return _poly6(_H2O_hV, t_C)
 
 
 def H2O_hlat(t_C):
-    """H2O 饱和潜热，kJ/kg = hgas - hliq（平移抵消，与表参考态无关）。"""
+    """H2O saturation latent heat, kJ/kg = hgas - hliq (the shift cancels; independent of the table reference state)."""
     return H2O_hgas(t_C) - H2O_hliq(t_C)
 
 
 def NH3_Pref(t_C):
-    """NH3 饱和压力，MPa。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
+    """NH3 saturation pressure, MPa. t_C: °C (NIST-table fit, lnP-t degree-7 polynomial)."""
     return _lnp_pref(t_C, _NH3_LNP)
 
 
 def NH3_Tsat(P_MPa):
-    """NH3 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    """NH3 saturation temperature, °C. P_MPa: MPa. Returns None when out of range."""
     return _tsat_bisect(P_MPa, NH3_Pref, _NH3_TLO, _NH3_THI)
 
 
 def NH3_hliq(t_C):
-    """NH3 饱和液体焓，kJ/kg。参考态 0°C 饱和液体 = 100 kJ/kg（已平移）。"""
+    """NH3 saturated-liquid enthalpy, kJ/kg. Reference state: saturated liquid at 0°C = 100 kJ/kg (after the shift)."""
     return _poly6(_NH3_hL, t_C)
 
 
 def NH3_hgas(t_C):
-    """NH3 饱和蒸气焓，kJ/kg。参考态同 hliq（已平移）。"""
+    """NH3 saturated-vapour enthalpy, kJ/kg. Reference state as for hliq (after the shift)."""
     return _poly6(_NH3_hV, t_C)
 
 
 def NH3_hlat(t_C):
-    """NH3 饱和潜热，kJ/kg = hgas - hliq（平移抵消，与表参考态无关）。"""
+    """NH3 saturation latent heat, kJ/kg = hgas - hliq (the shift cancels; independent of the table reference state)."""
     return NH3_hgas(t_C) - NH3_hliq(t_C)
 
 
 def CH3OH_Pref(t_C):
-    """CH3OH 饱和压力，MPa。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
+    """CH3OH saturation pressure, MPa. t_C: °C (NIST-table fit, lnP-t degree-7 polynomial)."""
     return _lnp_pref(t_C, _CH3OH_LNP)
 
 
 def CH3OH_Tsat(P_MPa):
-    """CH3OH 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    """CH3OH saturation temperature, °C. P_MPa: MPa. Returns None when out of range."""
     return _tsat_bisect(P_MPa, CH3OH_Pref, _CH3OH_TLO, _CH3OH_THI)
 
 
 def CH3OH_hliq(t_C):
-    """CH3OH 饱和液体焓，kJ/kg。参考态 0°C 饱和液体 = 100 kJ/kg（已平移）。"""
+    """CH3OH saturated-liquid enthalpy, kJ/kg. Reference state: saturated liquid at 0°C = 100 kJ/kg (after the shift)."""
     return _poly6(_CH3OH_hL, t_C)
 
 
 def CH3OH_hgas(t_C):
-    """CH3OH 饱和蒸气焓，kJ/kg。参考态同 hliq（已平移）。"""
+    """CH3OH saturated-vapour enthalpy, kJ/kg. Reference state as for hliq (after the shift)."""
     return _poly6(_CH3OH_hV, t_C)
 
 
 def CH3OH_hlat(t_C):
-    """CH3OH 饱和潜热，kJ/kg = hgas - hliq（平移抵消，与表参考态无关）。"""
+    """CH3OH saturation latent heat, kJ/kg = hgas - hliq (the shift cancels; independent of the table reference state)."""
     return CH3OH_hgas(t_C) - CH3OH_hliq(t_C)
 
 
 def R32_Pref(t_C):
-    """R32 饱和压力，MPa。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
+    """R32 saturation pressure, MPa. t_C: °C (NIST-table fit, lnP-t degree-7 polynomial)."""
     return _lnp_pref(t_C, _R32_LNP)
 
 
 def R32_Tsat(P_MPa):
-    """R32 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    """R32 saturation temperature, °C. P_MPa: MPa. Returns None when out of range."""
     return _tsat_bisect(P_MPa, R32_Pref, _R32_TLO, _R32_THI)
 
 
 def R32_hliq(t_C):
-    """R32 饱和液体焓，kJ/kg。参考态 0°C 饱和液体 = 100 kJ/kg（已平移）。"""
+    """R32 saturated-liquid enthalpy, kJ/kg. Reference state: saturated liquid at 0°C = 100 kJ/kg (after the shift)."""
     return _poly6(_R32_hL, t_C)
 
 
 def R32_hgas(t_C):
-    """R32 饱和蒸气焓，kJ/kg。参考态同 hliq（已平移）。"""
+    """R32 saturated-vapour enthalpy, kJ/kg. Reference state as for hliq (after the shift)."""
     return _poly6(_R32_hV, t_C)
 
 
 def R32_hlat(t_C):
-    """R32 饱和潜热，kJ/kg = hgas - hliq（平移抵消，与表参考态无关）。"""
+    """R32 saturation latent heat, kJ/kg = hgas - hliq (the shift cancels; independent of the table reference state)."""
     return R32_hgas(t_C) - R32_hliq(t_C)
 
 
 def R218_Pref(t_C):
-    """R218 饱和压力，MPa。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
+    """R218 saturation pressure, MPa. t_C: °C (NIST-table fit, lnP-t degree-7 polynomial)."""
     return _lnp_pref(t_C, _R218_LNP)
 
 
 def R218_Tsat(P_MPa):
-    """R218 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    """R218 saturation temperature, °C. P_MPa: MPa. Returns None when out of range."""
     return _tsat_bisect(P_MPa, R218_Pref, _R218_TLO, _R218_THI)
 
 
 def R218_hliq(t_C):
-    """R218 饱和液体焓，kJ/kg。参考态 0°C 饱和液体 = 100 kJ/kg（已平移）。"""
+    """R218 saturated-liquid enthalpy, kJ/kg. Reference state: saturated liquid at 0°C = 100 kJ/kg (after the shift)."""
     return _poly6(_R218_hL, t_C)
 
 
 def R218_hgas(t_C):
-    """R218 饱和蒸气焓，kJ/kg。参考态同 hliq（已平移）。"""
+    """R218 saturated-vapour enthalpy, kJ/kg. Reference state as for hliq (after the shift)."""
     return _poly6(_R218_hV, t_C)
 
 
 def R218_hlat(t_C):
-    """R218 饱和潜热，kJ/kg = hgas - hliq（平移抵消，与表参考态无关）。"""
+    """R218 saturation latent heat, kJ/kg = hgas - hliq (the shift cancels; independent of the table reference state)."""
     return R218_hgas(t_C) - R218_hliq(t_C)
 
 
 def CO2_Pref(t_C):
-    """CO2 饱和压力，MPa。t_C: °C（NIST 表拟合，lnP–t 7 次式）。"""
+    """CO2 saturation pressure, MPa. t_C: °C (NIST-table fit, lnP-t degree-7 polynomial)."""
     return _lnp_pref(t_C, _CO2_LNP)
 
 
 def CO2_Tsat(P_MPa):
-    """CO2 饱和温度，°C。P_MPa: MPa。超出范围返回 None。"""
+    """CO2 saturation temperature, °C. P_MPa: MPa. Returns None when out of range."""
     return _tsat_bisect(P_MPa, CO2_Pref, _CO2_TLO, _CO2_THI)
 
 
 def CO2_hliq(t_C):
-    """CO2 饱和液体焓，kJ/kg。参考态 0°C 饱和液体 = 100 kJ/kg（已平移）。"""
+    """CO2 saturated-liquid enthalpy, kJ/kg. Reference state: saturated liquid at 0°C = 100 kJ/kg (after the shift)."""
     return _poly6(_CO2_hL, t_C)
 
 
 def CO2_hgas(t_C):
-    """CO2 饱和蒸气焓，kJ/kg。参考态同 hliq（已平移）。"""
+    """CO2 saturated-vapour enthalpy, kJ/kg. Reference state as for hliq (after the shift)."""
     return _poly6(_CO2_hV, t_C)
 
 
 def CO2_hlat(t_C):
-    """CO2 饱和潜热，kJ/kg = hgas - hliq（平移抵消，与表参考态无关）。"""
+    """CO2 saturation latent heat, kJ/kg = hgas - hliq (the shift cancels; independent of the table reference state)."""
     return CO2_hgas(t_C) - CO2_hliq(t_C)
 
 

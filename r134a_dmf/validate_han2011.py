@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""Han et al. 2011 (JCED 56, 1821-1826) 112 点 p-T-x 数据:
-1) 与同实验室 Cui et al. 2007 的数据一致性检查 (同温度线性插值对比);
-2) 用现有冻结模型 (NRTL+gamma-phi, Zehioua 2009 拟合参数) 做独立验证。"""
+"""The 112-point p-T-x data of Han et al. 2011 (JCED 56, 1821-1826):
+1) consistency check against data of Cui et al. 2007 from the same laboratory (linear interpolation at the same temperature);
+2) independent validation with the existing frozen model (NRTL + gamma-phi, parameters fitted to Zehioua 2009)."""
 import csv, sys
 sys.path.insert(0, "/home/hatch/workspace/your_files/r134a_dmf")
 from r134a_dmf import psol
@@ -20,7 +20,7 @@ cui = load("cui2007.csv")
 print(f"Han 2011: {len(han)} 点, T={min(p[0] for p in han):.2f}~{max(p[0] for p in han):.2f}K")
 print(f"Cui 2007: {len(cui)} 点, T={min(p[0] for p in cui):.2f}~{max(p[0] for p in cui):.2f}K")
 
-# ---- 1) Han vs Cui: 同温度, 对 Cui 做 x 方向线性插值, 与 Han 对比 ----
+# ---- 1) Han vs Cui: at the same temperature, interpolate Cui in the x direction and compare with Han ----
 cui_by_T = {}
 for T, x, p in cui:
     cui_by_T.setdefault(T, []).append((x, p))
@@ -48,7 +48,7 @@ for T in sorted(diffs_by_T):
     s = diffs_by_T[T]
     print(f"T={T:7.2f}K  n={len(s):3d}  平均偏差={sum(s)/len(s):+6.2f}%  平均|偏差|={sum(abs(d) for d in s)/len(s):5.2f}%")
 
-# ---- 2) 冻结模型验证 Han 2011 ----
+# ---- 2) Validate Han 2011 with the frozen model ----
 pts = []
 for T, x1, pe in han:
     p_MPa, _ = psol(T, x1)

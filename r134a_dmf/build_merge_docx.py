@@ -1,7 +1,7 @@
 import os
 # -*- coding: utf-8 -*-
-"""生成《R134a-DMF 文献合并研究：四套数据、两次反转、一次证伪》.docx
-(2026-09-30 修订版: 并入 Han et al. 2011 全文数据)"""
+"""Generate the .docx of "R134a-DMF merged literature study: four data sets, two reversals, one falsification"
+(2026-09-30 revised edition: incorporating the full-text data of Han et al. 2011)"""
 from docx import Document
 from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH

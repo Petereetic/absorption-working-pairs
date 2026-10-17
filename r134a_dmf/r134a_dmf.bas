@@ -1,34 +1,34 @@
 Attribute VB_Name = "R134a_DMF"
 '======================================================================
-' R134a (1) + DMF (2) 溶液 VLE 与焓计算 - Excel VBA 模块
+' R134a (1) + DMF (2) solution VLE and enthalpy calculation - Excel VBA module
 '======================================================================
-' 模型: NRTL 活度系数 + gamma-phi 泡点模型
-' 数据源: Zehioua et al., J. Chem. Eng. Data 2009, DOI: 10.1021/je900440t
-' 验证: 58 个实验点 (303.30-353.24 K), 泡点压力平均绝对相对误差 1.49%
-'        (注: 1.49% 仅为训练集拟合精度。独立验证: Cui 2007 90点 AARD 15.1%,
-'         Han 2011 112点 AARD 10.1%; 跨实验室不确定度约 300K/8%、360K/20%。
-'         详见《文献合并研究-R134a-DMF-2026-09-30.md》)
-' 参考态: 273.15 K 饱和液体焓 = 100 kJ/kg (两组分统一)
+' Model: NRTL activity coefficients + gamma-phi bubble-point model
+' Data source: Zehioua et al., J. Chem. Eng. Data 2009, DOI: 10.1021/je900440t
+' Validation: 58 experimental points (303.30-353.24 K); bubble-point pressure mean absolute relative error 1.49%
+'       (Note: the 1.49% is only the fit accuracy on the training set. Independent validations: Cui 2007, 90 points, AARD 15.1%;
+'        Han 2011, 112 points, AARD 10.1%; cross-laboratory uncertainty about 300K/8%, 360K/20%.
+'        See the merged-literature study document for R134a-DMF, dated 2026-09-30.)
+' Reference state: saturated-liquid enthalpy at 273.15 K = 100 kJ/kg (unified for both components)
 '
-' 使用方法:
-'   1. Excel 中按 Alt+F11 打开 VBA 编辑器
-'   2. 菜单: 文件 -> 导入文件 -> 选择本文件 (r134a_dmf.bas)
-'   3. 在工作表中直接调用, 例如:
-'        =Psol(303.3, 0.4437)        求泡点压力 (MPa)
-'        =Bubble_T(0.337, 0.4437)        已知压力反算温度 (K)
-'        =hsol(330, 0.5)           求溶液焓 (kJ/kg)
-'        =Pref_R134a(303.15)             R134a 饱和压力 (MPa)
+' How to use:
+'   1. In Excel, press Alt+F11 to open the VBA editor
+'   2. Menu: File -> Import File -> select this file (r134a_dmf.bas)
+'   3. Call the functions directly in a worksheet, e.g.:
+'        =Psol(303.3, 0.4437)        bubble-point pressure (MPa)
+'        =Bubble_T(0.337, 0.4437)        temperature back-calculated from pressure (K)
+'        =hsol(330, 0.5)           solution enthalpy (kJ/kg)
+'        =Pref_R134a(303.15)             R134a saturation pressure (MPa)
 '======================================================================
 Option Explicit
 
 Private Const R_GAS As Double = 8.314462618  ' J/(mol·K)
-Private Const M1 As Double = 102.03          ' R134a 摩尔质量 g/mol
-Private Const M2 As Double = 73.09           ' DMF 摩尔质量 g/mol
+Private Const M1 As Double = 102.03          ' R134a molar mass g/mol
+Private Const M2 As Double = 73.09           ' DMF molar mass g/mol
 Private Const DG12 As Double = 868.1         ' NRTL, J/mol
 Private Const DG21 As Double = -929.1        ' NRTL, J/mol
 Private Const ALPHA As Double = 0.3
 
-'---------- 纯组分饱和压力 (MPa), T in K ----------
+'---------- Pure-component saturation pressures (MPa), T in K ----------
 
 Public Function Pref_R134a(T As Double) As Double
     Pref_R134a = Exp(7.89191 - 2310.84 / (T - 19.79))
@@ -38,7 +38,7 @@ Public Function Psat_DMF(T As Double) As Double
     Psat_DMF = (10# ^ (3.93068 - 1337.716 / (T - 82.648))) * 0.1
 End Function
 
-'---------- 液体摩尔体积 (m3/mol), Poynting 校正用 ----------
+'---------- Liquid molar volumes (m3/mol), for the Poynting correction ----------
 
 Private Function VL_R134a(T As Double) As Double
     Dim rho As Double
@@ -51,8 +51,8 @@ Private Function VL_DMF(T As Double) As Double
     VL_DMF = 0.07309 / (944# * (1# - 0.0009 * (T - 293#)))
 End Function
 
-'---------- NRTL 活度系数 ----------
-' 输入 T(K), x1 ; 输出 g1, g2 (ByRef)
+'---------- NRTL activity coefficients ----------
+' Input T(K), x1 ; output g1, g2 (ByRef)
 
 Public Sub NRTL_Gamma(T As Double, x1 As Double, ByRef g1 As Double, ByRef g2 As Double)
     Dim x2 As Double, t12 As Double, t21 As Double
@@ -71,7 +71,7 @@ Public Sub NRTL_Gamma(T As Double, x1 As Double, ByRef g1 As Double, ByRef g2 As
     g2 = Exp(x1 ^ 2 * (t12 * r2 ^ 2 + t21 * G21 / D1 ^ 2))
 End Sub
 
-'---------- NRTL 超额摩尔焓 (J/mol) ----------
+'---------- NRTL excess molar enthalpy (J/mol) ----------
 
 Public Function NRTL_hE(T As Double, x1 As Double) As Double
     Dim x2 As Double, t12 As Double, t21 As Double
@@ -89,9 +89,9 @@ Public Function NRTL_hE(T As Double, x1 As Double) As Double
     NRTL_hE = -R_GAS * T * x1 * x2 * (term1 + term2)
 End Function
 
-'---------- 泡点压力 (MPa) ----------
-' 输入 T(K), x1 ; y1 为气相摩尔分数 (ByRef 输出, 可忽略)
-' 气相几乎为纯 R134a (y1 > 0.99)
+'---------- Bubble-point pressure (MPa) ----------
+' Input T(K), x1 ; y1 is the vapour-phase mole fraction (ByRef output, may be ignored)
+' The vapour phase is almost pure R134a (y1 > 0.99)
 
 Public Function Psol(T As Double, x1 As Double, Optional ByRef y1 As Double = -1#) As Double
     Dim x2 As Double, g1 As Double, g2 As Double
@@ -114,7 +114,7 @@ Public Function Psol(T As Double, x1 As Double, Optional ByRef y1 As Double = -1
     Psol = p
 End Function
 
-'---------- 已知泡点压力反算温度 (K), 牛顿迭代 ----------
+'---------- Back-calculate the temperature (K) from the bubble-point pressure, Newton iteration ----------
 
 Public Function Bubble_T(p_MPa As Double, x1 As Double, Optional Tguess As Double = 330#) As Double
     Dim T As Double, pc As Double, p2 As Double, dpdT As Double
@@ -132,13 +132,13 @@ Public Function Bubble_T(p_MPa As Double, x1 As Double, Optional Tguess As Doubl
     Bubble_T = T
 End Function
 
-'---------- 已知露点温度与溶液温度反算浓度 (二分 80 次) ----------
-' 输入: Tdew(K) 露点温度, Tsol(K) 溶液温度
-' 返回: x1 (R134a 液相摩尔分数); 无根时返回 Empty
-' 原理: DMF 视为不挥发, 露点定压 P = Pref_R134a(Tdew);
-'       再二分求 Psol(Tsol, x1) = P, 括号取 x1 in [0, 1]。
-' 无根情形: P 超出 Tsol 下泡点压力区间 (如 Tsol 明显低于 Tdew)。
-' 注: 与 C/Python 同算法, 本 VBA 未在真实 Excel 中编译测试。
+'---------- Back-calculate the concentration from the dew-point temperature and the solution temperature (80 bisection steps) ----------
+' Input: Tdew(K) dew-point temperature, Tsol(K) solution temperature
+' Returns: x1 (R134a liquid-phase mole fraction); Empty when there is no root
+' Principle: DMF is treated as non-volatile; the dew point fixes the pressure P = Pref_R134a(Tdew);
+'       then bisection solves Psol(Tsol, x1) = P, with the bracket x1 in [0, 1].
+' No-root case: P outside the bubble-point pressure interval under Tsol (e.g. Tsol clearly below Tdew).
+' Note: same algorithm as C/Python; this VBA has not been compiled or tested in real Excel.
 
 Public Function Xi_By_Tsol_Tdew(Tsol As Double, Tdew As Double) As Variant
     Dim P As Double, Plo As Double, Phi As Double
@@ -159,25 +159,25 @@ Public Function Xi_By_Tsol_Tdew(Tsol As Double, Tdew As Double) As Variant
 End Function
 
 
-'---------- R134a 饱和温度 (K): Pref_R134a 的解析反解 ----------
+'---------- R134a saturation temperature (K): analytic inverse of Pref_R134a ----------
 
 Private Function Tsat_R134a(ByVal P_MPa As Double) As Double
     Tsat_R134a = 2310.84 / (7.89191 - Log(P_MPa)) + 19.79
 End Function
 
-'---------- 露点温度 (溶液) (K): 全库 TdewByTsolXi 约定 ----------
-' Tdew = Tsat_R134a(Psol(T, x1) 的压力): 以本模块自有纯 R134a 线
-' 评价溶液表面压力 Psol 所对应的饱和温度。DMF 视为不挥发。
+'---------- Dew-point temperature (solution) (K): library-wide TdewByTsolXi convention ----------
+' Tdew = Tsat_R134a(the pressure from Psol(T, x1)): the saturation temperature corresponding to the solution surface
+' pressure Psol, evaluated with this module's own pure-R134a line. DMF is treated as non-volatile.
 
 Public Function Tdew_By_Tsol_Xi(T As Double, x1 As Double) As Double
     Dim dummy As Double
     Tdew_By_Tsol_Xi = Tsat_R134a(Psol(T, x1, dummy))
 End Function
 
-'---------- 由溶液比焓反解溶液温度 (K) ----------
-' hsol 在固定 x1 下随 T 单调增, 二分 100 次反解,
-' 求解括号 T in [280, 360] K。h 超出值域返回 Empty。
-' 注: 与 C/Python 同算法, 本 VBA 未在真实 Excel 中编译测试。
+'---------- Solve the solution temperature (K) back from the solution specific enthalpy ----------
+' hsol increases monotonically with T at fixed x1; inverted by 100 bisection steps,
+' with the solution bracket T in [280, 360] K. Returns Empty when h is outside the range.
+' Note: same algorithm as C/Python; this VBA has not been compiled or tested in real Excel.
 
 Public Function Tsol_By_Hsol(h As Double, x1 As Double) As Variant
     Dim lo As Double, hi As Double, mid As Double, k As Long
@@ -192,7 +192,7 @@ Public Function Tsol_By_Hsol(h As Double, x1 As Double) As Variant
     Tsol_By_Hsol = 0.5 * (lo + hi)
 End Function
 
-'---------- 纯组分液体焓 (kJ/kg) ----------
+'---------- Pure-component liquid enthalpies (kJ/kg) ----------
 
 Public Function hliq_R134a(T As Double) As Double
     Dim tt As Double
@@ -204,7 +204,7 @@ Public Function H_DMF_L(T As Double) As Double
     H_DMF_L = -297.61 + 0.89544 * T + 0.0020551 * T * T
 End Function
 
-'---------- 摩尔分数 <-> 质量分数 (R134a) ----------
+'---------- Mole fraction <-> mass fraction (R134a) ----------
 
 Public Function X_to_W(x1 As Double) As Double
     X_to_W = x1 * M1 / (x1 * M1 + (1# - x1) * M2)
@@ -214,7 +214,7 @@ Public Function W_to_X(w1 As Double) As Double
     W_to_X = (w1 / M1) / (w1 / M1 + (1# - w1) / M2)
 End Function
 
-'---------- 溶液焓 (kJ/kg) ----------
+'---------- Solution enthalpy (kJ/kg) ----------
 ' h = w1*h1 + w2*h2 + hE/Mbar
 
 Public Function hsol(T As Double, x1 As Double) As Double

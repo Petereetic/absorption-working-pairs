@@ -1,12 +1,12 @@
-/* R22-DEGDME 热力学关联式（C 实现，与 r22_degdme.py 逐点一致）
- * 来源：E. Ando, I. Takeshita, Int. J. Refrigeration, Vol.7, No.3, 1984.
- *   式(1) 泡点压力 Rankine 方程：lnP = ΣAnX^n + (1/T)ΣBnX^n + lnT·ΣCnX^n
- *         P: kg/cm2, T: K, X: R22 摩尔分数；适用 X=0.1~1.0, T=-20~190°C
- *   式(6) 摩尔热容：C = ΣAnX^n + t·ΣBnX^n + t^2·ΣCnX^n
- *         C: J/mol/°C, t: °C；t=-30~110°C
- *   式(7) 混合热（10°C）：ΔHm = X(1-X)·Σ Gi·(1-2X)^(i-1), i=1..4；J/mol
- *   式(9) 溶液焓：H = ΔHm + ∫(10°C→t) Cp dτ；参考态：纯组分液体 10°C 焓为 0
- * 编译：gcc -O2 -Wall -o r22_degdme r22_degdme.c -lm
+/* Thermodynamic correlations for R22-DEGDME (C implementation, pointwise identical to r22_degdme.py)
+ * Source: E. Ando, I. Takeshita, Int. J. Refrigeration, Vol.7, No.3, 1984.
+ *   Eq. (1) Bubble-point pressure Rankine equation: lnP = ΣAnX^n + (1/T)ΣBnX^n + lnT·ΣCnX^n
+ *         P: kg/cm2, T: K, X: R22 mole fraction; valid X=0.1~1.0, T=-20~190°C
+ *   Eq. (6) Molar heat capacity: C = ΣAnX^n + t·ΣBnX^n + t^2·ΣCnX^n
+ *         C: J/mol/°C, t: °C; t=-30~110°C
+ *   Eq. (7) Heat of mixing (10°C): ΔHm = X(1-X)·Σ Gi·(1-2X)^(i-1), i=1..4; J/mol
+ *   Eq. (9) Solution enthalpy: H = ΔHm + integral(10°C->t) Cp dτ; reference state: pure-component liquids have enthalpy 0 at 10°C
+ * Build: gcc -O2 -Wall -o r22_degdme r22_degdme.c -lm
  */
 #include <stdio.h>
 #include <math.h>
@@ -14,9 +14,9 @@
 static const double M_R22 = 86.47;      /* g/mol */
 static const double M_DEGDME = 134.17;  /* g/mol */
 static const double TM_C = 10.0;        /* °C */
-static const double KGCM2_TO_MPA = 0.0980665; /* 1 kg/cm2 = 0.0980665 MPa（精确定义） */
+static const double KGCM2_TO_MPA = 0.0980665; /* 1 kg/cm2 = 0.0980665 MPa (exact definition) */
 
-/* 表2：式(1) n=0..5 (A, B, C) */
+/* Table 2: (A, B, C) of Eq. (1) for n=0..5 */
 static const double T2[6][3] = {
     { 5.2167e1, -5.5828e3, -6.3489e0},
     { 1.2753e1,  3.3999e3, -1.4386e0},
@@ -26,7 +26,7 @@ static const double T2[6][3] = {
     { 5.4717e2, -1.9049e4, -8.1999e1},
 };
 
-/* 表3：式(6) n=0..3 (A, B, C) */
+/* Table 3: (A, B, C) of Eq. (6) for n=0..3 */
 static const double T3[4][3] = {
     { 2.7974e2, -4.2015e-2,  2.3114e-3},
     {-1.5075e2,  5.9865e-1, -5.9745e-3},
@@ -34,7 +34,7 @@ static const double T3[4][3] = {
     {-1.2802e2,  1.0167e0,   1.0571e-3},
 };
 
-/* 式(7)：G1..G4 */
+/* Eq. (7): G1..G4 */
 static const double G4[4] = {-1.9061e4, 8.7280e3, -1.3948e3, -6.4218e2};
 
 static double poly(const double *c, int n, double x)
@@ -44,7 +44,7 @@ static double poly(const double *c, int n, double x)
     return s;
 }
 
-/* 式(1)：泡点压力 kg/cm2，T_K 开尔文 */
+/* Eq. (1): bubble-point pressure kg/cm2, T_K in kelvin */
 double r22degdme_psol_kgcm2(double X, double T_K)
 {
     double A[6], B[6], C[6];
@@ -53,21 +53,21 @@ double r22degdme_psol_kgcm2(double X, double T_K)
     return exp(sA + sB / T_K + sC * log(T_K));
 }
 
-/* 式(1)：泡点压力 MPa，t_C 摄氏度。
- * 【注意：函数名 r22degdme_psol_bar 为原名保留（改名待裁），返回值
- * 单位已由 bar 改为 MPa】＝原生 kg/cm2 值 ×0.0980665。 */
+/* Eq. (1): bubble-point pressure MPa, t_C in °C.
+ * [Note: the function name r22degdme_psol_bar is the retained original name (renaming pending a ruling); the return unit
+ * has been changed from bar to MPa] = native kg/cm2 value x0.0980665. */
 double r22degdme_psol_bar(double X, double t_C)
 {
     return r22degdme_psol_kgcm2(X, t_C + 273.15) * KGCM2_TO_MPA;
 }
 
-/* 由露点温度与溶液温度反解浓度 X（R22 摩尔分数），二分 80 次。
- * 露点定压 P = r22degdme_psol_kgcm2(1.0, Tdew_C+273.15) [kg/cm2
- * 原生]：式(1) 在 X=1 端即本模块的纯 R22 饱和压力（DEGDME 视为
- * 不挥发）；再二分求 r22degdme_psol_kgcm2(X, Tsol_C+273.15) = P，
- * 括号取式(1) 有效浓度域 X ∈ [0.1, 1.0]。内部一律走原生 kg/cm2
- * 函数（不经 MPa 导出线），保证浓度输出逐位不变。
- * 无根时返回 NAN（如 Tsol 明显低于 Tdew）。 */
+/* Solve the concentration X (R22 mole fraction) back from the dew-point temperature and the solution temperature, by 80 bisection steps.
+ * The dew point fixes the pressure P = r22degdme_psol_kgcm2(1.0, Tdew_C+273.15) [native kg/cm2
+ * ]: at the X=1 end, Eq. (1) is this module's pure-R22 saturation pressure (DEGDME treated as
+ * non-volatile); then bisection solves r22degdme_psol_kgcm2(X, Tsol_C+273.15) = P,
+ * with the bracket taken as the valid concentration domain of Eq. (1), X in [0.1, 1.0]. Internally the native kg/cm2
+ * functions are used throughout (not via the MPa export line), so the concentration output is bit-for-bit unchanged.
+ * Returns NAN when there is no root (e.g. Tsol clearly below Tdew). */
 double r22degdme_XiByTsolTdew(double Tsol_C, double Tdew_C)
 {
     double P = r22degdme_psol_kgcm2(1.0, Tdew_C + 273.15);
@@ -83,13 +83,13 @@ double r22degdme_XiByTsolTdew(double Tsol_C, double Tdew_C)
 }
 
 
-/* 溶液在 (X, t_C) 的露点温度 [°C]（全库 TdewByTsolXi 约定）：
- * 本模块自有纯 R22 线（式(1) X=1 端）上满足
+/* Dew-point temperature [°C] of the solution at (X, t_C) (library-wide TdewByTsolXi convention):
+ * the temperature on this module's own pure-R22 line (the X=1 end of Eq. (1)) satisfying
  * r22degdme_psol_kgcm2(1.0, Tdew+273.15) =
- * r22degdme_psol_kgcm2(X, t_C+273.15) [kg/cm2 原生] 的温度，
- * 二分 80 次反解，括号 t ∈ [-50, 190] °C。内部一律走原生 kg/cm2
- * 函数（不经 MPa 导出线），保证温度输出逐位不变。注意：式(1)
- * 标称温度辖区 -20~190 °C，Tdew < -20 °C 为纯端外推。无根返回 NAN。 */
+ * r22degdme_psol_kgcm2(X, t_C+273.15) [native kg/cm2],
+ * inverted by 80 bisection steps, bracket t in [-50, 190] °C. Internally the native kg/cm2
+ * functions are used throughout (not via the MPa export line), so the temperature output is bit-for-bit unchanged. Note: Eq. (1)
+ * has a nominal temperature domain of -20~190 °C; Tdew < -20 °C is an extrapolation of the pure end. Returns NAN when there is no root. */
 double r22degdme_TdewByTsolXi(double X, double t_C)
 {
     double P = r22degdme_psol_kgcm2(X, t_C + 273.15);
@@ -105,9 +105,9 @@ double r22degdme_TdewByTsolXi(double X, double t_C)
 }
 
 double r22degdme_hsol(double X, double t_C);  /* forward: defined below */
-/* 由溶液比焓 h [kJ/kg] 与 R22 摩尔分数 X 反解溶液温度 [°C]：
- * r22degdme_hsol 在固定 X 下随 t 单调增，二分 100 次反解，
- * 括号 t ∈ [-30, 110] °C。无根返回 NAN。 */
+/* Solve the solution temperature [°C] back from the solution specific enthalpy h [kJ/kg] and R22 mole fraction X:
+ * r22degdme_hsol increases monotonically with t at fixed X; inverted by 100 bisection steps,
+ * bracket t in [-30, 110] °C. Returns NAN when there is no root. */
 double r22degdme_TsolByHsol(double h, double X)
 {
     double lo = -30.0, hi = 110.0, mid;
@@ -120,7 +120,7 @@ double r22degdme_TsolByHsol(double h, double X)
     return 0.5 * (lo + hi);
 }
 
-/* 式(6)：摩尔热容 J/mol/°C */
+/* Eq. (6): molar heat capacity J/mol/°C */
 double r22degdme_cp_molar(double X, double t_C)
 {
     double A[4], B[4], C[4];
@@ -129,7 +129,7 @@ double r22degdme_cp_molar(double X, double t_C)
     return sA + t_C * sB + t_C * t_C * sC;
 }
 
-/* 式(7)：混合热 J/mol（10°C 测定值） */
+/* Eq. (7): heat of mixing J/mol (measured value at 10°C) */
 double r22degdme_heat_of_mixing(double X)
 {
     double s = 0.0, p = 1.0, d = 1.0 - 2.0 * X;
@@ -137,7 +137,7 @@ double r22degdme_heat_of_mixing(double X)
     return X * (1.0 - X) * s;
 }
 
-/* 式(9)：溶液比焓 kJ/kg；参考态：纯组分液体 10°C 焓为 0 */
+/* Eq. (9): solution specific enthalpy kJ/kg; reference state: pure-component liquids have enthalpy 0 at 10°C */
 double r22degdme_hsol(double X, double t_C)
 {
     double A[4], B[4], C[4];
@@ -155,7 +155,7 @@ double r22degdme_hsol(double X, double t_C)
 #ifdef R22DEGDME_MAIN
 int main(void)
 {
-    /* 网格自检输出，供与 Python 版逐点比对 */
+    /* Grid self-check output, for pointwise comparison against the Python version */
     double Xs[] = {0.1, 0.3, 0.5, 0.7, 0.9, 1.0};
     double ts[] = {-20.0, 0.0, 10.0, 40.0, 80.0, 110.0};
     for (int i = 0; i < 6; i++)

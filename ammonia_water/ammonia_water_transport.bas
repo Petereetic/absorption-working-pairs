@@ -1,32 +1,32 @@
 Attribute VB_Name = "AmmoniaWaterTransport"
 ' ==========================================================================
-' 氨水溶液输运物性 VBA 工作表函数
+' Ammonia-water solution transport properties - VBA worksheet functions
 ' ==========================================================================
 ' M. Conde Engineering (2004)
 ' "Thermophysical Properties of NH3 + H2O Solutions for the Industrial
-'  Design of Absorption Refrigeration Equipment", 第 5~15 章 + 附录 A/B/C。
+'  Design of Absorption Refrigeration Equipment", Chapters 5-15 + Appendices A/B/C.
 '
-' 与 ammonia_water_transport.py 逐行对应。双精度。
+' Corresponds line by line to ammonia_water_transport.py. Double precision.
 '
-' 工作表函数 (T 单位 K; x 液相氨摩尔分数; y 气相氨摩尔分数):
-'   AW_TcSol(x)      溶液临界温度 [K]               (§5)
-'   AW_PcSol(x)      溶液临界压力 [MPa]             (§5)
-'                    (§5 系数原生以 bar 计(书中源口径),公开函数出口 ×0.1)
-'   AW_CpLiq(T,x)    饱和液相比热 [kJ/(kg K)]       (§6)
-'   AW_LamLiq(T,x)   饱和液相导热 [W/(m K)]         (§7)
-'   AW_EtaLiq(T,x)   饱和液相动力黏度 [Pa s]        (§8)
-'   AW_Sigma(T,x)    表面张力 [N/m]                 (§9)
-'   AW_RhoLiq(T,x)   饱和液相密度 [kg/m^3]          (§10)
-'   AW_Diff(T,x)     质扩散系数 [m^2/s]             (§11)
-'   AW_LamVap(T,y)   饱和气相导热 [W/(m K)]         (§12)
-'   AW_EtaVap(T,y)   饱和气相动力黏度 [Pa s]        (§13)
-'   AW_RhoVap(T,y)   饱和气相密度 [kg/m^3]          (§14)
-'   AW_CpVap(T,y)    饱和气相比热 [kJ/(kg K)]       (§15)
+' Worksheet functions (T in K; x liquid-phase ammonia mole fraction; y vapour-phase ammonia mole fraction):
+'   AW_TcSol(x)      solution critical temperature [K]               (§5)
+'   AW_PcSol(x)      solution critical pressure [MPa]             (§5)
+'                    (the §5 coefficients are natively in bar (the book's source convention); public functions convert x0.1 at the exit)
+'   AW_CpLiq(T,x)    saturated-liquid specific heat [kJ/(kg K)]       (§6)
+'   AW_LamLiq(T,x)   saturated-liquid thermal conductivity [W/(m K)]         (§7)
+'   AW_EtaLiq(T,x)   saturated-liquid dynamic viscosity [Pa s]        (§8)
+'   AW_Sigma(T,x)    surface tension [N/m]                 (§9)
+'   AW_RhoLiq(T,x)   saturated-liquid density [kg/m^3]          (§10)
+'   AW_Diff(T,x)     mass diffusivity [m^2/s]             (§11)
+'   AW_LamVap(T,y)   saturated vapour-phase thermal conductivity [W/(m K)]         (§12)
+'   AW_EtaVap(T,y)   saturated vapour-phase dynamic viscosity [Pa s]        (§13)
+'   AW_RhoVap(T,y)   saturated vapour-phase density [kg/m^3]          (§14)
+'   AW_CpVap(T,y)    saturated vapour-phase specific heat [kJ/(kg K)]       (§15)
 '
-' 注意:
-'   本 .bas 未在真实 Excel 中编译或运行,系由 Python 参考实现逐行移植。
-'   附录 A 总式书中印刷为乘法,实为加法(见 py/c 注释)。
-'   §12/§13 正文附录引用有笔误,此处按目录(A=导热,B=黏度)实现。
+' Notes:
+'   This .bas has not been compiled or run in real Excel; it is a line-by-line port of the Python reference implementation.
+'   The overall formula of Appendix A is printed in the book as a product; it is actually a sum (see the py/c comments).
+'   The appendix citations in the §12/§13 text contain misprints; implemented here per the table of contents (A = thermal conductivity, B = viscosity).
 ' ==========================================================================
 Option Explicit
 
@@ -41,13 +41,13 @@ Public Function AW_TcSol(ByVal x As Double) As Double
              - 239.626217 * x ^ 3 + 88.689691 * x ^ 4
 End Function
 
-' 溶液临界压力原生值 [bar](系数书中源口径),仅供内部/核对
+' Native value of the solution critical pressure [bar] (the book-source convention of the coefficients); for internal/check use only
 Private Function PcSolBar(ByVal x As Double) As Double
     PcSolBar = 220.64 - 37.923795 * x + 36.424739 * x ^ 2 _
              - 41.851597 * x ^ 3 - 63.805617 * x ^ 4
 End Function
 
-' 溶液临界压力 [MPa] = 原生 bar 值 × 0.1
+' Solution critical pressure [MPa] = native bar value x 0.1
 Public Function AW_PcSol(ByVal x As Double) As Double
     AW_PcSol = PcSolBar(x) * 0.1
 End Function
@@ -60,7 +60,7 @@ Private Sub TStar(ByVal T As Double, ByVal x As Double, _
     TsH2O = th * T_C_H2O
 End Sub
 
-' ---------- 附录 A: IAPWS 水导热 ----------
+' ---------- Appendix A: IAPWS thermal conductivity of water ----------
 Private Function IapwsLambdaWater(ByVal T As Double, ByVal rho As Double) As Double
     Dim Tb As Double, rb As Double
     Dim lam0 As Double, lam1 As Double, lam2 As Double
@@ -84,7 +84,7 @@ Private Function IapwsLambdaWater(ByVal T As Double, ByVal rho As Double) As Dou
     IapwsLambdaWater = lam0 + lam1 + lam2
 End Function
 
-' ---------- 附录 B: IAPWS 水黏度 ----------
+' ---------- Appendix B: IAPWS viscosity of water ----------
 Private Function IapwsEtaWater(ByVal T As Double, ByVal rho As Double) As Double
     Dim Tb As Double, rb As Double, eta0 As Double
     Dim s As Double, ti As Double, rm As Double
@@ -109,7 +109,7 @@ Private Function IapwsEtaWater(ByVal T As Double, ByVal rho As Double) As Double
     IapwsEtaWater = 55.071E-06 * eta0 * Exp(rb * s)
 End Function
 
-' ---------- 附录 C: Fenghour 氨黏度 [μPa s] ----------
+' ---------- Appendix C: Fenghour viscosity of ammonia [μPa s] ----------
 Private Function FenghourEtaUpas(ByVal T As Double, ByVal rhoMolL As Double) As Double
     Dim th As Double, lnth As Double, zeta As Double
     Dim eta0 As Double, sq As Double, b1 As Double, dEta As Double, s As Double
@@ -146,7 +146,7 @@ Private Function FenghourEta(ByVal T As Double, ByVal rhoKgM3 As Double) As Doub
     FenghourEta = FenghourEtaUpas(T, rhoKgM3 / 17.03) * 1E-06
 End Function
 
-' ---------- §10 纯组分密度 ----------
+' ---------- §10 Pure-component densities ----------
 Private Function RhoLiqPure(ByVal T As Double, ByVal isNH3 As Boolean) As Double
     Dim A As Variant, B As Variant
     Dim Tc As Double, rhoc As Double, tau As Double, s As Double
@@ -268,7 +268,7 @@ Public Function AW_Diff(ByVal T As Double, ByVal x As Double) As Double
     AW_Diff = 117.282E-18 * T * Sqr(psi * Msol) / (eta * Vd ^ 0.6)
 End Function
 
-' ---------- §12/§13 共用 φ ----------
+' ---------- §12/§13 shared φ ----------
 Private Function Phi12(ByVal e1 As Double, ByVal e2 As Double) As Double
     Dim r As Double
     r = Sqr(e1 / e2) * (18.0152 / 17.03) ^ 0.25

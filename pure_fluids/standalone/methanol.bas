@@ -1,8 +1,8 @@
 Attribute VB_Name = "Methanol"
-' CH3OH 纯物质饱和性质（单独计算文件，Excel VBA 工作表函数；与合并模块 pure_fluids.bas 系数逐字同源）
-' 源：NIST WebBook 饱和表紧凑拟合（笔记见 ../fit-notes/甲醇饱和性质拟合-NIST表.md；源表为网页取整输出，残差含取整噪声）；饱和压 lnP-t 7 次式，对表全程最大 0.1064%、常用带（-40~90°C）0.0321%；焓已由表基准平移 +266.341441575 至统一基准。
-' 参考态：0°C 饱和液体焓 = 100 kJ/kg（模块统一基准）。Pref 返回 MPa；Tsat 入参 MPa 超界返回 #NUM!。
-' 注意：本模块未在真实 Excel 中编译运行过，使用前请先编译验证。
+' CH3OH pure-substance saturation properties (standalone calculation file, Excel VBA worksheet functions; coefficients verbatim identical to the merged module pure_fluids.bas)
+' Source: compact fit to the NIST WebBook saturation table (see fit notes in ../fit-notes/, "methanol saturation-property fit - NIST table"; the source table is rounded web output, so the residuals include rounding noise); saturation pressure as a degree-7 lnP-t polynomial, max deviation vs. table 0.1064% over the full range and 0.0321% in the usual band (-40~90°C); enthalpy shifted from the table datum by +266.341441575 to the uniform reference.
+' Reference state: saturated-liquid enthalpy at 0°C = 100 kJ/kg (uniform module reference). Pref returns MPa; Tsat takes MPa and returns #NUM! when out of range.
+' Note: this module has not been compiled or run in real Excel; compile and verify before use.
 
 Option Explicit
 
@@ -104,7 +104,7 @@ Public Function hgas_CH3OH(ByVal t_C As Double) As Double
     hgas_CH3OH = Poly6(t_C, True)
 End Function
 
-' CH3OH 饱和潜热 kJ/kg = hgas - hliq（同一参考态）
+' CH3OH saturation latent heat, kJ/kg = hgas - hliq (same reference state)
 Public Function hlat_CH3OH(ByVal t_C As Double) As Double
     hlat_CH3OH = hgas_CH3OH(t_C) - hliq_CH3OH(t_C)
 End Function

@@ -1,43 +1,43 @@
 Attribute VB_Name = "NH3LiNO3"
 ' ==========================================================================
-' 氨-硝酸锂 (NH3/LiNO3) 溶液物性 VBA 工作表函数
+' Ammonia-lithium nitrate (NH3/LiNO3) solution properties - VBA worksheet functions
 ' ==========================================================================
-' 来源: Amaris Castilla, C.F. (2014) 博士论文, Universitat Rovira i
-' Virgili, 附录 B (pp. A-6~A-8) 转录的关联式:
-'   泡点压力 Libotean et al. (2007); 液体焓 Valles & Salavera (2011,
-'   Haltenberger 法); 比热/密度 Libotean et al. (2008); 导热 Cuenca
-'   et al. (2013a); 结晶界限 Infante Ferreira et al. (1984)。
-' 黏度不实现: 论文附录 B 黏度式排版残损, 重构式未经核实
-' (仅 Python 版以 EXPERIMENTAL 标记提供)。
+' Source: Amaris Castilla, C.F. (2014), doctoral thesis, Universitat Rovira i
+' Virgili, correlations transcribed in Appendix B (pp. A-6~A-8):
+'   Bubble-point pressure Libotean et al. (2007); liquid enthalpy Valles & Salavera (2011,
+'   Haltenberger method); specific heat / density Libotean et al. (2008); thermal conductivity Cuenca
+'   et al. (2013a); crystallisation limit Infante Ferreira et al. (1984).
+' Viscosity is not implemented: the viscosity formula in Appendix B of the thesis is typeset in damaged form and the reconstructed form is unverified
+' (provided in the Python version only, marked EXPERIMENTAL).
 '
-' *** 本 .bas 未在真实 Excel 中编译或运行, 系由 Python 参考实现 ***
-' *** 逐行移植, 使用前请在 Excel 中实测。                      ***
+' *** This .bas has not been compiled or run in real Excel; it is a line-by-line port of the Python reference implementation. ***
+' *** Verify it in Excel before use.                      ***
 '
-' 约定: x = 氨质量分数 (小数, 如 0.5); T 为 K (NL_Xcris 用 °C)。
-' 压力: 公开工作表函数边界一律 MPa; 内部算术与源式仍为 kPa,
-' 公开函数只在边界作 MPa <-> kPa 换算 (私有函数 Psol_TX_kPa /
-' T_bubble_PX_kPa 为内部 kPa 原生值)。
-' 工作表函数:
-'   NL_Psol(T_K, x)     泡点压力 [MPa]      (T 293.15-353.15, x 0.35-0.65)
-'   NL_Tbub(P_MPa, x)   泡点温度 [K]        (解析反解; 结果须在上述 T 域)
-'   NL_hsol(T_K, x)     溶液比焓 [kJ/kg]    (T 273.15-353.15, x 0.35-0.65)
-'   NL_Cp(T_K, x)       比热 [kJ/(kg K)]    (T 293.15-353.15, x 0.35-0.65)
-'   NL_Rho(T_K, x)      密度 [kg/m^3]       (T 293.15-353.15, x 0.35-0.65)
-'   NL_K(T_K, x)        导热系数 [W/(m K)]  (T 303.15-353.15, x 0.35-0.60)
-'   NL_Xcris(T_C, x)    结晶界限量 XCRIS    (x 0-1, 原文十分段伪代码)
-'   NL_XiByTsolTdew(Tdew_K, Tsol_K)  由露点温度与溶液温度反解 x;
-'                       无根返回 Empty (本函数按跨工质对统一约定,
-'                       不用本模块其余函数的 #VALUE! 约定)
+' Conventions: x = ammonia mass fraction (a fraction, e.g. 0.5); T in K (NL_Xcris uses °C).
+' Pressure: worksheet-function boundaries are always MPa; internal arithmetic and the source formulas remain in kPa;
+' public functions convert MPa <-> kPa only at the boundary (the private functions Psol_TX_kPa /
+' T_bubble_PX_kPa are internal native values in kPa).
+' Worksheet functions:
+'   NL_Psol(T_K, x)     bubble-point pressure [MPa]      (T 293.15-353.15, x 0.35-0.65)
+'   NL_Tbub(P_MPa, x)   bubble-point temperature [K]        (analytic inverse; the result must lie in the T domain above)
+'   NL_hsol(T_K, x)     solution specific enthalpy [kJ/kg]    (T 273.15-353.15, x 0.35-0.65)
+'   NL_Cp(T_K, x)       specific heat [kJ/(kg K)]    (T 293.15-353.15, x 0.35-0.65)
+'   NL_Rho(T_K, x)      density [kg/m^3]       (T 293.15-353.15, x 0.35-0.65)
+'   NL_K(T_K, x)        thermal conductivity [W/(m K)]  (T 303.15-353.15, x 0.35-0.60)
+'   NL_Xcris(T_C, x)    crystallisation-limit quantity XCRIS    (x 0-1, ten-segment pseudocode of the original)
+'   NL_XiByTsolTdew(Tdew_K, Tsol_K)  solves x back from the dew-point temperature and the solution temperature;
+'                       returns Empty when there is no root (this function follows the cross-pair library convention,
+'                       not the #VALUE! convention of the rest of this module)
 '
-' 焓参考态 (来源原文): 0 °C、x=0.5 时 H = 0 kJ/kg。与本库其他工质对
-' 的参考态不同, 跨工质对作焓差比较时注意。
-' 导热注记: 论文印作 ka3 T^2 x (ka3 项带 x), 本实现按不带额外 x 的
-' 读法, 两读法差约 3%, 详见 公式说明.md。
-' 范围外返回 #VALUE! 错误值。
+' Enthalpy reference state (per the source): H = 0 kJ/kg at 0 °C and x=0.5. This differs from the reference states of the other pairs
+' in this library; take care when comparing enthalpy differences across pairs.
+' Thermal-conductivity note: the thesis prints ka3 T^2 x (the ka3 term carries an x); this implementation follows the reading without the extra x;
+' the two readings differ by about 3%; see the formula notes file.
+' Out-of-range inputs return the #VALUE! error value.
 ' ==========================================================================
 Option Explicit
 
-' ---------- 三次多项式 (Horner, 系数常数项在前, 存于 Variant 数组) ----------
+' ---------- Cubic polynomial (Horner; coefficients with the constant term first, stored in Variant arrays) ----------
 Private Function Poly3(ByRef c As Variant, ByVal x As Double) As Double
     Poly3 = ((c(3) * x + c(2)) * x + c(1)) * x + c(0)
 End Function
@@ -57,7 +57,7 @@ Private Function InRng(ByVal v As Double, ByVal lo As Double, _
     InRng = (v >= lo And v <= hi)
 End Function
 
-' ---------- (私有, 内部原生值) 泡点压力 [kPa]: ln P = pa(x) + pb(x)/T ----------
+' ---------- (private, internal native value) Bubble-point pressure [kPa]: ln P = pa(x) + pb(x)/T ----------
 Private Function Psol_TX_kPa(ByVal T_K As Double, ByVal x As Double) As Variant
     Dim pa As Double, pb As Double
     If Not InRng(T_K, 293.15, 353.15) Or Not InRng(x, 0.35, 0.65) Then
@@ -67,7 +67,7 @@ Private Function Psol_TX_kPa(ByVal T_K As Double, ByVal x As Double) As Variant
     Psol_TX_kPa = Exp(pa + pb / T_K)
 End Function
 
-' ---------- 泡点压力 [MPa]: 公开边界只作换算 = Psol_TX_kPa * 1e-3 ----------
+' ---------- Bubble-point pressure [MPa]: the public boundary only converts = Psol_TX_kPa * 1e-3 ----------
 Public Function NL_Psol(ByVal T_K As Double, ByVal x As Double) As Variant
     Dim p As Variant
     p = Psol_TX_kPa(T_K, x)
@@ -78,7 +78,7 @@ Public Function NL_Psol(ByVal T_K As Double, ByVal x As Double) As Variant
     End If
 End Function
 
-' ---------- (私有, 内部原生值) 泡点温度 [K]: T = pb / (ln P - pa), P 为 kPa ----------
+' ---------- (private, internal native value) Bubble-point temperature [K]: T = pb / (ln P - pa), P in kPa ----------
 Private Function T_bubble_PX_kPa(ByVal P_kPa As Double, ByVal x As Double) As Variant
     Dim pa As Double, pb As Double, denom As Double, T_K As Double
     If Not InRng(x, 0.35, 0.65) Or P_kPa <= 0# Then
@@ -96,18 +96,18 @@ Private Function T_bubble_PX_kPa(ByVal P_kPa As Double, ByVal x As Double) As Va
     T_bubble_PX_kPa = T_K
 End Function
 
-' ---------- 泡点温度 [K]: 公开边界入参 P_MPa [MPa], 换回 kPa 交私有原生函数 ----------
+' ---------- Bubble-point temperature [K]: the public boundary takes P_MPa [MPa], converts back to kPa and passes to the private native function ----------
 Public Function NL_Tbub(ByVal P_MPa As Double, ByVal x As Double) As Variant
     NL_Tbub = T_bubble_PX_kPa(P_MPa * 1000#, x)
 End Function
 
-' ---------- 纯氨饱和线 (露点口径, 供 NL_XiByTsolTdew 用) ----------
-' LiNO3 不挥发, 气相视为纯氨。纯氨线 2026-10-12 换源: 改用氨 NIST
-' 饱和表紧凑拟合 (lnP-t 7 次多项式, P 以 MPa 计, t 为 degC; 源:
-' NIST WebBook 饱和表 210 点 -77~132 degC; 常用带 -50~+60 degC
-' 最大偏差 0.0027%)。此前用 Patek-Klomfar 式 (6) 纯氨端点, 其
-' 25 degC 给 1012 kPa, 较 NIST 表值 1002.69 kPa 高约 0.9%, 自此
-' 只作历史口径分账。混合物泡点式不变。辖区 t = -77~132 degC。
+' ---------- Pure-ammonia saturation line (dew-point convention, for NL_XiByTsolTdew) ----------
+' LiNO3 is non-volatile; the vapour phase is treated as pure ammonia. The pure-ammonia line was re-sourced on 2026-10-12: it now uses a compact
+' fit to the ammonia NIST saturation table (lnP-t degree-7 polynomial; P in MPa, t in degC; source:
+' NIST WebBook saturation table, 210 points, -77~132 degC; max deviation over the usual band -50~+60 degC
+' is 0.0027%). Previously the pure-ammonia endpoint of the Patek-Klomfar Eq. (6) was used; at
+' 25 degC it gives 1012 kPa, about 0.9% above the NIST table value 1002.69 kPa; from now on
+' it is kept only as a historical convention, accounted separately. The mixture bubble-point formula is unchanged. Domain t = -77~132 degC.
 Private Function PrefNH3Pure(ByVal T_K As Double) As Variant
     Dim t As Double, lnP As Double, k As Long, c As Variant
     t = T_K - 273.15
@@ -125,8 +125,8 @@ Private Function PrefNH3Pure(ByVal T_K As Double) As Variant
     PrefNH3Pure = 1000# * Exp(lnP)
 End Function
 
-' 纯氨饱和温度 [K]: 二分 80 次反解 PrefNH3Pure(T) = P_kPa;
-' P 落在拟合辖区压力跨度 (约 6.4~11280 kPa) 之外时返回 Empty。
+' Pure-ammonia saturation temperature [K]: inverted from PrefNH3Pure(T) = P_kPa by 80 bisection steps;
+' returns Empty when P lies outside the pressure span of the fit domain (approx. 6.4~11280 kPa).
 Private Function TsatNH3Pure(ByVal P_kPa As Double) As Variant
     Dim lo As Double, hi As Double, mid As Double, k As Long
     lo = 196.15: hi = 405.15
@@ -140,13 +140,13 @@ Private Function TsatNH3Pure(ByVal P_kPa As Double) As Variant
     TsatNH3Pure = 0.5 * (lo + hi)
 End Function
 
-' ---------- 由露点温度与溶液温度反解氨质量分数 x ----------
-' 露点定压 P = PrefNH3Pure(Tdew_K) (纯氨饱和压, 口径见上);
-' 再二分 80 次反解 Psol_TX_kPa(Tsol_K, x) = P (全程内部 kPa,
-' 不经公开 MPa 边界), 括号取泡点函数有效
-' 浓度域 x = 0.35-0.65。无根时返回 Empty (P 落在 Tsol 下泡点压力
-' 跨度之外, 如溶液温度明显低于露点温度; 或 Tdew 超出纯氨 NIST
-' 拟合辖区; 或 Tsol 越界)。与 C/Python 同算法; 未在真实 Excel 编译。
+' ---------- Solve the ammonia mass fraction x back from the dew-point temperature and the solution temperature ----------
+' Dew-point pressure P = PrefNH3Pure(Tdew_K) (pure-ammonia saturation pressure; convention above);
+' then 80 bisection steps invert Psol_TX_kPa(Tsol_K, x) = P (internal kPa throughout,
+' not via the public MPa boundary); the bracket is the bubble-point function's valid
+' concentration domain x = 0.35-0.65. Returns Empty when there is no root (P outside the span of bubble-point pressures under Tsol,
+' e.g. the solution temperature clearly below the dew-point temperature; or Tdew outside the pure-ammonia NIST
+' fit domain; or Tsol out of domain). Same algorithm as C/Python; not compiled in real Excel.
 Public Function NL_XiByTsolTdew(ByVal Tsol_K As Double, ByVal Tdew_K As Double) As Variant
     Dim P As Variant, lo As Double, hi As Double, mid As Double, k As Long
     P = PrefNH3Pure(Tdew_K)
@@ -168,12 +168,12 @@ Public Function NL_XiByTsolTdew(ByVal Tsol_K As Double, ByVal Tdew_K As Double) 
 End Function
 
 
-' ---------- 露点温度（溶液）[K]：全库 TdewByTsolXi 约定 ----------
-' Tdew = TsatNH3Pure(Psol_TX_kPa(T_K, x))：以纯氨 NIST 拟合线
-' （2026-10-12 换源，见上）评价溶液表面压力 Psol 所对应的饱和
-' 温度（全程内部 kPa，不经公开 MPa 边界）。LiNO3 不挥发，
-' 气相视为纯氨。Psol_TX_kPa 无解或 P 超出纯氨
-' 拟合辖区压力跨度时返回 Empty。
+' ---------- Dew-point temperature (solution) [K]: library-wide TdewByTsolXi convention ----------
+' Tdew = TsatNH3Pure(Psol_TX_kPa(T_K, x)): the saturation temperature corresponding to the solution surface pressure Psol,
+' evaluated with the pure-ammonia NIST fit line (re-sourced on 2026-10-12; see above)
+' (internal kPa throughout, not via the public MPa boundary). LiNO3 is non-volatile,
+' the vapour phase is treated as pure ammonia. Returns Empty when Psol_TX_kPa has no solution or P lies outside
+' the pressure span of the pure-ammonia fit domain.
 Public Function NL_TdewByTsolX(ByVal T_K As Double, ByVal x As Double) As Variant
     Dim P As Variant, T As Variant
     P = Psol_TX_kPa(T_K, x)
@@ -183,11 +183,11 @@ Public Function NL_TdewByTsolX(ByVal T_K As Double, ByVal x As Double) As Varian
     NL_TdewByTsolX = T
 End Function
 
-' ---------- 由溶液比焓反解溶液温度 [K] ----------
-' NL_hsol 在固定 x 下随 T 单调增，在其辖区 T ∈ [273.15, 353.15] K
-' 内二分 100 次反解。h 超出该 x 下 hsol 值域、或 x 超辖区
-' （端点求值为 Empty）时返回 Empty。与 C/Python 同算法；
-' 本函数未在真实 Excel 中编译运行。
+' ---------- Solve the solution temperature [K] back from the solution specific enthalpy ----------
+' NL_hsol increases monotonically with T at fixed x; inverted by 100 bisection steps within its domain T in [273.15, 353.15] K.
+' Returns Empty when h lies outside the range of hsol at that x, or x is out of domain
+' (endpoint evaluations return Empty). Same algorithm as C/Python;
+' this function has not been compiled or run in real Excel.
 Public Function NL_TsolByHsol(ByVal h As Double, ByVal x As Double) As Variant
     Dim hlo As Variant, hhi As Variant
     Dim lo As Double, hi As Double, mid As Double, k As Long
@@ -202,7 +202,7 @@ Public Function NL_TsolByHsol(ByVal h As Double, ByVal x As Double) As Variant
     NL_TsolByHsol = 0.5 * (lo + hi)
 End Function
 
-' ---------- 溶液比焓 [kJ/kg]: H = ha + hb T + hc T^2 ----------
+' ---------- Solution specific enthalpy [kJ/kg]: H = ha + hb T + hc T^2 ----------
 Public Function NL_hsol(ByVal T_K As Double, ByVal x As Double) As Variant
     Dim cha As Variant, chb As Variant, chc As Variant
     If Not InRng(T_K, 273.15, 353.15) Or Not InRng(x, 0.35, 0.65) Then
@@ -215,7 +215,7 @@ Public Function NL_hsol(ByVal T_K As Double, ByVal x As Double) As Variant
               + Poly3(chc, x) * T_K * T_K
 End Function
 
-' ---------- 比热 [kJ/(kg K)] (原文 J/(g K), 数值相同) ----------
+' ---------- Specific heat [kJ/(kg K)] (the original is in J/(g K); the numerical value is the same) ----------
 Public Function NL_Cp(ByVal T_K As Double, ByVal x As Double) As Variant
     Dim cpa As Double, cpb As Double
     If Not InRng(T_K, 293.15, 353.15) Or Not InRng(x, 0.35, 0.65) Then
@@ -226,7 +226,7 @@ Public Function NL_Cp(ByVal T_K As Double, ByVal x As Double) As Variant
     NL_Cp = cpa + cpb * T_K
 End Function
 
-' ---------- 密度 [kg/m^3]: rho = 1000 (da + db T) ----------
+' ---------- Density [kg/m^3]: rho = 1000 (da + db T) ----------
 Public Function NL_Rho(ByVal T_K As Double, ByVal x As Double) As Variant
     Dim da As Double, db As Double
     If Not InRng(T_K, 293.15, 353.15) Or Not InRng(x, 0.35, 0.65) Then
@@ -237,7 +237,7 @@ Public Function NL_Rho(ByVal T_K As Double, ByVal x As Double) As Variant
     NL_Rho = 1000# * (da + db * T_K)
 End Function
 
-' ---------- 导热系数 [W/(m K)]: k = ka1 + ka2 T + ka3 T^2 + ka4 x ----------
+' ---------- Thermal conductivity [W/(m K)]: k = ka1 + ka2 T + ka3 T^2 + ka4 x ----------
 Public Function NL_K(ByVal T_K As Double, ByVal x As Double) As Variant
     If Not InRng(T_K, 303.15, 353.15) Or Not InRng(x, 0.35, 0.6) Then
         NL_K = CVErr(xlErrValue): Exit Function
@@ -246,7 +246,7 @@ Public Function NL_K(ByVal T_K As Double, ByVal x As Double) As Variant
            + 0.000000213849 * T_K * T_K + 0.006538043 * x
 End Function
 
-' ---------- 结晶界限 XCRIS (Infante Ferreira 1984, 十分段逐字转录) ----------
+' ---------- Crystallisation limit XCRIS (Infante Ferreira 1984; the ten segments transcribed verbatim) ----------
 Public Function NL_Xcris(ByVal T_C As Double, ByVal x As Double) As Variant
     Dim T As Double
     T = T_C
