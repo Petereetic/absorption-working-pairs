@@ -364,6 +364,89 @@ Public Function LW_TsolByHsol(ByVal h As Double, ByVal X As Double) As Variant
     LW_TsolByHsol = 0.5 * (lo + hi)
 End Function
 
+' ---------- Kaita 2001 high-temperature set (20-210 degC, 40-65 wt%) ----------
+' Eq.(1) dew point, Eq.(2) vapour pressure, Eq.(3) specific heat, Eq.(8) enthalpy.
+' Eq.(8) D2 is used as -4.5348E-3: the printed Eq.(8) sign (+) is an original misprint;
+' Eq.(6) C2 and Kaita Tables 5/6 arbitrate for the negative value (register TE-962).
+' The Kaita enthalpy datum differs from Patterson: keep separate accounts, differences only.
+' Not compiled or run in real Excel (same status as the rest of this module).
+
+Private Function KaitaTD(ByVal X As Double, ByVal T As Double) As Double
+    Dim A As Variant, dx As Double, s As Double, i As Integer, j As Integer
+    A = Array(Array(-9.133128, -0.4759724, -0.05638171, 0.001108418), _
+              Array(0.9439697, -0.002882015, -0.0001345453, 5.852133E-07), _
+              Array(-7.324352E-05, -1.556533E-05, 1.992657E-06, -3.924205E-08))
+    dx = X - 40#
+    s = 0#
+    For i = 0 To 2
+        For j = 0 To 3
+            s = s + A(i)(j) * dx ^ j * T ^ i
+        Next j
+    Next i
+    KaitaTD = s
+End Function
+
+Public Function LW_TdewKaita(ByVal X As Double, ByVal T As Double) As Variant
+    If Not InRange(X, T, 40, 65, 20, 210) Then LW_TdewKaita = CVErr(xlErrValue): Exit Function
+    LW_TdewKaita = KaitaTD(X, T)
+End Function
+
+Public Function LW_PsolKaita(ByVal X As Double, ByVal T As Double) As Variant
+    Dim Tk As Double
+    If Not InRange(X, T, 40, 65, 20, 210) Then LW_PsolKaita = CVErr(xlErrValue): Exit Function
+    Tk = KaitaTD(X, T) + 273.15
+    LW_PsolKaita = 10# ^ (7.05 - 1603.54 / Tk - 104095.5 / Tk ^ 2) * 0.001  ' kPa -> MPa
+End Function
+
+Public Function LW_CpKaita(ByVal X As Double, ByVal T As Double) As Variant
+    If Not InRange(X, T, 40, 65, 20, 210) Then LW_CpKaita = CVErr(xlErrValue): Exit Function
+    LW_CpKaita = (3.462023 - 0.02679895 * X) + (0.0013499 - 6.55E-06 * X) * T
+End Function
+
+Public Function LW_HsolKaita(ByVal X As Double, ByVal T As Double) As Variant
+    If Not InRange(X, T, 40, 65, 20, 210) Then LW_HsolKaita = CVErr(xlErrValue): Exit Function
+    LW_HsolKaita = (3.462023 - 0.02679895 * X) * T _
+        + 0.5 * (0.0013499 - 6.55E-06 * X) * T ^ 2 _
+        + (162.81 - 6.0418 * X - 0.0045348 * X ^ 2 + 0.0012053 * X ^ 3)
+End Function
+
+Public Function LW_TsolByHsolKaita(ByVal h As Double, ByVal X As Double) As Variant
+    Dim prevT As Double, prevH As Double, havePrev As Boolean
+    Dim lo As Double, hi As Double, mid As Double, k As Long
+    Dim hv As Variant, haveBracket As Boolean
+    If X < 40 Or X > 65 Then LW_TsolByHsolKaita = CVErr(xlErrValue): Exit Function
+    havePrev = False: haveBracket = False
+    For k = 0 To 38
+        hv = LW_HsolKaita(X, 20# + 5# * k)
+        If Not IsError(hv) Then
+            If havePrev And prevH <= h And h <= hv Then
+                lo = prevT: hi = 20# + 5# * k: haveBracket = True: Exit For
+            End If
+            prevT = 20# + 5# * k: prevH = hv: havePrev = True
+        End If
+    Next k
+    If Not haveBracket Then LW_TsolByHsolKaita = Empty: Exit Function
+    For k = 1 To 80
+        mid = 0.5 * (lo + hi)
+        If LW_HsolKaita(X, mid) < h Then lo = mid Else hi = mid
+    Next k
+    LW_TsolByHsolKaita = 0.5 * (lo + hi)
+End Function
+
+Public Function LW_XByTsolTdewKaita(ByVal Tsol_C As Double, ByVal Tdew_C As Double) As Variant
+    Dim lo As Double, hi As Double, mid As Double, k As Long
+    If Tsol_C < 20 Or Tsol_C > 210 Then LW_XByTsolTdewKaita = CVErr(xlErrValue): Exit Function
+    If Tdew_C > KaitaTD(40#, Tsol_C) Or Tdew_C < KaitaTD(65#, Tsol_C) Then
+        LW_XByTsolTdewKaita = Empty: Exit Function
+    End If
+    lo = 40#: hi = 65#
+    For k = 1 To 80
+        mid = 0.5 * (lo + hi)
+        If KaitaTD(mid, Tsol_C) > Tdew_C Then lo = mid Else hi = mid
+    Next k
+    LW_XByTsolTdewKaita = 0.5 * (lo + hi)
+End Function
+
 Public Function LW_RhoChua(ByVal X As Double, ByVal T As Double) As Variant
     Dim G As Variant, s As Double, xk As Double, k As Integer
     If X < 0 Or X > 70 Or T < 0 Or T > 200 Then

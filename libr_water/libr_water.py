@@ -463,6 +463,124 @@ def rho_chua(X, T):
     return s
 
 
+# --------------------------------------------------------------------------
+# Kaita 2001: high-temperature set (dew point Eq.(1), vapour pressure Eq.(2),
+# specific heat Eq.(3), enthalpy Eq.(8)); range 20-210 degC, 40-65 wt%.
+# Kaita, Y., Int. J. Refrigeration 24 (2001) 374-390.  Verified 2026-10-22
+# against the original (dossier dossiers/LiBr-H2O-Kaita2001.md in the
+# working-pair formula library): Eqs.(1)-(3) match the print character by
+# character; Eq.(8) prints D2 = +4.5348E-3 but Eq.(6) prints C2 = -4.5348E-3
+# for the identical coefficient, and Kaita's own Tables 5/6 arbitrate for
+# the negative value (max deviation 0.029% on Table 6 with D2<0, 23.6%
+# with the printed positive sign; transcription-error register TE-962).
+# The operative value D2 = -4.5348E-3 is used here.
+# Enthalpy datum follows Kaita Sec.3.2 (McNeely/Feuerecker datum) and
+# differs from the Patterson datum by a non-constant +1.7..+5.9 kJ/kg over
+# the checked points: keep the two enthalpy sets in separate accounts and
+# use enthalpy differences within one set only.
+# --------------------------------------------------------------------------
+_KAITA_A = [  # Eq.(1) Aij, index [i][j]: TD = sum_ij Aij (X-40)^j T^i
+    [-9.133128e+00, -4.759724e-01, -5.638171e-02, 1.108418e-03],
+    [9.439697e-01, -2.882015e-03, -1.345453e-04, 5.852133e-07],
+    [-7.324352e-05, -1.556533e-05, 1.992657e-06, -3.924205e-08],
+]
+_KAITA_CP = (3.462023, -2.679895e-02, 1.3499e-03, -6.55e-06)  # Eq.(3) A0,A1,B0,B1
+_KAITA_D = (162.81, -6.0418, -4.5348e-03, 1.2053e-03)  # Eq.(8) D0..D3, D2 corrected (see above)
+
+
+def _kaita_range(X, T, func_name):
+    if not (40.0 <= X <= 65.0 and 20.0 <= T <= 210.0):
+        raise ValueError(
+            "%s: (X=%.2f%%, T=%.2f°C) outside the Kaita 2001 range X in [40,65%%], T in [20,210°C]"
+            % (func_name, X, T))
+
+
+def tdew_by_tsol_x_kaita(X, T):
+    """Dew-point temperature [°C] (Kaita Eq.(1)); X wt%, T °C. Range: X in [40,65], T in [20,210]."""
+    _kaita_range(X, T, 'tdew_by_tsol_x_kaita')
+    dx = X - 40.0
+    return sum(_KAITA_A[i][j] * dx ** j * T ** i for i in range(3) for j in range(4))
+
+
+def _psol_kaita_kPa(X, T):
+    """Native vapour pressure [kPa] (Kaita Eq.(1)+(2) chain, private)."""
+    TD = tdew_by_tsol_x_kaita(X, T)
+    Tk = TD + 273.15
+    return 10.0 ** (7.05 - 1603.54 / Tk - 104095.5 / Tk ** 2)
+
+
+def psol_kaita(X, T):
+    """Water vapour partial pressure [MPa] (Kaita Eq.(1)+(2)); X wt%, T °C.
+    Public boundary = native kPa value x1e-3. Range as tdew_by_tsol_x_kaita."""
+    return _psol_kaita_kPa(X, T) * 1e-3
+
+
+def cp_kaita(X, T):
+    """Solution specific heat [kJ/(kg K)] (Kaita Eq.(3), Rockenfeller form); X wt%, T °C."""
+    _kaita_range(X, T, 'cp_kaita')
+    A0, A1, B0, B1 = _KAITA_CP
+    return (A0 + A1 * X) + (B0 + B1 * X) * T
+
+
+def hsol_kaita(X, T):
+    """Solution specific enthalpy [kJ/kg] (Kaita Eq.(8), D2 corrected negative; see header note);
+    X wt%, T °C. Kaita datum - do not mix with Patterson hsol values, use differences within this set."""
+    _kaita_range(X, T, 'hsol_kaita')
+    A0, A1, B0, B1 = _KAITA_CP
+    D0, D1, D2, D3 = _KAITA_D
+    return ((A0 + A1 * X) * T + 0.5 * (B0 + B1 * X) * T ** 2
+            + (D0 + D1 * X + D2 * X ** 2 + D3 * X ** 3))
+
+
+def tsol_by_hsol_kaita(h, X):
+    """Solution temperature [°C] from Kaita enthalpy h [kJ/kg] and X [wt%]: inverse of hsol_kaita.
+    Bracket scanned over T = 20..210 °C in 5 °C steps, then 80 bisection steps
+    (hsol_kaita increases monotonically with T at fixed X, Cp > 0). None if no bracket."""
+    if not (40.0 <= X <= 65.0):
+        raise ValueError("tsol_by_hsol_kaita: X=%.2f%% outside [40,65%%]" % X)
+    prev_T, prev_h, bracket = None, None, None
+    k = 0
+    while k <= 38:
+        T = 20.0 + 5.0 * k
+        k += 1
+        hv = hsol_kaita(X, T)
+        if prev_h is not None and prev_h <= h <= hv:
+            bracket = (prev_T, T)
+            break
+        prev_T, prev_h = T, hv
+    if bracket is None:
+        return None
+    lo, hi = bracket
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if hsol_kaita(X, mid) < h:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+def x_by_tsol_tdew_kaita(Tsol_C, Tdew_C):
+    """LiBr concentration X [wt%] back from solution temperature and dew point (Kaita Eq.(1) route).
+    Eq.(1) TD decreases monotonically with X at fixed T over [40,65]
+    (higher concentration, lower vapour pressure, lower dew point);
+    80 bisection steps. None when Tdew is outside the X in [40,65] band
+    at Tsol. Range errors of the underlying Eq.(1) domain (Tsol outside
+    [20,210]) propagate as ValueError."""
+    TD_hi = tdew_by_tsol_x_kaita(40.0, Tsol_C)
+    TD_lo = tdew_by_tsol_x_kaita(65.0, Tsol_C)
+    if not (TD_lo <= Tdew_C <= TD_hi):
+        return None
+    lo, hi = 40.0, 65.0
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if tdew_by_tsol_x_kaita(mid, Tsol_C) > Tdew_C:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
 if __name__ == '__main__':
     # Quick self-check
     print('h(0%%,25°C) = %.3f kJ/kg (expected ~104.6)' % hsol(0.0, 25.0))

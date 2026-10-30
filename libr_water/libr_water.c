@@ -394,3 +394,105 @@ double rho_chua(double X, double T)
     }
     return s;
 }
+
+/* ------------------------------------------------------------------ */
+/* Kaita 2001: high-temperature set, 20-210 degC, 40-65 wt%.          */
+/* Eq.(1) dew point, Eq.(2) vapour pressure, Eq.(3) specific heat,    */
+/* Eq.(8) enthalpy with D2 = -4.5348E-3 (the printed Eq.(8) sign is   */
+/* an original misprint; Eq.(6) C2 and Kaita Tables 5/6 arbitrate     */
+/* for the negative value, register TE-962).  Enthalpy datum differs  */
+/* from Patterson: keep separate accounts, differences only.          */
+/* ------------------------------------------------------------------ */
+static const double KAITA_A[3][4] = {
+    {-9.133128e+00, -4.759724e-01, -5.638171e-02, 1.108418e-03},
+    { 9.439697e-01, -2.882015e-03, -1.345453e-04, 5.852133e-07},
+    {-7.324352e-05, -1.556533e-05, 1.992657e-06, -3.924205e-08},
+};
+static const double KAITA_A0 = 3.462023, KAITA_A1 = -2.679895e-02;
+static const double KAITA_B0 = 1.3499e-03, KAITA_B1 = -6.55e-06;
+static const double KAITA_D0 = 162.81, KAITA_D1 = -6.0418;
+static const double KAITA_D2 = -4.5348e-03, KAITA_D3 = 1.2053e-03;
+
+static int kaita_range(double X, double T)
+{
+    return (X < 40.0 || X > 65.0 || T < 20.0 || T > 210.0);
+}
+
+double tdew_by_tsol_x_kaita(double X, double T)
+{
+    double dx, s = 0.0, tp = 1.0;
+    int i, j;
+    if (kaita_range(X, T)) return NAN;
+    dx = X - 40.0;
+    for (i = 0; i < 3; i++) {
+        double dp = 1.0;
+        if (i > 0) tp *= T;
+        for (j = 0; j < 4; j++) {
+            if (j > 0) dp *= dx;
+            s += KAITA_A[i][j] * dp * tp;
+        }
+    }
+    return s;
+}
+
+static double psol_kaita_kPa(double X, double T)
+{
+    double TD = tdew_by_tsol_x_kaita(X, T), Tk;
+    if (isnan(TD)) return NAN;
+    Tk = TD + 273.15;
+    return pow(10.0, 7.05 - 1603.54 / Tk - 104095.5 / (Tk * Tk));
+}
+
+double psol_kaita(double X, double T)
+{
+    return psol_kaita_kPa(X, T) * 1e-3;   /* kPa -> MPa */
+}
+
+double cp_kaita(double X, double T)
+{
+    if (kaita_range(X, T)) return NAN;
+    return (KAITA_A0 + KAITA_A1 * X) + (KAITA_B0 + KAITA_B1 * X) * T;
+}
+
+double hsol_kaita(double X, double T)
+{
+    if (kaita_range(X, T)) return NAN;
+    return (KAITA_A0 + KAITA_A1 * X) * T
+         + 0.5 * (KAITA_B0 + KAITA_B1 * X) * T * T
+         + (KAITA_D0 + KAITA_D1 * X + KAITA_D2 * X * X + KAITA_D3 * X * X * X);
+}
+
+double tsol_by_hsol_kaita(double h, double X)
+{
+    double prev_T = 0.0, prev_h = 0.0, lo = 0.0, hi = 0.0, mid;
+    int have_prev = 0, have_bracket = 0, k;
+    if (X < 40.0 || X > 65.0) return NAN;
+    for (k = 0; k <= 38 && !have_bracket; k++) {
+        double T = 20.0 + 5.0 * k, hv = hsol_kaita(X, T);
+        if (have_prev && prev_h <= h && h <= hv) {
+            lo = prev_T; hi = T; have_bracket = 1;
+        }
+        prev_T = T; prev_h = hv; have_prev = 1;
+    }
+    if (!have_bracket) return NAN;
+    for (k = 0; k < 80; k++) {
+        mid = 0.5 * (lo + hi);
+        if (hsol_kaita(X, mid) < h) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
+
+double x_by_tsol_tdew_kaita(double Tsol_C, double Tdew_C)
+{
+    double TD_hi = tdew_by_tsol_x_kaita(40.0, Tsol_C);
+    double TD_lo = tdew_by_tsol_x_kaita(65.0, Tsol_C);
+    double lo = 40.0, hi = 65.0, mid;
+    int k;
+    if (isnan(TD_lo) || isnan(TD_hi)) return NAN;
+    if (Tdew_C < TD_lo || Tdew_C > TD_hi) return NAN;
+    for (k = 0; k < 80; k++) {
+        mid = 0.5 * (lo + hi);
+        if (tdew_by_tsol_x_kaita(mid, Tsol_C) > Tdew_C) lo = mid; else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+}
