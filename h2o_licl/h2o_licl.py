@@ -6,11 +6,19 @@ Source: Conde-Petit, M. R., "Properties of aqueous solutions of
 lithium and calcium chlorides: formulations for use in air
 conditioning equipment design", Int. J. Thermal Sciences 43 (2004)
 367-382.  DOI 10.1016/j.ijthermalsci.2003.09.003.
-This module implements the LiCl branch only.  The CaCl2 branch of
-the same paper is NOT included: its differential dilution enthalpy
-correlation does not reproduce the paper's own Fig. 27 and is
-flagged [formula to be verified] in the source dossier
-(dossiers/H2O-LiCl-CaCl2-Conde.md, Sec. 8).
+This module implements the LiCl branch only; the CaCl2 branch of
+the same paper lives in the sibling module ../h2o_cacl2/.
+
+Dilution-enthalpy theta convention (IMPORTANT): in Sec.8 the paper
+does not redefine theta, so by the paper's own Nomenclature default
+theta = theta_r = T_K / T_c,H2O (dossier Sec.8 ruling, 2026-11-19,
+confirmed against the paper's Fig. 26 at 600 dpi: LiCl branch
+xi=0.4 at 25 degC -> 259.3 kJ/kg_H2O, figure reading 245-258;
+the theta_s reading gives 211.5 and falls below the figure's curve
+bundle).  The Sato theta_s = T_K/228 - 1 is used ONLY in the Sec.7
+specific-heat section, where the paper defines it explicitly.
+This module originally used theta_s in dh_d as built (2026-11-20);
+changed to theta_r on 2026-11-24 by Peter's order.
 
 Conventions (library-wide):
   * xi  = LiCl MASS fraction (0 .. 0.56), the paper's variable.
@@ -28,7 +36,7 @@ Implemented paper sections (LiCl coefficients only):
   (Table 6), Sec.5 viscosity (Table 7), Sec.6 thermal conductivity
   (Table 9, Riedel), Sec.7 specific heat (Table 10),
   Sec.8 differential dilution enthalpy (Table 11, LiCl branch,
-  theta = theta_s per the dossier ruling), Appendix A Saul-Wagner
+  theta = theta_r per the dossier ruling), Appendix A Saul-Wagner
   vapour pressure of pure water (Table 12).
 
 Water-side auxiliary correlations NOT given numerically in the
@@ -423,9 +431,11 @@ def cp_sol(T_C, xi):
 # ----------------------------------------------------------------------
 def dh_d(xi, T_C):
     """Differential dilution enthalpy [kJ/kg_H2O] (Sec.8, LiCl
-    branch; theta = theta_s = T/228 - 1 per the dossier ruling):
+    branch; theta = theta_r = T_K / T_c,H2O per the paper's
+    Nomenclature default and the dossier Sec.8 ruling of
+    2026-11-19 -- the Sec.8 text does not redefine theta):
         dh_d = dh_d0 * [1 + (zeta/H1)^H2]^H3,
-        zeta = xi / (H4 - xi),  dh_d0 = H5 + H6 * theta_s.
+        zeta = xi / (H4 - xi),  dh_d0 = H5 + H6 * theta_r.
     Positive = heat released on absorption of 1 kg of water
     (equivalently, extra heat beyond the latent heat needed to
     desorb 1 kg of water). xi in [0, 0.55], T in [0, 150] degC."""
@@ -434,7 +444,7 @@ def dh_d(xi, T_C):
     if not (0.0 <= xi <= 0.55 and 0.0 <= T_C <= 150.0):
         return None
     H1, H2, H3, H4, H5, H6 = _HD
-    th = (T_C + 273.15) / 228.0 - 1.0
+    th = (T_C + 273.15) / _TC
     dh0 = H5 + H6 * th
     zeta = xi / (H4 - xi)
     if xi == 0.0:

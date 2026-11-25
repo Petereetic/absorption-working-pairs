@@ -22,8 +22,12 @@ Anchors checked here:
   * specific heat: xi = 0.3, 25C -> 2.963 kJ/(kg K) (dossier value
     with Cp_H2O = 4.183 inserted; this module's tabulated
     Cp_H2O(25C) = 4.181 shifts the result by -0.05 %).
-  * differential dilution enthalpy: xi = 0.4, 25C -> 211.5
-    kJ/kg_H2O (paper Fig. 26 curve level 200-235).
+  * differential dilution enthalpy (theta = theta_r per the
+    dossier Sec.8 ruling of 2026-11-19; this module was changed
+    from theta_s to theta_r on 2026-11-24): xi = 0.4, 25C ->
+    259.3 kJ/kg_H2O (paper Fig. 26, Lange & Duerr data points,
+    figure reading 245-258).  The superseded theta_s build gave
+    211.5 at this point, below the figure's curve bundle.
   * viscosity at 20C: xi = 0.3 -> 4.08 mPa s (dossier, with
     eta_H2O = 1.002 mPa s inserted; this module's Vogel eta_water
     gives the same 1.002 at 20C).
@@ -71,7 +75,15 @@ chk("crystallization_T(0.253)", m.crystallization_T(0.253), -75.5, 0.3)
 
 # specific heat / dilution enthalpy / viscosity / surface tension
 chk("cp_sol(25C, 0.3)", m.cp_sol(25.0, 0.3), 2.963, 0.01)
-chk("dh_d(0.4, 25C)", m.dh_d(0.4, 25.0), 211.5, 2.0)
+chk("dh_d(0.4, 25C) theta_r", m.dh_d(0.4, 25.0), 259.3, 1.0)
+# theta convention contrast at the same point: current theta_r vs
+# the superseded theta_s build (pre-2026-11-24), computed inline
+# from the same Table 11 coefficients.
+_z = 0.4 / (0.6 - 0.4)
+_old_ts = (169.105 + 457.85 * (298.15 / 228.0 - 1.0)) \
+    * (1.0 + (_z / 0.845) ** (-1.965)) ** (-2.265)
+print("dh_d(0.4, 25C): theta_r = %.4f (current) vs theta_s = %.4f (superseded)"
+      % (m.dh_d(0.4, 25.0), _old_ts))
 chk("eta_sol(20C, 0.3) [mPa s]", m.eta_sol(20.0, 0.3) * 1000.0, 4.08, 0.08)
 chk("sigma ratio(25C, 0.3)", m.sigma_sol(25.0, 0.3) / m.sigma_water(25.0), 1.241, 0.01)
 print("lambda_sol(20C, 0.3) = %.3f W/(m K) (sanity: ~0.53-0.55)"

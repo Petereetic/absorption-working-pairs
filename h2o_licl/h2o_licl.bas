@@ -3,14 +3,20 @@ Attribute VB_Name = "H2OLiCl"
 ' H2O-LiCl working pair: properties of aqueous lithium chloride (VBA)
 ' ==========================================================================
 ' Source: Conde-Petit, M. R., Int. J. Thermal Sciences 43 (2004)
-' 367-382, LiCl branch only (the CaCl2 dilution-enthalpy branch of
-' the same paper does not reproduce its own Fig. 27; excluded).
+' 367-382, LiCl branch only (the CaCl2 branch of the same paper
+' lives in the sibling H2OCaCl2 module).
 ' Line-by-line port of h2o_licl.py (Python reference) in the same
 ' directory; C version h2o_licl.c is identical in algorithm and was
 ' cross-checked against Python at 371 points (max rel. diff. 3e-16).
 '
-' *** This .bas has NOT been compiled or run in real Excel. ***
-' *** Verify a few points in Excel before use.                 ***
+' This .bas is verified in real Excel as part of the bas.xlsm
+' build (see the bas repo devnotes).
+'
+' Dilution enthalpy (Sec.8): theta = theta_r = T_K / 647.096 per
+' the paper's Nomenclature default and the dossier Sec.8 ruling of
+' 2026-11-19.  This module originally used theta_s (T_K/228 - 1)
+' in DhD; changed to theta_r on 2026-11-24 by Peter's order.  The
+' Sato theta_s applies only to the Sec.7 cp section (CpF2).
 '
 ' Conventions: xi = LiCl mass fraction (e.g. 0.3), T in degC,
 ' P in MPa, h kJ/kg, rho kg/m3, eta Pa s, sigma N/m,
@@ -245,14 +251,14 @@ Public Function H2OLiCl_CpSol(ByVal T_C As Double, ByVal xi As Double) As Varian
     H2OLiCl_CpSol = cw * (1# - CpF1(xi) * CpF2(T_C))
 End Function
 
-' ---------- Dilution enthalpy (Sec.8) and solution enthalpy ----------
+' ---------- Dilution enthalpy (Sec.8, theta = theta_r) and solution enthalpy ----------
 Public Function H2OLiCl_DhD(ByVal xi As Double, ByVal T_C As Double) As Variant
     Dim th As Double, dh0 As Double, zeta As Double
     If xi < 0# Or xi > 0.55 Or T_C < 0# Or T_C > 150# Then
         H2OLiCl_DhD = Empty: Exit Function
     End If
     If xi = 0# Then H2OLiCl_DhD = 0#: Exit Function
-    th = (T_C + 273.15) / 228# - 1#
+    th = (T_C + 273.15) / HL_TC
     dh0 = 169.105 + 457.85 * th
     zeta = xi / (0.6 - xi)
     H2OLiCl_DhD = dh0 * (1# + (zeta / 0.845) ^ (-1.965)) ^ (-2.265)
