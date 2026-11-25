@@ -8,7 +8,11 @@
  * cp kJ/(kg K), dh_d kJ/kg_H2O.  NAN outside the stated ranges.
  * Enthalpy datum and construction: see h2o_licl.py header /
  * the formula notes (hsol = integral of cp_sol from 0 degC plus
- * the 25 degC excess term e25 built from dh_d). */
+ * the 25 degC excess term e25 built from dh_d).
+ * Dilution enthalpy uses theta_r = T_K / T_c,H2O (dossier Sec.8
+ * ruling, 2026-11-19; this file originally used theta_s in dh_d as
+ * built 2026-11-20, changed to theta_r on 2026-11-24 by Peter's
+ * order, following h2o_licl.py / h2o_licl.bas). */
 #include <math.h>
 
 static const double HL_TC = 647.096, HL_PC = 22.064;
@@ -261,7 +265,11 @@ double H2OLiCl_DhD(double xi, double T_C)
     double th, dh0, zeta;
     if (xi < 0.0 || xi > 0.55 || T_C < 0.0 || T_C > 150.0) return NAN;
     if (xi == 0.0) return 0.0;
-    th = (T_C + 273.15) / 228.0 - 1.0;
+    /* theta = theta_r = T_K / T_c,H2O here (dossier Sec.8 ruling,
+     * 2026-11-19; changed from theta_s by Peter's order, 2026-11-24,
+     * same change as h2o_licl.py / h2o_licl.bas).  The cp section
+     * above keeps theta_s = T_K / 228 - 1. */
+    th = (T_C + 273.15) / HL_TC;
     dh0 = HL_HD[4] + HL_HD[5] * th;
     zeta = xi / (HL_HD[3] - xi);
     return dh0 * pow(1.0 + pow(zeta / HL_HD[0], HL_HD[1]), HL_HD[2]);
