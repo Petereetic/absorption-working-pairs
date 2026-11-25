@@ -46,13 +46,17 @@ Private Function LamWTab() As Variant
                     0.67, 0.676, 0.679, 0.683, 0.685, 0.686, 0.685, 0.683)
 End Function
 
-Private Function TabInterp(ByRef tab As Variant, ByVal T_C As Double) As Double
+' NOTE: the table parameter is named tbl, not tab. A parameter named
+' tab breaks compilation in Excel VBA (Tab is a built-in function
+' name; the compiler then reports this function as not defined).
+' Found by real-Excel test, 2026-11-24.
+Private Function TabInterp(ByRef tbl As Variant, ByVal T_C As Double) As Double
     Dim i As Integer, f As Double
-    If T_C <= 0# Then TabInterp = tab(0): Exit Function
-    If T_C >= 150# Then TabInterp = tab(15): Exit Function
+    If T_C <= 0# Then TabInterp = tbl(0): Exit Function
+    If T_C >= 150# Then TabInterp = tbl(15): Exit Function
     i = Int(T_C / 10#)
     f = (T_C - 10# * i) / 10#
-    TabInterp = tab(i) * (1# - f) + tab(i + 1) * f
+    TabInterp = tbl(i) * (1# - f) + tbl(i + 1) * f
 End Function
 
 ' ---------- Pure water ----------
